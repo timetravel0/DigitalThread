@@ -2,14 +2,17 @@
 
 ThreadLite is a lightweight Digital Thread web application for engineering projects.
 
-It is designed for SMEs that need traceability without adopting a heavy PLM or MBSE suite. The MVP starts with a realistic drone project and focuses on the core digital-thread loop:
+It is designed for SMEs that need traceability without adopting a heavy PLM or MBSE suite. The platform now behaves like a small engineering authoring workspace rather than a read-only demo:
 
 - define projects
-- capture requirements, components, tests, operational runs, and change requests
-- create traceability links between objects
-- version key records
-- build baselines
-- inspect coverage, impact, and matrix views
+- create a new blank project from scratch
+- create and edit requirements, blocks, and test cases
+- submit items for review and approve or reject them
+- create traceability links and SysML-inspired relations
+- version approved artifacts through draft copies
+- build baselines from approved content
+- export a complete project bundle for external validation
+- inspect coverage, impact, matrix, and SysML practice views
 
 ## Why this is a lightweight Digital Thread MVP
 
@@ -17,7 +20,8 @@ ThreadLite is intentionally narrow in scope:
 
 - one project-centric data model
 - explicit traceability links instead of a complex graph platform
-- simple version fields and baseline snapshots
+- simple version fields plus revision snapshots for authored objects
+- approval workflow for requirements, blocks, and test cases
 - one-hop plus two-hop impact analysis
 - practical seed data so the product feels alive on first run
 
@@ -64,13 +68,81 @@ threadlite/
 ## Key Product Areas
 
 - Dashboard with KPIs and recent activity
-- Project pages with tabs for requirements, components, tests, operational runs, links, matrix, baselines, and change requests
-- Requirement, component, and test detail pages with inbound/outbound traceability
+- Project pages with tabs for requirements, blocks, tests, operational runs, traceability, SysML, review queue, matrix, baselines, and change requests
+- Requirement, block, and test detail pages with inbound/outbound traceability plus workflow controls
 - Traceability matrix with component or test columns
-- Impact analysis with direct and two-hop traversal
-- Baselines for freezing a versioned snapshot of core objects
+- Impact analysis with direct and two-hop traversal across requirements, blocks, and tests
+- Baselines for freezing approved versions of core objects
 - Change requests with impact summaries
+- Project export bundles for external validation
 - Demo seed for a drone inspection project
+
+## Implemented SysML-Inspired Concepts
+
+ThreadLite does not implement the full SysML standard. It implements a focused subset that is easy to learn:
+
+- Requirement: a statement of need or constraint.
+- Block: a SysML-inspired structural element for a logical or physical subsystem.
+- Containment: a block hierarchy using `contains` / `composed_of`.
+- Satisfy: a block fulfills a requirement.
+- Verify: a test case verifies a requirement.
+- DeriveReqt: one requirement is derived from another requirement.
+
+In the drone demo, the top-level `Drone System` block contains subsystems such as `Power Subsystem` and `Flight Controller`, while the battery and controller satisfy endurance, telemetry, and temperature requirements.
+
+## Approval Workflow
+
+Requirements, blocks, and test cases move through a simple lifecycle:
+
+- `draft`
+- `in_review`
+- `approved`
+- `rejected`
+- `obsolete`
+
+Editing rules:
+
+- draft and rejected items can be edited directly
+- approved items are immutable in place
+- if you need to change an approved item, create a new draft version from it
+
+The UI makes this explicit: approved requirements, blocks, and test cases show a `Create draft version and edit` action instead of a direct edit flow.
+
+Every authored update records a revision snapshot so the history panel can show the sequence of changes without a full event-sourcing implementation.
+
+## Baselines
+
+Baselines now default to approved content only.
+
+- approved requirements, blocks, and test cases are included by default
+- draft and in-review items are skipped unless you explicitly choose them
+- each baseline item stores the object version captured at baseline creation time
+- this keeps the baseline model simple and makes future comparison features straightforward
+
+## Project Creation and Export
+
+ThreadLite now supports two starting points:
+
+- start from the seeded drone project
+- create a blank project from scratch and author everything yourself
+
+Each project can be exported as a single JSON bundle from the project workspace. The export includes:
+
+- project metadata
+- requirements
+- blocks
+- block containments
+- components
+- test cases
+- test runs
+- operational runs
+- links
+- SysML relations
+- baselines and baseline items
+- change requests and change impacts
+- revision snapshots
+
+The export is intentionally deterministic and flat enough that another tool can validate it without needing the web app.
 
 ## Local Setup
 
@@ -169,7 +241,7 @@ If your system blocks PowerShell scripts, use the Windows launcher instead:
 .\scripts\start-local.cmd
 ```
 
-The local launcher waits for the API health check before starting the frontend, so you do not hit a false `Failed to fetch` error during boot.
+The local launcher opens both windows immediately and prints a warning if the API health check is still warming up, so the frontend does not get blocked by slow local startup.
 
 If you prefer manual terminals instead of the helper script:
 
@@ -194,6 +266,8 @@ curl -X POST http://localhost:8000/api/seed/demo
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
 
+From the Projects page you can create a blank project from scratch. From any project workspace you can export a full JSON bundle for external validation.
+
 ## Development Notes
 
 - The compose file is configured for local development and mounts the repository into the frontend and backend containers.
@@ -202,16 +276,19 @@ curl -X POST http://localhost:8000/api/seed/demo
 - The local script uses SQLite by default and creates `apps/api/threadlite.db` on first run.
 - The Docker workflow uses the root `.env.example` and PostgreSQL.
 - The local workflow uses `apps/api/.env.example` and `apps/web/.env.local.example`.
+- The local launcher opens both backend and frontend windows; if the API is still starting, refresh the frontend once the backend window reports `Application startup complete`.
 - If you are extending the app, keep the API contract consistent with the route names described in the product brief.
+- Use the project workspace `Export JSON` action when you need a full bundle for audit or external validation.
 
 ## Seeding
 
 The demo seed should create:
 
 - project `DRONE-001` named `Inspection Drone MVP`
-- five requirements
-- five components
+- six requirements, including one derived requirement
+- seven blocks with a simple containment hierarchy
 - four test cases
+- SysML satisfy, verify, and deriveReqt relations
 - sample traceability links
 - failed and passing test runs
 - one operational run
@@ -219,6 +296,8 @@ The demo seed should create:
 - one change request and its impact records
 
 The seed should make the dashboard immediately useful and populate matrix and impact views with realistic data.
+
+The seeded block hierarchy also powers the SysML `Block Structure` view, so the drone project opens with a visible `contains` tree rather than an empty SysML section.
 
 ## Screenshots
 

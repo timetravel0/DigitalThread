@@ -1,10 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-from datetime import date, timedelta
+from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import desc, select
+from sqlalchemy import and_, desc, or_, select
 from sqlmodel import Session
 
 from app.models import *
@@ -13,6 +14,7 @@ from app.schemas import *
 OBJECT_MODELS = {
     "project": Project,
     "requirement": Requirement,
+    "block": Block,
     "component": Component,
     "test_case": TestCase,
     "test_run": TestRun,
@@ -53,6 +55,60 @@ def _items(result: Any) -> list[Any]:
     return items
 
 
+def _status_value(status: Any) -> str:
+    return status.value if hasattr(status, "value") else str(status)
+
+
+def _snapshot(session: Session, object_type: str, obj: Any, summary: str | None = None, actor: str | None = None) -> None:
+    session.add(
+        RevisionSnapshot(
+            project_id=obj.project_id,
+            object_type=object_type,
+            object_id=obj.id,
+            version=getattr(obj, "version", 1),
+            snapshot_json=obj.model_dump(mode="json"),
+            changed_by=actor,
+            change_summary=summary,
+        )
+    )
+
+
+def _log_action(
+    session: Session,
+    *,
+    object_type: str,
+    obj: Any,
+    from_status: str,
+    to_status: str,
+    action: str,
+    actor: str | None = None,
+    comment: str | None = None,
+) -> None:
+    session.add(
+        ApprovalActionLog(
+            project_id=obj.project_id,
+            object_type=object_type,
+            object_id=obj.id,
+            from_status=from_status,
+            to_status=to_status,
+            action=action,
+            actor=actor,
+            comment=comment,
+        )
+    )
+
+
+def _commit(session: Session, obj: Any) -> Any:
+    session.add(obj)
+    session.commit()
+    session.refresh(obj)
+    return obj
+
+
+def _editable(status: Any) -> bool:
+    return _status_value(status) in {"draft", "rejected"}
+
+
 def resolve_object(session: Session, object_type: str, object_id: UUID) -> dict[str, Any]:
     model = OBJECT_MODELS.get(object_type)
     if model is None:
@@ -67,6 +123,12 @@ def resolve_object(session: Session, object_type: str, object_id: UUID) -> dict[
         if tc is None:
             raise LookupError("test_case not found")
         project_id, label, code, status, version = tc.project_id, (obj.summary or f"Test run {obj.id}"), None, obj.result, None
+    elif object_type == "block":
+        project_id = obj.project_id
+        label = obj.name
+        code = obj.key
+        status = obj.status
+        version = obj.version
     else:
         project_id = obj.project_id
         label = getattr(obj, "title", None) or getattr(obj, "name", None) or getattr(obj, "key", None)
@@ -107,6 +169,36 @@ def get_project_service(session: Session, project_id: UUID) -> ProjectRead:
     return _read(ProjectRead, item)
 
 
+def export_project_bundle(session: Session, project_id: UUID) -> dict[str, Any]:
+    project = get_project_service(session, project_id)
+    bundle = {
+        "schema": "threadlite.project.export.v1",
+        "exported_at": utcnow().isoformat(),
+        "project": project.model_dump(mode="json"),
+        "dashboard": get_project_dashboard(session, project_id).model_dump(mode="json"),
+        "requirements": [RequirementRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(Requirement).where(Requirement.project_id == project_id)))],
+        "blocks": [BlockRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(Block).where(Block.project_id == project_id)))],
+        "block_containments": [BlockContainmentRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(BlockContainment).where(BlockContainment.project_id == project_id)))],
+        "components": [ComponentRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(Component).where(Component.project_id == project_id)))],
+        "test_cases": [TestCaseRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(TestCase).where(TestCase.project_id == project_id)))],
+        "test_runs": [TestRunRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(TestRun).join(TestCase).where(TestCase.project_id == project_id)))],
+        "operational_runs": [OperationalRunRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(OperationalRun).where(OperationalRun.project_id == project_id)))],
+        "links": [LinkRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(Link).where(Link.project_id == project_id)))],
+        "sysml_relations": [SysMLRelationRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(SysMLRelation).where(SysMLRelation.project_id == project_id)))],
+        "baselines": [
+            {
+                "baseline": BaselineRead.model_validate(baseline).model_dump(mode="json"),
+                "items": [BaselineItemRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(BaselineItem).where(BaselineItem.baseline_id == baseline.id)))],
+            }
+            for baseline in _items(session.exec(select(Baseline).where(Baseline.project_id == project_id)))
+        ],
+        "change_requests": [ChangeRequestRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project_id)))],
+        "change_impacts": [ChangeImpactRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(ChangeImpact).join(ChangeRequest).where(ChangeRequest.project_id == project_id)))],
+        "revision_snapshots": [RevisionSnapshotRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(RevisionSnapshot).where(RevisionSnapshot.project_id == project_id)))],
+    }
+    return bundle
+
+
 def create_project(session: Session, payload: ProjectCreate) -> ProjectRead:
     return _read(ProjectRead, _add(session, Project.model_validate(payload)))
 
@@ -122,17 +214,125 @@ def update_project(session: Session, project_id: UUID, payload: ProjectUpdate) -
 
 
 def create_requirement(session: Session, payload: RequirementCreate) -> RequirementRead:
-    return _read(RequirementRead, _add(session, Requirement.model_validate(payload)))
+    item = Requirement.model_validate(payload)
+    if item.status == RequirementStatus.approved and item.approved_at is None:
+        item.approved_at = datetime.now(timezone.utc)
+        item.approved_by = "seed"
+    _commit(session, item)
+    _snapshot(session, "requirement", item, "Created requirement")
+    return _read(RequirementRead, item)
 
 
 def update_requirement(session: Session, obj_id: UUID, payload: RequirementUpdate) -> RequirementRead:
     item = _get(session, Requirement, obj_id)
     if item is None:
         raise LookupError("Requirement not found")
+    if not _editable(item.status):
+        raise ValueError("Approved and obsolete requirements cannot be edited in place.")
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(item, k, v)
     _touch(item)
-    return _read(RequirementRead, _add(session, item))
+    _commit(session, item)
+    _snapshot(session, "requirement", item, "Updated requirement")
+    return _read(RequirementRead, item)
+
+
+def create_requirement_draft_version(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> RequirementRead:
+    item = _get(session, Requirement, obj_id)
+    if item is None:
+        raise LookupError("Requirement not found")
+    if item.status != RequirementStatus.approved:
+        raise ValueError("Draft versions can only be created from approved requirements.")
+    draft = Requirement(
+        project_id=item.project_id,
+        key=item.key,
+        title=item.title,
+        description=item.description,
+        category=item.category,
+        priority=item.priority,
+        verification_method=item.verification_method,
+        status=RequirementStatus.draft,
+        version=item.version + 1,
+        parent_requirement_id=item.parent_requirement_id,
+        review_comment=payload.change_summary if payload else None,
+    )
+    _commit(session, draft)
+    _snapshot(session, "requirement", draft, "Created draft version", payload.actor if payload else None)
+    return _read(RequirementRead, draft)
+
+
+def submit_requirement_for_review(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> RequirementRead:
+    item = _get(session, Requirement, obj_id)
+    if item is None:
+        raise LookupError("Requirement not found")
+    if not _editable(item.status):
+        raise ValueError("Only draft or rejected requirements can be submitted for review.")
+    old = _status_value(item.status)
+    item.status = RequirementStatus.in_review
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="requirement", obj=item, from_status=old, to_status="in_review", action="submit_review", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "requirement", item, "Submitted for review", payload.actor if payload else None)
+    return _read(RequirementRead, item)
+
+
+def approve_requirement(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> RequirementRead:
+    item = _get(session, Requirement, obj_id)
+    if item is None:
+        raise LookupError("Requirement not found")
+    if item.status != RequirementStatus.in_review:
+        raise ValueError("Only requirements in review can be approved.")
+    old = _status_value(item.status)
+    item.status = RequirementStatus.approved
+    item.approved_at = datetime.now(timezone.utc)
+    item.approved_by = payload.actor if payload and payload.actor else "system"
+    item.rejection_reason = None
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="requirement", obj=item, from_status=old, to_status="approved", action="approve", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "requirement", item, "Approved requirement", payload.actor if payload else None)
+    return _read(RequirementRead, item)
+
+
+def reject_requirement(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> RequirementRead:
+    item = _get(session, Requirement, obj_id)
+    if item is None:
+        raise LookupError("Requirement not found")
+    if item.status != RequirementStatus.in_review:
+        raise ValueError("Only requirements in review can be rejected.")
+    old = _status_value(item.status)
+    item.status = RequirementStatus.rejected
+    item.rejection_reason = payload.reason if payload and payload.reason else payload.comment if payload else None
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="requirement", obj=item, from_status=old, to_status="rejected", action="reject", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "requirement", item, "Rejected requirement", payload.actor if payload else None)
+    return _read(RequirementRead, item)
+
+
+def send_requirement_back_to_draft(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> RequirementRead:
+    item = _get(session, Requirement, obj_id)
+    if item is None:
+        raise LookupError("Requirement not found")
+    if item.status not in {RequirementStatus.in_review, RequirementStatus.rejected}:
+        raise ValueError("Only requirements in review or rejected requirements can be sent back to draft.")
+    old = _status_value(item.status)
+    item.status = RequirementStatus.draft
+    item.rejection_reason = None
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="requirement", obj=item, from_status=old, to_status="draft", action="send_back_to_draft", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "requirement", item, "Sent back to draft", payload.actor if payload else None)
+    return _read(RequirementRead, item)
+
+
+def list_requirement_history(session: Session, obj_id: UUID) -> list[RevisionSnapshotRead]:
+    rows = _items(session.exec(select(RevisionSnapshot).where(RevisionSnapshot.object_type == "requirement", RevisionSnapshot.object_id == obj_id).order_by(desc(RevisionSnapshot.changed_at))))
+    return [RevisionSnapshotRead.model_validate(item) for item in rows]
 
 
 def list_requirements(session: Session, project_id: UUID, status: RequirementStatus | None = None, category: RequirementCategory | None = None, priority: Priority | None = None) -> list[RequirementRead]:
@@ -164,18 +364,416 @@ def list_components(session: Session, project_id: UUID) -> list[ComponentRead]:
     return [ComponentRead.model_validate(item) for item in _items(session.exec(select(Component).where(Component.project_id == project_id).order_by(Component.key)))]
 
 
+def create_block(session: Session, payload: BlockCreate) -> BlockRead:
+    item = Block.model_validate(payload)
+    if item.status == BlockStatus.approved and item.approved_at is None:
+        item.approved_at = datetime.now(timezone.utc)
+        item.approved_by = "seed"
+    _commit(session, item)
+    _snapshot(session, "block", item, "Created block")
+    return _read(BlockRead, item)
+
+
+def update_block(session: Session, obj_id: UUID, payload: BlockUpdate) -> BlockRead:
+    item = _get(session, Block, obj_id)
+    if item is None:
+        raise LookupError("Block not found")
+    if not _editable(item.status):
+        raise ValueError("Approved and obsolete blocks cannot be edited in place.")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(item, k, v)
+    _touch(item)
+    _commit(session, item)
+    _snapshot(session, "block", item, "Updated block")
+    return _read(BlockRead, item)
+
+
+def create_block_draft_version(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> BlockRead:
+    item = _get(session, Block, obj_id)
+    if item is None:
+        raise LookupError("Block not found")
+    if item.status != BlockStatus.approved:
+        raise ValueError("Draft versions can only be created from approved blocks.")
+    draft = Block(
+        project_id=item.project_id,
+        key=item.key,
+        name=item.name,
+        description=item.description,
+        block_kind=item.block_kind,
+        abstraction_level=item.abstraction_level,
+        status=BlockStatus.draft,
+        version=item.version + 1,
+        owner=item.owner,
+        review_comment=payload.change_summary if payload else None,
+    )
+    _commit(session, draft)
+    _snapshot(session, "block", draft, "Created draft version", payload.actor if payload else None)
+    return _read(BlockRead, draft)
+
+
+def submit_block_for_review(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> BlockRead:
+    item = _get(session, Block, obj_id)
+    if item is None:
+        raise LookupError("Block not found")
+    if not _editable(item.status):
+        raise ValueError("Only draft or rejected blocks can be submitted for review.")
+    old = _status_value(item.status)
+    item.status = BlockStatus.in_review
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="block", obj=item, from_status=old, to_status="in_review", action="submit_review", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "block", item, "Submitted for review", payload.actor if payload else None)
+    return _read(BlockRead, item)
+
+
+def approve_block(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> BlockRead:
+    item = _get(session, Block, obj_id)
+    if item is None:
+        raise LookupError("Block not found")
+    if item.status != BlockStatus.in_review:
+        raise ValueError("Only blocks in review can be approved.")
+    old = _status_value(item.status)
+    item.status = BlockStatus.approved
+    item.approved_at = datetime.now(timezone.utc)
+    item.approved_by = payload.actor if payload and payload.actor else "system"
+    item.rejection_reason = None
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="block", obj=item, from_status=old, to_status="approved", action="approve", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "block", item, "Approved block", payload.actor if payload else None)
+    return _read(BlockRead, item)
+
+
+def reject_block(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> BlockRead:
+    item = _get(session, Block, obj_id)
+    if item is None:
+        raise LookupError("Block not found")
+    if item.status != BlockStatus.in_review:
+        raise ValueError("Only blocks in review can be rejected.")
+    old = _status_value(item.status)
+    item.status = BlockStatus.rejected
+    item.rejection_reason = payload.reason if payload and payload.reason else payload.comment if payload else None
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="block", obj=item, from_status=old, to_status="rejected", action="reject", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "block", item, "Rejected block", payload.actor if payload else None)
+    return _read(BlockRead, item)
+
+
+def send_block_back_to_draft(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> BlockRead:
+    item = _get(session, Block, obj_id)
+    if item is None:
+        raise LookupError("Block not found")
+    if item.status not in {BlockStatus.in_review, BlockStatus.rejected}:
+        raise ValueError("Only blocks in review or rejected blocks can be sent back to draft.")
+    old = _status_value(item.status)
+    item.status = BlockStatus.draft
+    item.rejection_reason = None
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="block", obj=item, from_status=old, to_status="draft", action="send_back_to_draft", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "block", item, "Sent back to draft", payload.actor if payload else None)
+    return _read(BlockRead, item)
+
+
+def list_blocks(session: Session, project_id: UUID) -> list[BlockRead]:
+    return [BlockRead.model_validate(item) for item in _items(session.exec(select(Block).where(Block.project_id == project_id).order_by(Block.key)))]
+
+
+def get_block_detail(session: Session, obj_id: UUID) -> dict[str, Any]:
+    item = _get(session, Block, obj_id)
+    if item is None:
+        raise LookupError("Block not found")
+    return {
+        "block": BlockRead.model_validate(item),
+        "containments": list_block_containments(session, item.project_id, obj_id=item.id),
+        "links": list_sysml_relations(session, item.project_id, object_type="block", object_id=item.id),
+        "history": list_block_history(session, item.id),
+        "impact": build_impact(session, item.project_id, "block", item.id),
+    }
+
+
+def list_block_history(session: Session, obj_id: UUID) -> list[RevisionSnapshotRead]:
+    rows = _items(session.exec(select(RevisionSnapshot).where(RevisionSnapshot.object_type == "block", RevisionSnapshot.object_id == obj_id).order_by(desc(RevisionSnapshot.changed_at))))
+    return [RevisionSnapshotRead.model_validate(item) for item in rows]
+
+
+def create_block_containment(session: Session, payload: BlockContainmentCreate) -> BlockContainmentRead:
+    parent = _get(session, Block, payload.parent_block_id)
+    child = _get(session, Block, payload.child_block_id)
+    if parent is None or child is None:
+        raise LookupError("Block not found")
+    if parent.project_id != payload.project_id or child.project_id != payload.project_id:
+        raise ValueError("Containment must stay within the same project")
+    existing = session.exec(select(BlockContainment).where(BlockContainment.project_id == payload.project_id, BlockContainment.parent_block_id == payload.parent_block_id, BlockContainment.child_block_id == payload.child_block_id)).first()
+    if existing:
+        return BlockContainmentRead.model_validate(existing)
+    return BlockContainmentRead.model_validate(_add(session, BlockContainment.model_validate(payload)))
+
+
+def delete_block_containment(session: Session, containment_id: UUID) -> None:
+    item = _get(session, BlockContainment, containment_id)
+    if item is None:
+        raise LookupError("Block containment not found")
+    session.delete(item)
+    session.commit()
+
+
+def list_block_containments(session: Session, project_id: UUID, obj_id: UUID | None = None) -> list[BlockContainmentRead]:
+    stmt = select(BlockContainment).where(BlockContainment.project_id == project_id)
+    if obj_id:
+        stmt = stmt.where(or_(BlockContainment.parent_block_id == obj_id, BlockContainment.child_block_id == obj_id))
+    return [BlockContainmentRead.model_validate(item) for item in _items(session.exec(stmt.order_by(BlockContainment.created_at)))]
+
+
+def create_sysml_relation(session: Session, payload: SysMLRelationCreate) -> SysMLRelationRead:
+    source = resolve_object(session, payload.source_type.value, payload.source_id)
+    target = resolve_object(session, payload.target_type.value, payload.target_id)
+    if source["project_id"] != target["project_id"] or source["project_id"] != payload.project_id:
+        raise ValueError("SysML relations must stay within the same project")
+    _validate_sysml_relation_pattern(payload)
+    return SysMLRelationRead.model_validate(_add(session, SysMLRelation.model_validate(payload)))
+
+
+def _validate_sysml_relation_pattern(payload: SysMLRelationCreate) -> None:
+    allowed = {
+        (SysMLObjectType.block, SysMLObjectType.requirement, SysMLRelationType.satisfy),
+        (SysMLObjectType.test_case, SysMLObjectType.requirement, SysMLRelationType.verify),
+        (SysMLObjectType.requirement, SysMLObjectType.requirement, SysMLRelationType.deriveReqt),
+        (SysMLObjectType.requirement, SysMLObjectType.block, SysMLRelationType.allocate),
+        (SysMLObjectType.requirement, SysMLObjectType.block, SysMLRelationType.refine),
+        (SysMLObjectType.requirement, SysMLObjectType.block, SysMLRelationType.trace),
+        (SysMLObjectType.block, SysMLObjectType.block, SysMLRelationType.contain),
+        (SysMLObjectType.block, SysMLObjectType.test_case, SysMLRelationType.trace),
+        (SysMLObjectType.requirement, SysMLObjectType.test_case, SysMLRelationType.trace),
+        (SysMLObjectType.component, SysMLObjectType.requirement, SysMLRelationType.trace),
+        (SysMLObjectType.operational_run, SysMLObjectType.requirement, SysMLRelationType.trace),
+    }
+    if (payload.source_type, payload.target_type, payload.relation_type) not in allowed:
+        raise ValueError("Unsupported SysML relation pattern")
+
+
+def delete_sysml_relation(session: Session, relation_id: UUID) -> None:
+    item = _get(session, SysMLRelation, relation_id)
+    if item is None:
+        raise LookupError("SysML relation not found")
+    session.delete(item)
+    session.commit()
+
+
+def list_sysml_relations(session: Session, project_id: UUID, object_type: str | None = None, object_id: UUID | None = None) -> list[SysMLRelationRead]:
+    stmt = select(SysMLRelation).where(SysMLRelation.project_id == project_id)
+    if object_type and object_id:
+        stype = SysMLObjectType(object_type)
+        stmt = stmt.where(or_(and_(SysMLRelation.source_type == stype, SysMLRelation.source_id == object_id), and_(SysMLRelation.target_type == stype, SysMLRelation.target_id == object_id)))
+    return [SysMLRelationRead.model_validate(item) for item in _items(session.exec(stmt.order_by(SysMLRelation.created_at)))]
+
+
+def list_review_queue(session: Session, project_id: UUID) -> ReviewQueueResponse:
+    project = get_project_service(session, project_id)
+    items: list[ReviewQueueItem] = []
+    for model, object_type, status_value in (
+        (Requirement, "requirement", RequirementStatus.in_review),
+        (Block, "block", BlockStatus.in_review),
+        (TestCase, "test_case", TestCaseStatus.in_review),
+    ):
+        rows = _items(session.exec(select(model).where(model.project_id == project_id, model.status == status_value)))
+        for row in rows:
+            items.append(
+                ReviewQueueItem(
+                    object_type=object_type,
+                    id=row.id,
+                    key=row.key,
+                    title=getattr(row, "title", getattr(row, "name", "")),
+                    status=_status_value(row.status),
+                    version=row.version,
+                    updated_at=row.updated_at,
+                )
+            )
+    return ReviewQueueResponse(project=project, items=sorted(items, key=lambda item: item.updated_at, reverse=True))
+
+
+def build_block_tree(session: Session, project_id: UUID) -> SysMLTreeResponse:
+    project = get_project_service(session, project_id)
+    blocks = list_blocks(session, project_id)
+    containments = list_block_containments(session, project_id)
+    relations = list_sysml_relations(session, project_id)
+    nodes = {block.id: BlockTreeNode(block=block) for block in blocks}
+    children: dict[UUID, list[UUID]] = {}
+    parent_ids: set[UUID] = set()
+    satisfied: dict[UUID, list[ObjectSummary]] = defaultdict(list)
+    tests_by_req: dict[UUID, list[ObjectSummary]] = defaultdict(list)
+    for containment in containments:
+        children.setdefault(containment.parent_block_id, []).append(containment.child_block_id)
+        parent_ids.add(containment.child_block_id)
+    for rel in relations:
+        if rel.relation_type == SysMLRelationType.satisfy and rel.source_type == SysMLObjectType.block and rel.target_type == SysMLObjectType.requirement:
+            satisfied[rel.source_id].append(summarize(resolve_object(session, "requirement", rel.target_id)))
+        if rel.relation_type == SysMLRelationType.verify and rel.source_type == SysMLObjectType.test_case and rel.target_type == SysMLObjectType.requirement:
+            tests_by_req[rel.target_id].append(summarize(resolve_object(session, "test_case", rel.source_id)))
+    for block in blocks:
+        node = nodes[block.id]
+        node.satisfied_requirements = satisfied.get(block.id, [])
+        test_map: dict[UUID, ObjectSummary] = {}
+        for req in node.satisfied_requirements:
+            for test in tests_by_req.get(req.object_id, []):
+                test_map[test.object_id] = test
+        node.linked_tests = list(test_map.values())
+    for parent_id, child_ids in children.items():
+        nodes[parent_id].children = [nodes[cid] for cid in child_ids if cid in nodes]
+    roots = [node for bid, node in nodes.items() if bid not in parent_ids]
+    return SysMLTreeResponse(project=project, roots=roots)
+
+
+def build_satisfaction_view(session: Session, project_id: UUID) -> SysMLSatisfactionResponse:
+    project = get_project_service(session, project_id)
+    rows: list[SatisfactionRow] = []
+    for block in list_blocks(session, project_id):
+        rels = _items(session.exec(select(SysMLRelation).where(SysMLRelation.project_id == project_id, SysMLRelation.source_type == SysMLObjectType.block, SysMLRelation.source_id == block.id, SysMLRelation.relation_type == SysMLRelationType.satisfy)))
+        rows.append(SatisfactionRow(block=block, requirements=[summarize(resolve_object(session, "requirement", rel.target_id)) for rel in rels]))
+    return SysMLSatisfactionResponse(project=project, rows=rows)
+
+
+def build_verification_view(session: Session, project_id: UUID) -> SysMLVerificationResponse:
+    project = get_project_service(session, project_id)
+    rows: list[VerificationRow] = []
+    for test in list_test_cases(session, project_id):
+        rels = _items(session.exec(select(SysMLRelation).where(SysMLRelation.project_id == project_id, SysMLRelation.source_type == SysMLObjectType.test_case, SysMLRelation.source_id == test.id, SysMLRelation.relation_type == SysMLRelationType.verify)))
+        rows.append(VerificationRow(test_case=test, requirements=[summarize(resolve_object(session, "requirement", rel.target_id)) for rel in rels]))
+    return SysMLVerificationResponse(project=project, rows=rows)
+
+
+def build_derivation_view(session: Session, project_id: UUID) -> SysMLDerivationResponse:
+    project = get_project_service(session, project_id)
+    rows: list[DerivationRow] = []
+    for req in list_requirements(session, project_id):
+        rels = _items(session.exec(select(SysMLRelation).where(SysMLRelation.project_id == project_id, SysMLRelation.source_type == SysMLObjectType.requirement, SysMLRelation.source_id == req.id, SysMLRelation.relation_type == SysMLRelationType.deriveReqt)))
+        if rels:
+            rows.append(DerivationRow(source_requirement=req, derived_requirements=[summarize(resolve_object(session, "requirement", rel.target_id)) for rel in rels]))
+    return SysMLDerivationResponse(project=project, rows=rows)
+
+
 def create_test_case(session: Session, payload: TestCaseCreate) -> TestCaseRead:
-    return _read(TestCaseRead, _add(session, TestCase.model_validate(payload)))
+    item = TestCase.model_validate(payload)
+    if item.status == TestCaseStatus.approved and item.approved_at is None:
+        item.approved_at = datetime.now(timezone.utc)
+        item.approved_by = "seed"
+    _commit(session, item)
+    _snapshot(session, "test_case", item, "Created test case")
+    return _read(TestCaseRead, item)
 
 
 def update_test_case(session: Session, obj_id: UUID, payload: TestCaseUpdate) -> TestCaseRead:
     item = _get(session, TestCase, obj_id)
     if item is None:
         raise LookupError("Test case not found")
+    if not _editable(item.status):
+        raise ValueError("Approved and obsolete test cases cannot be edited in place.")
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(item, k, v)
     _touch(item)
-    return _read(TestCaseRead, _add(session, item))
+    _commit(session, item)
+    _snapshot(session, "test_case", item, "Updated test case")
+    return _read(TestCaseRead, item)
+
+
+def create_test_case_draft_version(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> TestCaseRead:
+    item = _get(session, TestCase, obj_id)
+    if item is None:
+        raise LookupError("Test case not found")
+    if item.status != TestCaseStatus.approved:
+        raise ValueError("Draft versions can only be created from approved test cases.")
+    draft = TestCase(
+        project_id=item.project_id,
+        key=item.key,
+        title=item.title,
+        description=item.description,
+        method=item.method,
+        status=TestCaseStatus.draft,
+        version=item.version + 1,
+        review_comment=payload.change_summary if payload else None,
+    )
+    _commit(session, draft)
+    _snapshot(session, "test_case", draft, "Created draft version", payload.actor if payload else None)
+    return _read(TestCaseRead, draft)
+
+
+def submit_test_case_for_review(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> TestCaseRead:
+    item = _get(session, TestCase, obj_id)
+    if item is None:
+        raise LookupError("Test case not found")
+    if not _editable(item.status):
+        raise ValueError("Only draft or rejected test cases can be submitted for review.")
+    old = _status_value(item.status)
+    item.status = TestCaseStatus.in_review
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="test_case", obj=item, from_status=old, to_status="in_review", action="submit_review", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "test_case", item, "Submitted for review", payload.actor if payload else None)
+    return _read(TestCaseRead, item)
+
+
+def approve_test_case(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> TestCaseRead:
+    item = _get(session, TestCase, obj_id)
+    if item is None:
+        raise LookupError("Test case not found")
+    if item.status != TestCaseStatus.in_review:
+        raise ValueError("Only test cases in review can be approved.")
+    old = _status_value(item.status)
+    item.status = TestCaseStatus.approved
+    item.approved_at = datetime.now(timezone.utc)
+    item.approved_by = payload.actor if payload and payload.actor else "system"
+    item.rejection_reason = None
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="test_case", obj=item, from_status=old, to_status="approved", action="approve", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "test_case", item, "Approved test case", payload.actor if payload else None)
+    return _read(TestCaseRead, item)
+
+
+def reject_test_case(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> TestCaseRead:
+    item = _get(session, TestCase, obj_id)
+    if item is None:
+        raise LookupError("Test case not found")
+    if item.status != TestCaseStatus.in_review:
+        raise ValueError("Only test cases in review can be rejected.")
+    old = _status_value(item.status)
+    item.status = TestCaseStatus.rejected
+    item.rejection_reason = payload.reason if payload and payload.reason else payload.comment if payload else None
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="test_case", obj=item, from_status=old, to_status="rejected", action="reject", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "test_case", item, "Rejected test case", payload.actor if payload else None)
+    return _read(TestCaseRead, item)
+
+
+def send_test_case_back_to_draft(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> TestCaseRead:
+    item = _get(session, TestCase, obj_id)
+    if item is None:
+        raise LookupError("Test case not found")
+    if item.status not in {TestCaseStatus.in_review, TestCaseStatus.rejected}:
+        raise ValueError("Only test cases in review or rejected test cases can be sent back to draft.")
+    old = _status_value(item.status)
+    item.status = TestCaseStatus.draft
+    item.rejection_reason = None
+    item.review_comment = payload.comment if payload else item.review_comment
+    _touch(item)
+    _commit(session, item)
+    _log_action(session, object_type="test_case", obj=item, from_status=old, to_status="draft", action="send_back_to_draft", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
+    _snapshot(session, "test_case", item, "Sent back to draft", payload.actor if payload else None)
+    return _read(TestCaseRead, item)
+
+
+def list_test_case_history(session: Session, obj_id: UUID) -> list[RevisionSnapshotRead]:
+    rows = _items(session.exec(select(RevisionSnapshot).where(RevisionSnapshot.object_type == "test_case", RevisionSnapshot.object_id == obj_id).order_by(desc(RevisionSnapshot.changed_at))))
+    return [RevisionSnapshotRead.model_validate(item) for item in rows]
 
 
 def list_test_cases(session: Session, project_id: UUID) -> list[TestCaseRead]:
@@ -218,9 +816,18 @@ def create_baseline(session: Session, payload: BaselineCreate) -> tuple[Baseline
         raise LookupError("Project not found")
     baseline = _add(session, Baseline.model_validate(payload))
     items: list[BaselineItemRead] = []
-    for object_type, model in ((BaselineObjectType.requirement, Requirement), (BaselineObjectType.component, Component), (BaselineObjectType.test_case, TestCase)):
+    for object_type, model, selected_ids in (
+        (BaselineObjectType.requirement, Requirement, set(payload.requirement_ids) or None),
+        (BaselineObjectType.block, Block, set(payload.block_ids) or None),
+        (BaselineObjectType.component, Component, None),
+        (BaselineObjectType.test_case, TestCase, set(payload.test_case_ids) or None),
+    ):
         for row in _items(session.exec(select(model).where(model.project_id == payload.project_id))):
             obj = row[0] if not hasattr(row, "id") else row
+            if object_type != BaselineObjectType.component and getattr(obj, "status", None) is not None and _status_value(obj.status) != "approved":
+                continue
+            if selected_ids and obj.id not in selected_ids:
+                continue
             bi = _add(session, BaselineItem(baseline_id=baseline.id, object_type=object_type, object_id=obj.id, object_version=getattr(obj, "version", 1)))
             items.append(BaselineItemRead.model_validate(bi))
     return BaselineRead.model_validate(baseline), items
@@ -234,7 +841,7 @@ def get_baseline_detail(session: Session, baseline_id: UUID) -> dict[str, Any]:
     baseline = _get(session, Baseline, baseline_id)
     if baseline is None:
         raise LookupError("Baseline not found")
-    items = [BaselineItemRead.model_validate(item) for item in session.exec(select(BaselineItem).where(BaselineItem.baseline_id == baseline_id))]
+    items = [BaselineItemRead.model_validate(item) for item in _items(session.exec(select(BaselineItem).where(BaselineItem.baseline_id == baseline_id)))]
     return {"baseline": BaselineRead.model_validate(baseline), "items": items}
 
 
@@ -283,7 +890,8 @@ def create_link(session: Session, payload: LinkCreate) -> LinkRead:
 def list_links(session: Session, project_id: UUID, object_type: str | None = None, object_id: UUID | None = None) -> list[LinkRead]:
     stmt = select(Link).where(Link.project_id == project_id)
     if object_type and object_id:
-        stmt = stmt.where(((Link.source_type == object_type) & (Link.source_id == object_id)) | ((Link.target_type == object_type) & (Link.target_id == object_id)))
+        otype = LinkObjectType(object_type)
+        stmt = stmt.where(((Link.source_type == otype) & (Link.source_id == object_id)) | ((Link.target_type == otype) & (Link.target_id == object_id)))
     links = [LinkRead.model_validate(item) for item in _items(session.exec(stmt.order_by(Link.created_at)))]
     for link in links:
         src = resolve_object(session, link.source_type.value, link.source_id)
@@ -386,34 +994,102 @@ def build_matrix(session: Session, project_id: UUID, mode: str, status: Requirem
 def build_impact(session: Session, project_id: UUID, object_type: str, object_id: UUID) -> ImpactResponse:
     project = get_project_service(session, project_id)
     root = resolve_object(session, object_type, object_id)
-    links = list_links(session, project_id)
-    direct_links = [l for l in links if (l.source_type.value == object_type and l.source_id == object_id) or (l.target_type.value == object_type and l.target_id == object_id)]
+    legacy_links = list_links(session, project_id)
+    sysml_relations = list_sysml_relations(session, project_id)
+    containments = list_block_containments(session, project_id)
+
     direct: dict[tuple[str, UUID], ObjectSummary] = {}
-    for link in direct_links:
-        src = resolve_object(session, link.source_type.value, link.source_id)
-        tgt = resolve_object(session, link.target_type.value, link.target_id)
-        other = tgt if src["object_id"] == object_id else src
-        direct[(other["object_type"], other["object_id"])] = summarize(other)
     secondary: dict[tuple[str, UUID], ObjectSummary] = {}
-    for d in list(direct.values()):
-        for link in links:
-            if link.source_type.value == d.object_type and link.source_id == d.object_id:
-                other = resolve_object(session, link.target_type.value, link.target_id)
-                if other["object_id"] != object_id:
-                    secondary[(other["object_type"], other["object_id"])] = summarize(other)
-            if link.target_type.value == d.object_type and link.target_id == d.object_id:
-                other = resolve_object(session, link.source_type.value, link.source_id)
-                if other["object_id"] != object_id:
-                    secondary[(other["object_type"], other["object_id"])] = summarize(other)
+
+    def add(bucket: dict[tuple[str, UUID], ObjectSummary], obj: dict[str, Any]) -> None:
+        bucket[(obj["object_type"], obj["object_id"])] = summarize(obj)
+
+    if object_type == "block":
+        for rel in sysml_relations:
+            if rel.relation_type == SysMLRelationType.satisfy and rel.source_type == SysMLObjectType.block and rel.source_id == object_id:
+                add(direct, resolve_object(session, "requirement", rel.target_id))
+            if rel.relation_type == SysMLRelationType.contain and rel.source_type == SysMLObjectType.block and rel.source_id == object_id:
+                add(direct, resolve_object(session, "block", rel.target_id))
+        for containment in containments:
+            if containment.parent_block_id == object_id:
+                add(direct, resolve_object(session, "block", containment.child_block_id))
+            elif containment.child_block_id == object_id:
+                add(direct, resolve_object(session, "block", containment.parent_block_id))
+    elif object_type == "requirement":
+        for rel in sysml_relations:
+            if rel.source_type == SysMLObjectType.requirement and rel.source_id == object_id and rel.relation_type == SysMLRelationType.deriveReqt:
+                add(direct, resolve_object(session, "requirement", rel.target_id))
+            if rel.target_type == SysMLObjectType.requirement and rel.target_id == object_id:
+                if rel.relation_type == SysMLRelationType.satisfy:
+                    add(direct, resolve_object(session, "block", rel.source_id))
+                elif rel.relation_type == SysMLRelationType.verify:
+                    add(direct, resolve_object(session, "test_case", rel.source_id))
+                else:
+                    add(direct, resolve_object(session, rel.source_type.value, rel.source_id))
+    elif object_type == "test_case":
+        for rel in sysml_relations:
+            if rel.source_type == SysMLObjectType.test_case and rel.source_id == object_id and rel.relation_type == SysMLRelationType.verify:
+                add(direct, resolve_object(session, "requirement", rel.target_id))
+
+    if object_type in {"block", "requirement"}:
+        req_ids = [obj.object_id for obj in direct.values() if obj.object_type == "requirement"]
+        for req_id in req_ids:
+            for rel in _items(session.exec(select(SysMLRelation).where(SysMLRelation.project_id == project_id, SysMLRelation.source_type == SysMLObjectType.test_case, SysMLRelation.target_type == SysMLObjectType.requirement, SysMLRelation.target_id == req_id, SysMLRelation.relation_type == SysMLRelationType.verify))):
+                add(secondary, resolve_object(session, "test_case", rel.source_id))
+        for rel in _items(session.exec(select(SysMLRelation).where(SysMLRelation.project_id == project_id, SysMLRelation.source_type == SysMLObjectType.requirement, SysMLRelation.target_type == SysMLObjectType.requirement, SysMLRelation.relation_type == SysMLRelationType.deriveReqt, SysMLRelation.source_id.in_(req_ids)))):
+            add(secondary, resolve_object(session, "requirement", rel.target_id))
+
+    if object_type == "test_case":
+        for rel in sysml_relations:
+            if rel.target_type == SysMLObjectType.requirement and rel.relation_type == SysMLRelationType.verify:
+                add(secondary, resolve_object(session, "block", rel.source_id))
+
+    for item in list(direct.values()):
+        if item.object_type == "requirement":
+            for rel in _items(session.exec(select(SysMLRelation).where(SysMLRelation.project_id == project_id, SysMLRelation.source_type == SysMLObjectType.test_case, SysMLRelation.target_type == SysMLObjectType.requirement, SysMLRelation.target_id == item.object_id, SysMLRelation.relation_type == SysMLRelationType.verify))):
+                add(secondary, resolve_object(session, "test_case", rel.source_id))
+        if item.object_type == "block":
+            for containment in containments:
+                if containment.parent_block_id == item.object_id:
+                    add(secondary, resolve_object(session, "block", containment.child_block_id))
+                elif containment.child_block_id == item.object_id:
+                    add(secondary, resolve_object(session, "block", containment.parent_block_id))
+
     likely = {**direct, **secondary}
-    return ImpactResponse(project=project, object=summarize(root), direct=list(direct.values()), secondary=list(secondary.values()), likely_impacted=list(likely.values()), links=direct_links)
+    related_baselines: list[BaselineRead] = []
+    for baseline in list_baselines(session, project_id):
+        detail = get_baseline_detail(session, baseline.id)
+        baseline_ids = {item.object_id for item in detail["items"]}
+        if object_id in baseline_ids or any(obj.object_id in baseline_ids for obj in likely.values()):
+            related_baselines.append(baseline)
+    open_changes: list[ChangeRequestRead] = []
+    for cr in list_change_requests(session, project_id):
+        impacts = list_change_impacts(session, cr.id)
+        if cr.status == ChangeRequestStatus.open and any(str(impact.object_id) == str(object_id) or any(str(impact.object_id) == str(obj.object_id) for obj in likely.values()) for impact in impacts):
+            open_changes.append(cr)
+
+    return ImpactResponse(
+        project=project,
+        object=summarize(root),
+        direct=list(direct.values()),
+        secondary=list(secondary.values()),
+        likely_impacted=list(likely.values()),
+        links=legacy_links,
+        related_baselines=related_baselines,
+        open_change_requests=open_changes,
+    )
 
 
 def get_requirement_detail(session: Session, obj_id: UUID) -> dict[str, Any]:
     item = _get(session, Requirement, obj_id)
     if item is None:
         raise LookupError("Requirement not found")
-    return {"requirement": RequirementRead.model_validate(item), "links": list_links(session, item.project_id, "requirement", item.id), "impact": build_impact(session, item.project_id, "requirement", item.id)}
+    return {
+        "requirement": RequirementRead.model_validate(item),
+        "links": list_links(session, item.project_id, "requirement", item.id),
+        "history": list_requirement_history(session, item.id),
+        "impact": build_impact(session, item.project_id, "requirement", item.id),
+    }
 
 
 def get_component_detail(session: Session, obj_id: UUID) -> dict[str, Any]:
@@ -429,7 +1105,13 @@ def get_test_case_detail(session: Session, obj_id: UUID) -> dict[str, Any]:
     if item is None:
         raise LookupError("Test case not found")
     runs = [TestRunRead.model_validate(x) for x in _items(session.exec(select(TestRun).where(TestRun.test_case_id == obj_id).order_by(desc(TestRun.execution_date), desc(TestRun.created_at))))]
-    return {"test_case": TestCaseRead.model_validate(item), "links": list_links(session, item.project_id, "test_case", item.id), "runs": runs, "impact": build_impact(session, item.project_id, "test_case", item.id)}
+    return {
+        "test_case": TestCaseRead.model_validate(item),
+        "links": list_links(session, item.project_id, "test_case", item.id),
+        "runs": runs,
+        "history": list_test_case_history(session, item.id),
+        "impact": build_impact(session, item.project_id, "test_case", item.id),
+    }
 
 
 def get_change_request_detail(session: Session, obj_id: UUID) -> dict[str, Any]:
@@ -447,15 +1129,54 @@ def seed_demo(session: Session) -> dict[str, Any]:
 
     reqs = {}
     for p in [
-        {"project_id": project.id, "key": "DR-REQ-001", "title": "Drone shall fly for at least 30 minutes", "description": "Mission endurance target.", "category": RequirementCategory.performance, "priority": Priority.critical, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1},
-        {"project_id": project.id, "key": "DR-REQ-002", "title": "Drone shall stream real-time video to ground operator", "description": "Low latency live video stream.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1},
-        {"project_id": project.id, "key": "DR-REQ-003", "title": "Drone shall operate between -5C and 40C", "description": "Environmental envelope.", "category": RequirementCategory.environment, "priority": Priority.high, "verification_method": VerificationMethod.analysis, "status": RequirementStatus.approved, "version": 1},
-        {"project_id": project.id, "key": "DR-REQ-004", "title": "Drone shall detect obstacles during low altitude flight", "description": "Safety obstacle detection.", "category": RequirementCategory.safety, "priority": Priority.critical, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1},
-        {"project_id": project.id, "key": "DR-REQ-005", "title": "Drone shall support remote monitoring of battery and mission status", "description": "Telemetry requirement.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.demonstration, "status": RequirementStatus.approved, "version": 1},
+        {"project_id": project.id, "key": "DR-REQ-001", "title": "Drone shall fly for at least 30 minutes", "description": "Mission endurance target.", "category": RequirementCategory.performance, "priority": Priority.critical, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-REQ-002", "title": "Drone shall stream real-time video to ground operator", "description": "Low latency live video stream.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-REQ-003", "title": "Drone shall operate between -5C and 40C", "description": "Environmental envelope.", "category": RequirementCategory.environment, "priority": Priority.high, "verification_method": VerificationMethod.analysis, "status": RequirementStatus.in_review, "version": 1},
+        {"project_id": project.id, "key": "DR-REQ-004", "title": "Drone shall detect obstacles during low altitude flight", "description": "Safety obstacle detection.", "category": RequirementCategory.safety, "priority": Priority.critical, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-REQ-005", "title": "Drone shall support remote monitoring of battery and mission status", "description": "Telemetry requirement.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.demonstration, "status": RequirementStatus.draft, "version": 1},
+        {"project_id": project.id, "key": "DR-REQ-006", "title": "Battery pack shall support mission reserve margin of 10 percent", "description": "Derived reserve requirement.", "category": RequirementCategory.performance, "priority": Priority.medium, "verification_method": VerificationMethod.analysis, "status": RequirementStatus.draft, "version": 1, "parent_requirement_id": None},
     ]:
         item = _items(session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == p["key"])))
         item = item[0] if item else None
         reqs[p["key"]] = item or _add(session, Requirement.model_validate(p))
+
+    if reqs["DR-REQ-006"].parent_requirement_id is None:
+        reqs["DR-REQ-006"].parent_requirement_id = reqs["DR-REQ-001"].id
+        _touch(reqs["DR-REQ-006"])
+        _add(session, reqs["DR-REQ-006"])
+
+    for requirement in reqs.values():
+        if not session.exec(select(RevisionSnapshot).where(RevisionSnapshot.project_id == project.id, RevisionSnapshot.object_type == "requirement", RevisionSnapshot.object_id == requirement.id)).first():
+            _snapshot(session, "requirement", requirement, "Seeded requirement", "seed")
+
+    blocks = {}
+    for p in [
+        {"project_id": project.id, "key": "DR-BLK-001", "name": "Drone System", "description": "Top-level drone system.", "block_kind": BlockKind.system, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-BLK-002", "name": "Power Subsystem", "description": "Power distribution and management.", "block_kind": BlockKind.subsystem, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-BLK-003", "name": "Propulsion Subsystem", "description": "Lift and propulsion.", "block_kind": BlockKind.subsystem, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.in_review, "version": 1},
+        {"project_id": project.id, "key": "DR-BLK-004", "name": "Battery Pack", "description": "High density battery.", "block_kind": BlockKind.component, "abstraction_level": AbstractionLevel.physical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-BLK-005", "name": "Flight Controller", "description": "Primary flight control unit.", "block_kind": BlockKind.component, "abstraction_level": AbstractionLevel.physical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-BLK-006", "name": "Camera Module", "description": "Streaming camera.", "block_kind": BlockKind.component, "abstraction_level": AbstractionLevel.physical, "status": BlockStatus.draft, "version": 1},
+        {"project_id": project.id, "key": "DR-BLK-007", "name": "Obstacle Detection Subsystem", "description": "Obstacle sensing and avoidance.", "block_kind": BlockKind.subsystem, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+    ]:
+        item = _items(session.exec(select(Block).where(Block.project_id == project.id, Block.key == p["key"])))
+        item = item[0] if item else None
+        blocks[p["key"]] = item or _add(session, Block.model_validate(p))
+
+    for block in blocks.values():
+        if not session.exec(select(RevisionSnapshot).where(RevisionSnapshot.project_id == project.id, RevisionSnapshot.object_type == "block", RevisionSnapshot.object_id == block.id)).first():
+            _snapshot(session, "block", block, "Seeded block", "seed")
+
+    for parent, child in [
+        ("DR-BLK-001", "DR-BLK-002"),
+        ("DR-BLK-001", "DR-BLK-003"),
+        ("DR-BLK-001", "DR-BLK-005"),
+        ("DR-BLK-001", "DR-BLK-006"),
+        ("DR-BLK-001", "DR-BLK-007"),
+        ("DR-BLK-002", "DR-BLK-004"),
+    ]:
+        if not session.exec(select(BlockContainment).where(BlockContainment.project_id == project.id, BlockContainment.parent_block_id == blocks[parent].id, BlockContainment.child_block_id == blocks[child].id)).first():
+            _add(session, BlockContainment(project_id=project.id, parent_block_id=blocks[parent].id, child_block_id=blocks[child].id, relation_type=BlockContainmentRelationType.contains))
 
     comps = {}
     for p in [
@@ -479,6 +1200,28 @@ def seed_demo(session: Session) -> dict[str, Any]:
         item = _items(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == p["key"])))
         item = item[0] if item else None
         tests[p["key"]] = item or _add(session, TestCase.model_validate(p))
+
+    for test_case in tests.values():
+        if not session.exec(select(RevisionSnapshot).where(RevisionSnapshot.project_id == project.id, RevisionSnapshot.object_type == "test_case", RevisionSnapshot.object_id == test_case.id)).first():
+            _snapshot(session, "test_case", test_case, "Seeded test case", "seed")
+
+    for rel in [
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blocks["DR-BLK-004"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-001"].id, relation_type=SysMLRelationType.satisfy, rationale="Battery contributes to endurance."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blocks["DR-BLK-005"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-002"].id, relation_type=SysMLRelationType.satisfy, rationale="Flight controller manages video."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blocks["DR-BLK-006"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-002"].id, relation_type=SysMLRelationType.satisfy, rationale="Camera module provides streaming."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blocks["DR-BLK-004"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-003"].id, relation_type=SysMLRelationType.satisfy, rationale="Battery supports temperature envelope."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blocks["DR-BLK-005"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-003"].id, relation_type=SysMLRelationType.satisfy, rationale="Controller monitors thermal state."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blocks["DR-BLK-007"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-004"].id, relation_type=SysMLRelationType.satisfy, rationale="Obstacle subsystem satisfies detection."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blocks["DR-BLK-005"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-005"].id, relation_type=SysMLRelationType.satisfy, rationale="Controller supports mission monitoring."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blocks["DR-BLK-004"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-005"].id, relation_type=SysMLRelationType.satisfy, rationale="Battery status reported remotely."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.test_case, source_id=tests["DR-TST-001"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-001"].id, relation_type=SysMLRelationType.verify, rationale="Endurance verification."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.test_case, source_id=tests["DR-TST-002"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-002"].id, relation_type=SysMLRelationType.verify, rationale="Streaming verification."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.test_case, source_id=tests["DR-TST-003"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-003"].id, relation_type=SysMLRelationType.verify, rationale="Temperature verification."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.test_case, source_id=tests["DR-TST-004"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-004"].id, relation_type=SysMLRelationType.verify, rationale="Obstacle detection verification."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.requirement, source_id=reqs["DR-REQ-006"].id, target_type=SysMLObjectType.requirement, target_id=reqs["DR-REQ-001"].id, relation_type=SysMLRelationType.deriveReqt, rationale="Reserve margin derived from endurance."),
+    ]:
+        if not session.exec(select(SysMLRelation).where(SysMLRelation.project_id == project.id, SysMLRelation.source_type == rel.source_type, SysMLRelation.source_id == rel.source_id, SysMLRelation.target_type == rel.target_type, SysMLRelation.target_id == rel.target_id, SysMLRelation.relation_type == rel.relation_type)).first():
+            create_sysml_relation(session, rel)
 
     for p in [
         LinkCreate(project_id=project.id, source_type=LinkObjectType.requirement, source_id=reqs["DR-REQ-001"].id, target_type=LinkObjectType.component, target_id=comps["DR-CMP-001"].id, relation_type=RelationType.allocated_to, rationale="Battery contributes to endurance."),

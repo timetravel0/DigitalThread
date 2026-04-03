@@ -49,8 +49,7 @@ export function TopBar() {
         <div className="text-xs uppercase tracking-[0.25em] text-muted">ThreadLite</div>
         <div className="text-lg font-semibold">Lightweight Digital Thread</div>
       </div>
-      <div className="hidden text-sm text-muted md:block">FastAPI + Next.js + PostgreSQL</div>
+      <div className="hidden text-sm text-muted md:block">FastAPI + Next.js + SQLite or PostgreSQL</div>
     </div>
   );
 }
-

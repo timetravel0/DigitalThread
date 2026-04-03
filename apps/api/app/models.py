@@ -43,11 +43,37 @@ class VerificationMethod(str, Enum):
 
 class RequirementStatus(str, Enum):
     draft = "draft"
+    in_review = "in_review"
     approved = "approved"
+    rejected = "rejected"
     implemented = "implemented"
     verified = "verified"
     failed = "failed"
+    obsolete = "obsolete"
     retired = "retired"
+
+
+class BlockKind(str, Enum):
+    system = "system"
+    subsystem = "subsystem"
+    assembly = "assembly"
+    component = "component"
+    software = "software"
+    interface = "interface"
+    other = "other"
+
+
+class AbstractionLevel(str, Enum):
+    logical = "logical"
+    physical = "physical"
+
+
+class BlockStatus(str, Enum):
+    draft = "draft"
+    in_review = "in_review"
+    approved = "approved"
+    rejected = "rejected"
+    obsolete = "obsolete"
 
 
 class ComponentType(str, Enum):
@@ -77,11 +103,15 @@ class TestMethod(str, Enum):
 
 class TestCaseStatus(str, Enum):
     draft = "draft"
+    in_review = "in_review"
+    approved = "approved"
+    rejected = "rejected"
     ready = "ready"
     executed = "executed"
     failed = "failed"
     passed = "passed"
     archived = "archived"
+    obsolete = "obsolete"
 
 
 class TestRunResult(str, Enum):
@@ -104,6 +134,7 @@ class BaselineStatus(str, Enum):
 
 class BaselineObjectType(str, Enum):
     requirement = "requirement"
+    block = "block"
     component = "component"
     test_case = "test_case"
 
@@ -129,6 +160,29 @@ class RelationType(str, Enum):
     reports_on = "reports_on"
     validates = "validates"
     fails = "fails"
+
+
+class SysMLObjectType(str, Enum):
+    requirement = "requirement"
+    block = "block"
+    test_case = "test_case"
+    component = "component"
+    operational_run = "operational_run"
+
+
+class SysMLRelationType(str, Enum):
+    satisfy = "satisfy"
+    verify = "verify"
+    deriveReqt = "deriveReqt"
+    refine = "refine"
+    trace = "trace"
+    allocate = "allocate"
+    contain = "contain"
+
+
+class BlockContainmentRelationType(str, Enum):
+    contains = "contains"
+    composed_of = "composed_of"
 
 
 class ChangeRequestStatus(str, Enum):
@@ -181,6 +235,40 @@ class Requirement(TimestampMixin, SQLModel, table=True):
     status: RequirementStatus = Field(default=RequirementStatus.draft, sa_column=Column(SAEnum(RequirementStatus), nullable=False))
     version: int = Field(default=1, nullable=False)
     parent_requirement_id: UUID | None = Field(default=None, foreign_key="requirements.id", index=True)
+    approved_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    approved_by: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
+    rejection_reason: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    review_comment: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+
+
+class Block(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "blocks"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    key: str = Field(sa_column=Column(String(64), index=True, nullable=False))
+    name: str = Field(sa_column=Column(String(255), nullable=False))
+    description: str = Field(default="", nullable=False)
+    block_kind: BlockKind = Field(sa_column=Column(SAEnum(BlockKind), nullable=False))
+    abstraction_level: AbstractionLevel = Field(sa_column=Column(SAEnum(AbstractionLevel), nullable=False))
+    status: BlockStatus = Field(default=BlockStatus.draft, sa_column=Column(SAEnum(BlockStatus), nullable=False))
+    version: int = Field(default=1, nullable=False)
+    owner: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
+    approved_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    approved_by: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
+    rejection_reason: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    review_comment: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+
+
+class BlockContainment(SQLModel, table=True):
+    __tablename__ = "block_containments"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    parent_block_id: UUID = Field(foreign_key="blocks.id", index=True)
+    child_block_id: UUID = Field(foreign_key="blocks.id", index=True)
+    relation_type: BlockContainmentRelationType = Field(sa_column=Column(SAEnum(BlockContainmentRelationType), nullable=False))
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)
 
 
 class Component(TimestampMixin, SQLModel, table=True):
@@ -210,6 +298,10 @@ class TestCase(TimestampMixin, SQLModel, table=True):
     method: TestMethod = Field(sa_column=Column(SAEnum(TestMethod), nullable=False))
     status: TestCaseStatus = Field(default=TestCaseStatus.draft, sa_column=Column(SAEnum(TestCaseStatus), nullable=False))
     version: int = Field(default=1, nullable=False)
+    approved_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    approved_by: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
+    rejection_reason: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    review_comment: str | None = Field(default=None, sa_column=Column(String, nullable=True))
 
 
 class TestRun(TimestampMixin, SQLModel, table=True):
@@ -273,6 +365,49 @@ class Link(TimestampMixin, SQLModel, table=True):
     target_id: UUID = Field(index=True)
     relation_type: RelationType = Field(sa_column=Column(SAEnum(RelationType), nullable=False))
     rationale: str | None = Field(default=None)
+
+
+class SysMLRelation(SQLModel, table=True):
+    __tablename__ = "sysml_relations"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    source_type: SysMLObjectType = Field(sa_column=Column(SAEnum(SysMLObjectType), nullable=False))
+    source_id: UUID = Field(index=True)
+    target_type: SysMLObjectType = Field(sa_column=Column(SAEnum(SysMLObjectType), nullable=False))
+    target_id: UUID = Field(index=True)
+    relation_type: SysMLRelationType = Field(sa_column=Column(SAEnum(SysMLRelationType), nullable=False))
+    rationale: str | None = Field(default=None)
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)
+
+
+class RevisionSnapshot(SQLModel, table=True):
+    __tablename__ = "revision_snapshots"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    object_type: str = Field(sa_column=Column(String(64), index=True, nullable=False))
+    object_id: UUID = Field(index=True)
+    version: int = Field(nullable=False)
+    snapshot_json: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
+    changed_at: datetime = Field(default_factory=utcnow, nullable=False)
+    changed_by: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
+    change_summary: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+
+
+class ApprovalActionLog(SQLModel, table=True):
+    __tablename__ = "approval_action_logs"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    object_type: str = Field(sa_column=Column(String(64), index=True, nullable=False))
+    object_id: UUID = Field(index=True)
+    from_status: str = Field(sa_column=Column(String(64), nullable=False))
+    to_status: str = Field(sa_column=Column(String(64), nullable=False))
+    action: str = Field(sa_column=Column(String(64), nullable=False))
+    actor: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
+    comment: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)
 
 
 class ChangeRequest(TimestampMixin, SQLModel, table=True):

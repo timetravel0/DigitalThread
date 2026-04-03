@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+import json
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from sqlmodel import Session
 
 from app.core import get_settings
@@ -67,9 +68,24 @@ def get_project_endpoint(project_id: UUID, session: Session = Depends(db)):
 
 
 @app.put("/api/projects/{project_id}", response_model=ProjectRead)
+@app.patch("/api/projects/{project_id}", response_model=ProjectRead)
 def update_project_endpoint(project_id: UUID, payload: ProjectUpdate, session: Session = Depends(db)):
     try:
         return update_project(session, project_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/projects/{project_id}/export")
+def export_project_endpoint(project_id: UUID, session: Session = Depends(db)):
+    try:
+        bundle = export_project_bundle(session, project_id)
+        filename = f"threadlite-{bundle['project']['code']}.json"
+        return Response(
+            content=json.dumps(bundle, ensure_ascii=False, indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     except Exception as exc:
         raise api_error(exc)
 
@@ -106,7 +122,7 @@ def create_requirement_endpoint(payload: RequirementCreate, session: Session = D
         raise api_error(exc)
 
 
-@app.get("/api/requirements/{obj_id}")
+@app.get("/api/requirements/{obj_id}", response_model=dict)
 def requirement_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
     try:
         return get_requirement_detail(session, obj_id)
@@ -114,39 +130,135 @@ def requirement_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
         raise api_error(exc)
 
 
-@app.put("/api/requirements/{obj_id}", response_model=RequirementRead)
-def update_requirement_endpoint(obj_id: UUID, payload: RequirementUpdate, session: Session = Depends(db)):
+@app.patch("/api/requirements/{obj_id}", response_model=RequirementRead)
+def patch_requirement_endpoint(obj_id: UUID, payload: RequirementUpdate, session: Session = Depends(db)):
     try:
         return update_requirement(session, obj_id, payload)
     except Exception as exc:
         raise api_error(exc)
 
 
-@app.get("/api/components", response_model=list[ComponentRead])
-def list_components_endpoint(project_id: UUID = Query(...), session: Session = Depends(db)):
-    return list_components(session, project_id)
-
-
-@app.post("/api/components", response_model=ComponentRead, status_code=201)
-def create_component_endpoint(payload: ComponentCreate, session: Session = Depends(db)):
+@app.post("/api/requirements/{obj_id}/submit-review", response_model=RequirementRead)
+def submit_requirement_review_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
     try:
-        return create_component(session, payload)
+        return submit_requirement_for_review(session, obj_id, payload)
     except Exception as exc:
         raise api_error(exc)
 
 
-@app.get("/api/components/{obj_id}")
-def component_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
+@app.post("/api/requirements/{obj_id}/approve", response_model=RequirementRead)
+def approve_requirement_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
     try:
-        return get_component_detail(session, obj_id)
+        return approve_requirement(session, obj_id, payload)
     except Exception as exc:
         raise api_error(exc)
 
 
-@app.put("/api/components/{obj_id}", response_model=ComponentRead)
-def update_component_endpoint(obj_id: UUID, payload: ComponentUpdate, session: Session = Depends(db)):
+@app.post("/api/requirements/{obj_id}/reject", response_model=RequirementRead)
+def reject_requirement_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
     try:
-        return update_component(session, obj_id, payload)
+        return reject_requirement(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/requirements/{obj_id}/send-draft", response_model=RequirementRead)
+def requirement_send_draft_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return send_requirement_back_to_draft(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/requirements/{obj_id}/create-draft-version", response_model=RequirementRead)
+def requirement_create_draft_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return create_requirement_draft_version(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/requirements/{obj_id}/history", response_model=list[RevisionSnapshotRead])
+def requirement_history_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return list_requirement_history(session, obj_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/blocks", response_model=list[BlockRead])
+def list_blocks_endpoint(project_id: UUID = Query(...), session: Session = Depends(db)):
+    return list_blocks(session, project_id)
+
+
+@app.post("/api/blocks", response_model=BlockRead, status_code=201)
+def create_block_endpoint(payload: BlockCreate, session: Session = Depends(db)):
+    try:
+        return create_block(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/blocks/{obj_id}", response_model=dict)
+def block_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_block_detail(session, obj_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.patch("/api/blocks/{obj_id}", response_model=BlockRead)
+def patch_block_endpoint(obj_id: UUID, payload: BlockUpdate, session: Session = Depends(db)):
+    try:
+        return update_block(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/blocks/{obj_id}/submit-review", response_model=BlockRead)
+def submit_block_review_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return submit_block_for_review(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/blocks/{obj_id}/approve", response_model=BlockRead)
+def approve_block_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return approve_block(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/blocks/{obj_id}/reject", response_model=BlockRead)
+def reject_block_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return reject_block(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/blocks/{obj_id}/send-draft", response_model=BlockRead)
+def block_send_draft_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return send_block_back_to_draft(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/blocks/{obj_id}/create-draft-version", response_model=BlockRead)
+def block_create_draft_version_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return create_block_draft_version(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/blocks/{obj_id}/history", response_model=list[RevisionSnapshotRead])
+def block_history_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return list_block_history(session, obj_id)
     except Exception as exc:
         raise api_error(exc)
 
@@ -164,7 +276,7 @@ def create_test_case_endpoint(payload: TestCaseCreate, session: Session = Depend
         raise api_error(exc)
 
 
-@app.get("/api/test-cases/{obj_id}")
+@app.get("/api/test-cases/{obj_id}", response_model=dict)
 def test_case_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
     try:
         return get_test_case_detail(session, obj_id)
@@ -172,10 +284,58 @@ def test_case_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
         raise api_error(exc)
 
 
-@app.put("/api/test-cases/{obj_id}", response_model=TestCaseRead)
-def update_test_case_endpoint(obj_id: UUID, payload: TestCaseUpdate, session: Session = Depends(db)):
+@app.patch("/api/test-cases/{obj_id}", response_model=TestCaseRead)
+def patch_test_case_endpoint(obj_id: UUID, payload: TestCaseUpdate, session: Session = Depends(db)):
     try:
         return update_test_case(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/test-cases/{obj_id}/submit-review", response_model=TestCaseRead)
+def submit_test_case_review_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return submit_test_case_for_review(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/test-cases/{obj_id}/approve", response_model=TestCaseRead)
+def approve_test_case_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return approve_test_case(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/test-cases/{obj_id}/reject", response_model=TestCaseRead)
+def reject_test_case_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return reject_test_case(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/test-cases/{obj_id}/send-draft", response_model=TestCaseRead)
+def test_case_send_draft_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return send_test_case_back_to_draft(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/test-cases/{obj_id}/create-draft-version", response_model=TestCaseRead)
+def test_case_create_draft_version_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return create_test_case_draft_version(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/test-cases/{obj_id}/history", response_model=list[RevisionSnapshotRead])
+def test_case_history_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return list_test_case_history(session, obj_id)
     except Exception as exc:
         raise api_error(exc)
 
@@ -206,7 +366,7 @@ def create_operational_run_endpoint(payload: OperationalRunCreate, session: Sess
         raise api_error(exc)
 
 
-@app.put("/api/operational-runs/{obj_id}", response_model=OperationalRunRead)
+@app.patch("/api/operational-runs/{obj_id}", response_model=OperationalRunRead)
 def update_operational_run_endpoint(obj_id: UUID, payload: OperationalRunUpdate, session: Session = Depends(db)):
     try:
         return update_operational_run(session, obj_id, payload)
@@ -257,7 +417,7 @@ def change_request_detail_endpoint(obj_id: UUID, session: Session = Depends(db))
         raise api_error(exc)
 
 
-@app.put("/api/change-requests/{obj_id}", response_model=ChangeRequestRead)
+@app.patch("/api/change-requests/{obj_id}", response_model=ChangeRequestRead)
 def update_change_request_endpoint(obj_id: UUID, payload: ChangeRequestUpdate, session: Session = Depends(db)):
     try:
         return update_change_request(session, obj_id, payload)
@@ -289,6 +449,73 @@ def create_link_endpoint(payload: LinkCreate, session: Session = Depends(db)):
         return create_link(session, payload)
     except Exception as exc:
         raise api_error(exc)
+
+
+@app.get("/api/sysml-relations", response_model=list[SysMLRelationRead])
+def list_sysml_relations_endpoint(project_id: UUID = Query(...), object_type: str | None = None, object_id: UUID | None = None, session: Session = Depends(db)):
+    return list_sysml_relations(session, project_id, object_type=object_type, object_id=object_id)
+
+
+@app.post("/api/sysml-relations", response_model=SysMLRelationRead, status_code=201)
+def create_sysml_relation_endpoint(payload: SysMLRelationCreate, session: Session = Depends(db)):
+    try:
+        return create_sysml_relation(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.delete("/api/sysml-relations/{relation_id}", status_code=204)
+def delete_sysml_relation_endpoint(relation_id: UUID, session: Session = Depends(db)):
+    try:
+        delete_sysml_relation(session, relation_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/block-containments", response_model=list[BlockContainmentRead])
+def list_block_containments_endpoint(project_id: UUID = Query(...), object_id: UUID | None = None, session: Session = Depends(db)):
+    return list_block_containments(session, project_id, obj_id=object_id)
+
+
+@app.post("/api/block-containments", response_model=BlockContainmentRead, status_code=201)
+def create_block_containment_endpoint(payload: BlockContainmentCreate, session: Session = Depends(db)):
+    try:
+        return create_block_containment(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.delete("/api/block-containments/{containment_id}", status_code=204)
+def delete_block_containment_endpoint(containment_id: UUID, session: Session = Depends(db)):
+    try:
+        delete_block_containment(session, containment_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/review-queue", response_model=ReviewQueueResponse)
+def review_queue_endpoint(project_id: UUID = Query(...), session: Session = Depends(db)):
+    return list_review_queue(session, project_id)
+
+
+@app.get("/api/projects/{project_id}/sysml/block-tree", response_model=SysMLTreeResponse)
+def block_tree_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return build_block_tree(session, project_id)
+
+
+@app.get("/api/projects/{project_id}/sysml/satisfaction", response_model=SysMLSatisfactionResponse)
+def satisfaction_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return build_satisfaction_view(session, project_id)
+
+
+@app.get("/api/projects/{project_id}/sysml/verification", response_model=SysMLVerificationResponse)
+def verification_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return build_verification_view(session, project_id)
+
+
+@app.get("/api/projects/{project_id}/sysml/derivations", response_model=SysMLDerivationResponse)
+def derivations_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return build_derivation_view(session, project_id)
 
 
 @app.get("/api/projects/{project_id}/matrix", response_model=MatrixResponse)

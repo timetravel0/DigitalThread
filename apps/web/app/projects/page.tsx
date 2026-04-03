@@ -15,7 +15,11 @@ export default async function ProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <SectionTitle title="Projects" description="Project portfolio and entry point to the digital thread." />
+      <SectionTitle
+        title="Projects"
+        description="Project portfolio and entry point to the digital thread."
+        action={<Button href="/projects/new">Create project</Button>}
+      />
       <Card>
         <CardHeader>
           <div className="font-semibold">Project list</div>
@@ -36,7 +40,11 @@ export default async function ProjectsPage() {
               ))}
             </div>
           ) : (
-            <EmptyState title="No projects yet" description="Seed the demo project to start exploring ThreadLite." action={<Button href="/dashboard">Go to dashboard</Button>} />
+            <EmptyState
+              title="No projects yet"
+              description="Seed the demo project or create a new blank project to start authoring."
+              action={<div className="flex flex-wrap gap-2"><Button href="/projects/new">Create project</Button><Button href="/dashboard" variant="secondary">Go to dashboard</Button></div>}
+            />
           )}
         </CardBody>
       </Card>

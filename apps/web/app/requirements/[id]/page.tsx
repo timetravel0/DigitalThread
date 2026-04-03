@@ -1,6 +1,7 @@
 ﻿import Link from "next/link";
 import { api } from "@/lib/api-client";
-import { Badge, Card, CardBody, CardHeader, SectionTitle } from "@/components/ui";
+import { Badge, Button, Card, CardBody, CardHeader, SectionTitle } from "@/components/ui";
+import { WorkflowActions } from "@/components/workflow-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,17 @@ export default async function RequirementPage({ params }: { params: { id: string
       <SectionTitle title={`${data.requirement.key} - ${data.requirement.title}`} description={data.requirement.description} />
       <div className="grid gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
-          <CardHeader><div className="font-semibold">Requirement record</div></CardHeader>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-4">
+              <div className="font-semibold">Requirement record</div>
+              <div className="flex flex-wrap gap-2">
+                {data.requirement.status === "approved" || data.requirement.status === "in_review" ? null : (
+                  <Button href={`/requirements/${data.requirement.id}/edit`} variant="secondary">Edit</Button>
+                )}
+                <WorkflowActions kind="requirement" id={data.requirement.id} status={data.requirement.status} />
+              </div>
+            </div>
+          </CardHeader>
           <CardBody className="space-y-3">
             <Row label="Category" value={data.requirement.category} />
             <Row label="Priority" value={data.requirement.priority} />
@@ -36,6 +47,17 @@ export default async function RequirementPage({ params }: { params: { id: string
         </Card>
       </div>
 
+      {data.requirement.status === "approved" ? (
+        <Card>
+          <CardHeader><div className="font-semibold">Approved item editing</div></CardHeader>
+          <CardBody className="space-y-3 text-sm text-muted">
+            <p>This requirement is approved and cannot be edited in place.</p>
+            <p>Create a new draft version to change it while keeping the approved revision intact.</p>
+            <WorkflowActions kind="requirement" id={data.requirement.id} status={data.requirement.status} />
+          </CardBody>
+        </Card>
+      ) : null}
+
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader><div className="font-semibold">Traceability</div></CardHeader>
@@ -56,6 +78,18 @@ export default async function RequirementPage({ params }: { params: { id: string
           </CardBody>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader><div className="font-semibold">History</div></CardHeader>
+        <CardBody className="space-y-3">
+          {(data.history || []).map((entry: any) => (
+            <div key={entry.id} className="rounded-xl border border-line bg-panel2 p-3">
+              <div className="font-medium">Version {entry.version}</div>
+              <div className="text-xs text-muted">{entry.change_summary || entry.changed_at}</div>
+            </div>
+          ))}
+        </CardBody>
+      </Card>
 
       <Link href="/projects" className="text-sm text-accent">Back to projects</Link>
     </div>
@@ -79,5 +113,3 @@ function ImpactItem({ item }: { item: any }) {
     </div>
   );
 }
-
-

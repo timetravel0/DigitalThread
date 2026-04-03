@@ -33,7 +33,7 @@ class ProjectRead(ProjectCreate, ORMBase):
     updated_at: datetime
 
 
-class RequirementCreate(BaseModel):
+class RequirementBase(BaseModel):
     project_id: UUID
     key: str
     title: str
@@ -44,6 +44,14 @@ class RequirementCreate(BaseModel):
     status: RequirementStatus = RequirementStatus.draft
     version: int = 1
     parent_requirement_id: UUID | None = None
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+    rejection_reason: str | None = None
+    review_comment: str | None = None
+
+
+class RequirementCreate(RequirementBase):
+    pass
 
 
 class RequirementUpdate(BaseModel):
@@ -57,12 +65,70 @@ class RequirementUpdate(BaseModel):
     status: RequirementStatus | None = None
     version: int | None = None
     parent_requirement_id: UUID | None = None
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+    rejection_reason: str | None = None
+    review_comment: str | None = None
 
 
-class RequirementRead(RequirementCreate, ORMBase):
+class RequirementRead(RequirementBase, ORMBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+
+
+class BlockBase(BaseModel):
+    project_id: UUID
+    key: str
+    name: str
+    description: str = ""
+    block_kind: BlockKind
+    abstraction_level: AbstractionLevel
+    status: BlockStatus = BlockStatus.draft
+    version: int = 1
+    owner: str | None = None
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+    rejection_reason: str | None = None
+    review_comment: str | None = None
+
+
+class BlockCreate(BlockBase):
+    pass
+
+
+class BlockUpdate(BaseModel):
+    project_id: UUID | None = None
+    key: str | None = None
+    name: str | None = None
+    description: str | None = None
+    block_kind: BlockKind | None = None
+    abstraction_level: AbstractionLevel | None = None
+    status: BlockStatus | None = None
+    version: int | None = None
+    owner: str | None = None
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+    rejection_reason: str | None = None
+    review_comment: str | None = None
+
+
+class BlockRead(BlockBase, ORMBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class BlockContainmentCreate(BaseModel):
+    project_id: UUID
+    parent_block_id: UUID
+    child_block_id: UUID
+    relation_type: BlockContainmentRelationType = BlockContainmentRelationType.contains
+
+
+class BlockContainmentRead(BlockContainmentCreate, ORMBase):
+    id: UUID
+    created_at: datetime
 
 
 class ComponentCreate(BaseModel):
@@ -97,7 +163,7 @@ class ComponentRead(ComponentCreate, ORMBase):
     updated_at: datetime
 
 
-class TestCaseCreate(BaseModel):
+class TestCaseBase(BaseModel):
     project_id: UUID
     key: str
     title: str
@@ -105,6 +171,14 @@ class TestCaseCreate(BaseModel):
     method: TestMethod
     status: TestCaseStatus = TestCaseStatus.draft
     version: int = 1
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+    rejection_reason: str | None = None
+    review_comment: str | None = None
+
+
+class TestCaseCreate(TestCaseBase):
+    pass
 
 
 class TestCaseUpdate(BaseModel):
@@ -115,9 +189,13 @@ class TestCaseUpdate(BaseModel):
     method: TestMethod | None = None
     status: TestCaseStatus | None = None
     version: int | None = None
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+    rejection_reason: str | None = None
+    review_comment: str | None = None
 
 
-class TestCaseRead(TestCaseCreate, ORMBase):
+class TestCaseRead(TestCaseBase, ORMBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
@@ -178,6 +256,10 @@ class BaselineCreate(BaseModel):
     name: str
     description: str = ""
     status: BaselineStatus = BaselineStatus.draft
+    requirement_ids: list[UUID] = Field(default_factory=list)
+    block_ids: list[UUID] = Field(default_factory=list)
+    test_case_ids: list[UUID] = Field(default_factory=list)
+    include_unapproved: bool = False
 
 
 class BaselineRead(BaselineCreate, ORMBase):
@@ -209,6 +291,53 @@ class LinkRead(LinkCreate, ORMBase):
     created_at: datetime
     source_label: str | None = None
     target_label: str | None = None
+
+
+class SysMLRelationCreate(BaseModel):
+    project_id: UUID
+    source_type: SysMLObjectType
+    source_id: UUID
+    target_type: SysMLObjectType
+    target_id: UUID
+    relation_type: SysMLRelationType
+    rationale: str | None = None
+
+
+class SysMLRelationRead(SysMLRelationCreate, ORMBase):
+    id: UUID
+    created_at: datetime
+
+
+class RevisionSnapshotRead(ORMBase):
+    id: UUID
+    project_id: UUID
+    object_type: str
+    object_id: UUID
+    version: int
+    snapshot_json: dict[str, Any]
+    changed_at: datetime
+    changed_by: str | None = None
+    change_summary: str | None = None
+
+
+class ApprovalActionLogRead(ORMBase):
+    id: UUID
+    project_id: UUID
+    object_type: str
+    object_id: UUID
+    from_status: str
+    to_status: str
+    action: str
+    actor: str | None = None
+    comment: str | None = None
+    created_at: datetime
+
+
+class WorkflowActionPayload(BaseModel):
+    actor: str | None = None
+    comment: str | None = None
+    reason: str | None = None
+    change_summary: str | None = None
 
 
 class ChangeRequestCreate(BaseModel):
@@ -318,3 +447,62 @@ class ImpactResponse(BaseModel):
     secondary: list[ObjectSummary]
     likely_impacted: list[ObjectSummary]
     links: list[LinkRead]
+    related_baselines: list[BaselineRead] = Field(default_factory=list)
+    open_change_requests: list[ChangeRequestRead] = Field(default_factory=list)
+
+
+class BlockTreeNode(BaseModel):
+    block: BlockRead
+    children: list["BlockTreeNode"] = Field(default_factory=list)
+    satisfied_requirements: list[ObjectSummary] = Field(default_factory=list)
+    linked_tests: list[ObjectSummary] = Field(default_factory=list)
+
+
+class SatisfactionRow(BaseModel):
+    block: BlockRead
+    requirements: list[ObjectSummary] = Field(default_factory=list)
+
+
+class VerificationRow(BaseModel):
+    test_case: TestCaseRead
+    requirements: list[ObjectSummary] = Field(default_factory=list)
+
+
+class DerivationRow(BaseModel):
+    source_requirement: RequirementRead
+    derived_requirements: list[ObjectSummary] = Field(default_factory=list)
+
+
+class SysMLTreeResponse(BaseModel):
+    project: ProjectRead
+    roots: list[BlockTreeNode]
+
+
+class SysMLSatisfactionResponse(BaseModel):
+    project: ProjectRead
+    rows: list[SatisfactionRow]
+
+
+class SysMLVerificationResponse(BaseModel):
+    project: ProjectRead
+    rows: list[VerificationRow]
+
+
+class SysMLDerivationResponse(BaseModel):
+    project: ProjectRead
+    rows: list[DerivationRow]
+
+
+class ReviewQueueItem(BaseModel):
+    object_type: str
+    id: UUID
+    key: str
+    title: str
+    status: str
+    version: int
+    updated_at: datetime
+
+
+class ReviewQueueResponse(BaseModel):
+    project: ProjectRead
+    items: list[ReviewQueueItem]
