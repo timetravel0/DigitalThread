@@ -33,3 +33,8 @@ postgres_data/
 # IDE
 .vscode/
 .idea/
+.ralph/logs/
+_bmad-output/
+.ralph/
+_bmad/
+bmalph/

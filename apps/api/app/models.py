@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum, JSON, String
+from sqlalchemy import Boolean, Column, DateTime, Enum as SAEnum, JSON, String
 from sqlmodel import Field, SQLModel
 
 
@@ -51,6 +51,14 @@ class RequirementStatus(str, Enum):
     failed = "failed"
     obsolete = "obsolete"
     retired = "retired"
+
+
+class RequirementVerificationStatus(str, Enum):
+    not_covered = "not_covered"
+    partially_verified = "partially_verified"
+    at_risk = "at_risk"
+    failed = "failed"
+    verified = "verified"
 
 
 class BlockKind(str, Enum):
@@ -126,6 +134,15 @@ class OperationalOutcome(str, Enum):
     failure = "failure"
 
 
+class VerificationEvidenceType(str, Enum):
+    test_result = "test_result"
+    simulation = "simulation"
+    telemetry = "telemetry"
+    analysis = "analysis"
+    inspection = "inspection"
+    other = "other"
+
+
 class BaselineStatus(str, Enum):
     draft = "draft"
     released = "released"
@@ -146,6 +163,7 @@ class LinkObjectType(str, Enum):
     test_run = "test_run"
     operational_run = "operational_run"
     change_request = "change_request"
+    non_conformity = "non_conformity"
 
 
 class RelationType(str, Enum):
@@ -191,6 +209,16 @@ class ChangeRequestStatus(str, Enum):
     approved = "approved"
     rejected = "rejected"
     implemented = "implemented"
+    closed = "closed"
+
+
+class NonConformityStatus(str, Enum):
+    detected = "detected"
+    analyzing = "analyzing"
+    contained = "contained"
+    corrected = "corrected"
+    verified = "verified"
+    closed = "closed"
 
 
 class Severity(str, Enum):
@@ -204,6 +232,79 @@ class ImpactLevel(str, Enum):
     low = "low"
     medium = "medium"
     high = "high"
+
+
+class ConnectorType(str, Enum):
+    doors = "doors"
+    sysml = "sysml"
+    plm = "plm"
+    simulation = "simulation"
+    test = "test"
+    telemetry = "telemetry"
+    custom = "custom"
+
+
+class ExternalArtifactType(str, Enum):
+    requirement = "requirement"
+    sysml_element = "sysml_element"
+    block = "block"
+    cad_part = "cad_part"
+    software_module = "software_module"
+    test_case = "test_case"
+    simulation_model = "simulation_model"
+    test_result = "test_result"
+    telemetry_source = "telemetry_source"
+    document = "document"
+    other = "other"
+
+
+class ExternalArtifactStatus(str, Enum):
+    active = "active"
+    deprecated = "deprecated"
+    obsolete = "obsolete"
+
+
+class FederatedInternalObjectType(str, Enum):
+    project = "project"
+    requirement = "requirement"
+    block = "block"
+    test_case = "test_case"
+    baseline = "baseline"
+    change_request = "change_request"
+    non_conformity = "non_conformity"
+    component = "component"
+
+
+class ArtifactLinkRelationType(str, Enum):
+    authoritative_reference = "authoritative_reference"
+    derived_from_external = "derived_from_external"
+    synchronized_with = "synchronized_with"
+    validated_against = "validated_against"
+    exported_to = "exported_to"
+    maps_to = "maps_to"
+
+
+class ConfigurationContextType(str, Enum):
+    working = "working"
+    baseline_candidate = "baseline_candidate"
+    review_gate = "review_gate"
+    released = "released"
+    imported = "imported"
+
+
+class ConfigurationContextStatus(str, Enum):
+    draft = "draft"
+    active = "active"
+    frozen = "frozen"
+    obsolete = "obsolete"
+
+
+class ConfigurationItemKind(str, Enum):
+    internal_requirement = "internal_requirement"
+    internal_block = "internal_block"
+    internal_test_case = "internal_test_case"
+    baseline_item = "baseline_item"
+    external_artifact_version = "external_artifact_version"
 
 
 class TimestampMixin(SQLModel):
@@ -334,6 +435,30 @@ class OperationalRun(TimestampMixin, SQLModel, table=True):
     telemetry_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
 
 
+class VerificationEvidence(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "verification_evidence"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    title: str = Field(sa_column=Column(String(255), nullable=False))
+    evidence_type: VerificationEvidenceType = Field(sa_column=Column(SAEnum(VerificationEvidenceType), nullable=False))
+    summary: str = Field(default="", nullable=False)
+    observed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    source_name: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
+    source_reference: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    metadata_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+
+
+class VerificationEvidenceLink(SQLModel, table=True):
+    __tablename__ = "verification_evidence_links"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    verification_evidence_id: UUID = Field(foreign_key="verification_evidence.id", index=True)
+    internal_object_type: FederatedInternalObjectType = Field(sa_column=Column(SAEnum(FederatedInternalObjectType), nullable=False))
+    internal_object_id: UUID = Field(index=True)
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)
+
+
 class Baseline(TimestampMixin, SQLModel, table=True):
     __tablename__ = "baselines"
 
@@ -431,3 +556,99 @@ class ChangeImpact(SQLModel, table=True):
     object_id: UUID = Field(index=True)
     impact_level: ImpactLevel = Field(sa_column=Column(SAEnum(ImpactLevel), nullable=False))
     notes: str = Field(default="", nullable=False)
+
+
+class NonConformity(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "non_conformities"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    key: str = Field(sa_column=Column(String(64), index=True, nullable=False))
+    title: str = Field(sa_column=Column(String(255), nullable=False))
+    description: str = Field(default="", nullable=False)
+    status: NonConformityStatus = Field(default=NonConformityStatus.detected, sa_column=Column(SAEnum(NonConformityStatus), nullable=False))
+    severity: Severity = Field(sa_column=Column(SAEnum(Severity), nullable=False))
+
+
+class ConnectorDefinition(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "connector_definitions"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    name: str = Field(sa_column=Column(String(255), nullable=False))
+    connector_type: ConnectorType = Field(sa_column=Column(SAEnum(ConnectorType), nullable=False))
+    base_url: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    description: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    is_active: bool = Field(default=True, sa_column=Column(Boolean, nullable=False))
+    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+
+
+class ExternalArtifact(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "external_artifacts"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    connector_definition_id: UUID | None = Field(default=None, foreign_key="connector_definitions.id", index=True)
+    external_id: str = Field(sa_column=Column(String(128), index=True, nullable=False))
+    artifact_type: ExternalArtifactType = Field(sa_column=Column(SAEnum(ExternalArtifactType), nullable=False))
+    name: str = Field(sa_column=Column(String(255), nullable=False))
+    description: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    canonical_uri: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    native_tool_url: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    status: ExternalArtifactStatus = Field(default=ExternalArtifactStatus.active, sa_column=Column(SAEnum(ExternalArtifactStatus), nullable=False))
+    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+
+
+class ExternalArtifactVersion(SQLModel, table=True):
+    __tablename__ = "external_artifact_versions"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    external_artifact_id: UUID = Field(foreign_key="external_artifacts.id", index=True)
+    version_label: str = Field(sa_column=Column(String(64), nullable=False))
+    revision_label: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
+    checksum_or_signature: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
+    effective_date: dt_date | None = Field(default=None, nullable=True)
+    source_timestamp: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)
+
+
+class ArtifactLink(SQLModel, table=True):
+    __tablename__ = "artifact_links"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    internal_object_type: FederatedInternalObjectType = Field(sa_column=Column(SAEnum(FederatedInternalObjectType), nullable=False))
+    internal_object_id: UUID = Field(index=True)
+    external_artifact_id: UUID = Field(foreign_key="external_artifacts.id", index=True)
+    external_artifact_version_id: UUID | None = Field(default=None, foreign_key="external_artifact_versions.id", index=True)
+    relation_type: ArtifactLinkRelationType = Field(sa_column=Column(SAEnum(ArtifactLinkRelationType), nullable=False))
+    rationale: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)
+
+
+class ConfigurationContext(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "configuration_contexts"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    key: str = Field(sa_column=Column(String(64), index=True, nullable=False))
+    name: str = Field(sa_column=Column(String(255), nullable=False))
+    description: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    context_type: ConfigurationContextType = Field(sa_column=Column(SAEnum(ConfigurationContextType), nullable=False))
+    status: ConfigurationContextStatus = Field(default=ConfigurationContextStatus.draft, sa_column=Column(SAEnum(ConfigurationContextStatus), nullable=False))
+
+
+class ConfigurationItemMapping(SQLModel, table=True):
+    __tablename__ = "configuration_item_mappings"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    configuration_context_id: UUID = Field(foreign_key="configuration_contexts.id", index=True)
+    item_kind: ConfigurationItemKind = Field(sa_column=Column(SAEnum(ConfigurationItemKind), nullable=False))
+    internal_object_type: FederatedInternalObjectType | None = Field(default=None, sa_column=Column(SAEnum(FederatedInternalObjectType), nullable=True))
+    internal_object_id: UUID | None = Field(default=None, index=True)
+    internal_object_version: int | None = Field(default=None, nullable=True)
+    external_artifact_version_id: UUID | None = Field(default=None, foreign_key="external_artifact_versions.id", index=True)
+    role_label: str | None = Field(default=None, sa_column=Column(String(128), nullable=True))
+    notes: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)

@@ -10,6 +10,7 @@ export function Button({
   href,
   variant = "primary",
   type = "button",
+  disabled = false,
   onClick,
 }: {
   children: ReactNode;
@@ -17,6 +18,7 @@ export function Button({
   href?: string;
   variant?: "primary" | "secondary" | "ghost" | "danger";
   type?: "button" | "submit";
+  disabled?: boolean;
   onClick?: () => void;
 }) {
   const classes = cn(
@@ -25,6 +27,7 @@ export function Button({
     variant === "secondary" && "bg-panel2 text-text border border-line hover:border-accent/60",
     variant === "ghost" && "text-text hover:bg-white/5",
     variant === "danger" && "bg-danger text-white hover:opacity-90",
+    disabled && "cursor-not-allowed opacity-50 hover:opacity-50",
     className
   );
   const content = children;
@@ -36,7 +39,7 @@ export function Button({
     );
   }
   return (
-    <button type={type} className={classes} onClick={onClick}>
+    <button type={type} className={classes} onClick={onClick} disabled={disabled}>
       {content}
     </button>
   );
@@ -126,4 +129,3 @@ export function Shell({ sidebar, header, children }: { sidebar: ReactNode; heade
     </div>
   );
 }
-

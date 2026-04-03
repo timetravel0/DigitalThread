@@ -1,0 +1,18 @@
+0 verbose cli /home/danielelando/.nvm/versions/node/v22.22.2/bin/node /home/danielelando/.nvm/versions/node/v22.22.2/bin/npm
+1 info using npm@10.9.7
+2 info using node@v22.22.2
+3 silly config load:file:/home/danielelando/.nvm/versions/node/v22.22.2/lib/node_modules/npm/npmrc
+4 silly config load:file:/home/danielelando/code/DT/apps/web/.npmrc
+5 silly config load:file:/home/danielelando/code/DT/.npmrc
+6 silly config load:file:/home/danielelando/.nvm/versions/node/v22.22.2/etc/npmrc
+7 verbose title npm run build
+8 verbose argv "run" "build"
+9 verbose logfile logs-max:10 dir:/home/danielelando/code/DT/.npm/_logs/2026-04-03T16_49_09_147Z-
+10 verbose logfile /home/danielelando/code/DT/.npm/_logs/2026-04-03T16_49_09_147Z-debug-0.log
+11 silly logfile done cleaning log files
+12 verbose cwd /home/danielelando/code/DT/apps/web
+13 verbose os Linux 6.6.87.2-microsoft-standard-WSL2
+14 verbose node v22.22.2
+15 verbose npm  v10.9.7
+16 verbose exit 1
+17 verbose code 1

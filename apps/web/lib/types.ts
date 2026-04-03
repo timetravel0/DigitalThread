@@ -5,6 +5,7 @@ export type RequirementCategory = "performance" | "safety" | "environment" | "op
 export type Priority = "low" | "medium" | "high" | "critical";
 export type VerificationMethod = "analysis" | "inspection" | "test" | "demonstration";
 export type RequirementStatus = "draft" | "in_review" | "approved" | "rejected" | "implemented" | "verified" | "failed" | "obsolete" | "retired";
+export type RequirementVerificationStatus = "not_covered" | "partially_verified" | "at_risk" | "failed" | "verified";
 export type BlockKind = "system" | "subsystem" | "assembly" | "component" | "software" | "interface" | "other";
 export type AbstractionLevel = "logical" | "physical";
 export type BlockStatus = "draft" | "in_review" | "approved" | "rejected" | "obsolete";
@@ -14,16 +15,25 @@ export type TestMethod = "bench" | "simulation" | "field" | "inspection";
 export type TestCaseStatus = "draft" | "in_review" | "approved" | "rejected" | "ready" | "executed" | "failed" | "passed" | "archived" | "obsolete";
 export type TestRunResult = "passed" | "failed" | "partial";
 export type OperationalOutcome = "success" | "degraded" | "failure";
+export type VerificationEvidenceType = "test_result" | "simulation" | "telemetry" | "analysis" | "inspection" | "other";
 export type BaselineStatus = "draft" | "released" | "obsolete";
 export type BaselineObjectType = "requirement" | "block" | "component" | "test_case";
-export type LinkObjectType = "requirement" | "component" | "test_case" | "test_run" | "operational_run" | "change_request";
+export type LinkObjectType = "requirement" | "component" | "test_case" | "test_run" | "operational_run" | "change_request" | "non_conformity";
 export type RelationType = "satisfies" | "allocated_to" | "verifies" | "tested_by" | "impacts" | "derived_from" | "depends_on" | "uses" | "reports_on" | "validates" | "fails";
 export type SysMLObjectType = "requirement" | "block" | "test_case" | "component" | "operational_run";
 export type SysMLRelationType = "satisfy" | "verify" | "deriveReqt" | "refine" | "trace" | "allocate" | "contain";
 export type BlockContainmentRelationType = "contains" | "composed_of";
-export type ChangeRequestStatus = "open" | "analysis" | "approved" | "rejected" | "implemented";
+export type ChangeRequestStatus = "open" | "analysis" | "approved" | "rejected" | "implemented" | "closed";
 export type Severity = "low" | "medium" | "high" | "critical";
 export type ImpactLevel = "low" | "medium" | "high";
+export type ConnectorType = "doors" | "sysml" | "plm" | "simulation" | "test" | "telemetry" | "custom";
+export type ExternalArtifactType = "requirement" | "sysml_element" | "block" | "cad_part" | "software_module" | "test_case" | "simulation_model" | "test_result" | "telemetry_source" | "document" | "other";
+export type ExternalArtifactStatus = "active" | "deprecated" | "obsolete";
+export type FederatedInternalObjectType = "project" | "requirement" | "block" | "test_case" | "baseline" | "change_request" | "non_conformity" | "component";
+export type ArtifactLinkRelationType = "authoritative_reference" | "derived_from_external" | "synchronized_with" | "validated_against" | "exported_to" | "maps_to";
+export type ConfigurationContextType = "working" | "baseline_candidate" | "review_gate" | "released" | "imported";
+export type ConfigurationContextStatus = "draft" | "active" | "frozen" | "obsolete";
+export type ConfigurationItemKind = "internal_requirement" | "internal_block" | "internal_test_case" | "baseline_item" | "external_artifact_version";
 
 export interface Project {
   id: ID;
@@ -90,6 +100,14 @@ export interface Component {
   updated_at: string;
 }
 
+export interface ComponentDetail {
+  component: Component;
+  links: Link[];
+  verification_evidence: VerificationEvidence[];
+  impact: ImpactResponse;
+  change_impacts: ChangeImpact[];
+}
+
 export interface TestCase {
   id: ID;
   project_id: ID;
@@ -105,6 +123,44 @@ export interface TestCase {
   review_comment?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface RequirementDetail {
+  requirement: Requirement;
+  links: Link[];
+  artifact_links: ArtifactLink[];
+  verification_evidence: VerificationEvidence[];
+  verification_evaluation: RequirementVerificationEvaluation;
+  history: RevisionSnapshot[];
+  impact: ImpactResponse;
+}
+
+export interface TestCaseDetail {
+  test_case: TestCase;
+  links: Link[];
+  artifact_links: ArtifactLink[];
+  verification_evidence: VerificationEvidence[];
+  runs: TestRun[];
+  history: RevisionSnapshot[];
+  impact: ImpactResponse;
+}
+
+export interface RequirementVerificationEvaluation {
+  status: RequirementVerificationStatus;
+  linked_evidence_count: number;
+  fresh_evidence_count: number;
+  stale_evidence_count: number;
+  linked_operational_run_count: number;
+  fresh_operational_run_count: number;
+  stale_operational_run_count: number;
+  successful_operational_run_count: number;
+  degraded_operational_run_count: number;
+  failed_operational_run_count: number;
+  linked_test_case_count: number;
+  passed_test_case_count: number;
+  partial_test_case_count: number;
+  failed_test_case_count: number;
+  reasons: string[];
 }
 
 export interface TestRun {
@@ -137,6 +193,27 @@ export interface OperationalRun {
   updated_at: string;
 }
 
+export interface OperationalRunDetail {
+  operational_run: OperationalRun;
+  links: Link[];
+  impact: ImpactResponse;
+}
+
+export interface VerificationEvidence {
+  id: ID;
+  project_id: ID;
+  title: string;
+  evidence_type: VerificationEvidenceType;
+  summary: string;
+  observed_at?: string | null;
+  source_name?: string | null;
+  source_reference?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  linked_objects: ObjectSummary[];
+}
+
 export interface Baseline {
   id: ID;
   project_id: ID;
@@ -145,6 +222,12 @@ export interface Baseline {
   status: BaselineStatus;
   created_at: string;
   updated_at: string;
+}
+
+export interface BaselineDetail {
+  baseline: Baseline;
+  items: BaselineItem[];
+  related_configuration_contexts: ConfigurationContext[];
 }
 
 export interface BaselineItem {
@@ -238,6 +321,18 @@ export interface Link {
   target_label?: string | null;
 }
 
+export interface SysMLRelation {
+  id: ID;
+  project_id: ID;
+  source_type: SysMLObjectType;
+  source_id: ID;
+  target_type: SysMLObjectType;
+  target_id: ID;
+  relation_type: SysMLRelationType;
+  rationale?: string | null;
+  created_at: string;
+}
+
 export interface ChangeRequest {
   id: ID;
   project_id: ID;
@@ -250,6 +345,46 @@ export interface ChangeRequest {
   updated_at: string;
 }
 
+export interface ApprovalActionLog {
+  id: ID;
+  project_id: ID;
+  object_type: string;
+  object_id: ID;
+  from_status: string;
+  to_status: string;
+  action: string;
+  actor?: string | null;
+  comment?: string | null;
+  created_at: string;
+}
+
+export interface ChangeRequestDetail {
+  change_request: ChangeRequest;
+  impacts: ChangeImpact[];
+  impact_summary: ObjectSummary[];
+  history: ApprovalActionLog[];
+}
+
+export interface NonConformity {
+  id: ID;
+  project_id: ID;
+  key: string;
+  title: string;
+  description: string;
+  status: "detected" | "analyzing" | "contained" | "corrected" | "verified" | "closed";
+  severity: Severity;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NonConformityDetail {
+  non_conformity: NonConformity;
+  links: Link[];
+  verification_evidence: VerificationEvidence[];
+  impact: ImpactResponse;
+  impact_summary: ObjectSummary[];
+}
+
 export interface ChangeImpact {
   id: ID;
   change_request_id: ID;
@@ -257,6 +392,189 @@ export interface ChangeImpact {
   object_id: ID;
   impact_level: ImpactLevel;
   notes: string;
+}
+
+export interface ConnectorDefinition {
+  id: ID;
+  project_id: ID;
+  name: string;
+  connector_type: ConnectorType;
+  base_url?: string | null;
+  description?: string | null;
+  is_active: boolean;
+  metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  artifact_count?: number;
+}
+
+export interface ExternalArtifactVersion {
+  id: ID;
+  external_artifact_id: ID;
+  version_label: string;
+  revision_label?: string | null;
+  checksum_or_signature?: string | null;
+  effective_date?: string | null;
+  source_timestamp?: string | null;
+  metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface ExternalArtifact {
+  id: ID;
+  project_id: ID;
+  connector_definition_id?: ID | null;
+  external_id: string;
+  artifact_type: ExternalArtifactType;
+  name: string;
+  description?: string | null;
+  canonical_uri?: string | null;
+  native_tool_url?: string | null;
+  status: ExternalArtifactStatus;
+  metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  connector_name?: string | null;
+  connector_type?: ConnectorType | null;
+  versions?: ExternalArtifactVersion[];
+}
+
+export interface ArtifactLink {
+  id: ID;
+  project_id: ID;
+  internal_object_type: FederatedInternalObjectType;
+  internal_object_id: ID;
+  external_artifact_id: ID;
+  external_artifact_version_id?: ID | null;
+  relation_type: ArtifactLinkRelationType;
+  rationale?: string | null;
+  created_at: string;
+  internal_object_label?: string | null;
+  external_artifact_name?: string | null;
+  external_artifact_version_label?: string | null;
+  connector_name?: string | null;
+}
+
+export interface ConfigurationContext {
+  id: ID;
+  project_id: ID;
+  key: string;
+  name: string;
+  description?: string | null;
+  context_type: ConfigurationContextType;
+  status: ConfigurationContextStatus;
+  created_at: string;
+  updated_at: string;
+  item_count?: number;
+}
+
+export interface ConfigurationItemMapping {
+  id: ID;
+  configuration_context_id: ID;
+  item_kind: ConfigurationItemKind;
+  internal_object_type?: FederatedInternalObjectType | null;
+  internal_object_id?: ID | null;
+  internal_object_version?: number | null;
+  external_artifact_version_id?: ID | null;
+  role_label?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
+export interface AuthoritativeRegistrySummary {
+  connectors: number;
+  external_artifacts: number;
+  external_artifact_versions: number;
+  artifact_links: number;
+  configuration_contexts: number;
+  configuration_item_mappings: number;
+}
+
+export interface ConnectorDetail {
+  connector: ConnectorDefinition;
+  artifacts: ExternalArtifact[];
+}
+
+export interface ExternalArtifactDetail {
+  external_artifact: ExternalArtifact;
+  versions: ExternalArtifactVersion[];
+  artifact_links: ArtifactLink[];
+}
+
+export interface ConfigurationContextDetail {
+  context: ConfigurationContext;
+  items: ConfigurationItemMapping[];
+  resolved_view: {
+    internal: ConfigurationContextResolvedInternalItem[];
+    external: ConfigurationContextResolvedExternalItem[];
+  };
+  related_baselines: Baseline[];
+}
+
+export interface ConfigurationContextResolvedInternalItem {
+  mapping_id: ID;
+  item_kind: ConfigurationItemKind;
+  label: string;
+  object_type: string;
+  object_id: ID;
+  version: number | null;
+  role_label?: string | null;
+  notes?: string | null;
+}
+
+export interface ConfigurationContextResolvedExternalItem {
+  mapping_id: ID;
+  item_kind: ConfigurationItemKind;
+  artifact_name?: string | null;
+  artifact_type?: string | null;
+  version_label?: string | null;
+  revision_label?: string | null;
+  connector_name?: string | null;
+  role_label?: string | null;
+  notes?: string | null;
+}
+
+export interface ConfigurationContextComparisonEntry {
+  item_kind: ConfigurationItemKind;
+  label: string;
+  object_type?: string | null;
+  object_id?: ID | null;
+  object_version?: number | null;
+  external_artifact_id?: ID | null;
+  external_artifact_version_id?: ID | null;
+  version_label?: string | null;
+  revision_label?: string | null;
+  connector_name?: string | null;
+  artifact_name?: string | null;
+  artifact_type?: string | null;
+  role_label?: string | null;
+  notes?: string | null;
+}
+
+export interface ConfigurationContextComparisonChange {
+  key: string;
+  left?: ConfigurationContextComparisonEntry | null;
+  right?: ConfigurationContextComparisonEntry | null;
+}
+
+export interface ConfigurationContextComparisonGroup {
+  item_kind: ConfigurationItemKind;
+  added: ConfigurationContextComparisonEntry[];
+  removed: ConfigurationContextComparisonEntry[];
+  version_changed: ConfigurationContextComparisonChange[];
+}
+
+export interface ConfigurationContextComparisonSummary {
+  added: number;
+  removed: number;
+  version_changed: number;
+}
+
+export interface ConfigurationContextComparisonResponse {
+  left_context: ConfigurationContext;
+  right_context: ConfigurationContext;
+  summary: ConfigurationContextComparisonSummary;
+  groups: ConfigurationContextComparisonGroup[];
 }
 
 export interface DashboardKpis {

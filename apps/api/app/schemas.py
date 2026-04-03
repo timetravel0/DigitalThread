@@ -217,6 +217,39 @@ class TestRunRead(TestRunCreate, ORMBase):
     updated_at: datetime
 
 
+class VerificationEvidenceBase(BaseModel):
+    project_id: UUID
+    title: str
+    evidence_type: VerificationEvidenceType
+    summary: str = ""
+    observed_at: datetime | None = None
+    source_name: str | None = None
+    source_reference: str | None = None
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class VerificationEvidenceCreate(VerificationEvidenceBase):
+    linked_requirement_ids: list[UUID] = Field(default_factory=list)
+    linked_test_case_ids: list[UUID] = Field(default_factory=list)
+    linked_component_ids: list[UUID] = Field(default_factory=list)
+    linked_non_conformity_ids: list[UUID] = Field(default_factory=list)
+
+
+class VerificationEvidenceRead(VerificationEvidenceBase, ORMBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    linked_objects: list[ObjectSummary] = Field(default_factory=list)
+
+
+class ComponentDetail(BaseModel):
+    component: ComponentRead
+    links: list[LinkRead] = Field(default_factory=list)
+    verification_evidence: list[VerificationEvidenceRead] = Field(default_factory=list)
+    impact: ImpactResponse
+    change_impacts: list[ChangeImpactRead] = Field(default_factory=list)
+
+
 class OperationalRunCreate(BaseModel):
     project_id: UUID
     key: str
@@ -251,6 +284,12 @@ class OperationalRunRead(OperationalRunCreate, ORMBase):
     updated_at: datetime
 
 
+class OperationalRunDetail(BaseModel):
+    operational_run: OperationalRunRead
+    links: list[LinkRead] = Field(default_factory=list)
+    impact: ImpactResponse
+
+
 class BaselineCreate(BaseModel):
     project_id: UUID
     name: str
@@ -266,6 +305,44 @@ class BaselineRead(BaselineCreate, ORMBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+
+
+class RequirementDetail(BaseModel):
+    requirement: RequirementRead
+    links: list[LinkRead] = Field(default_factory=list)
+    artifact_links: list[ArtifactLinkRead] = Field(default_factory=list)
+    verification_evidence: list[VerificationEvidenceRead] = Field(default_factory=list)
+    verification_evaluation: RequirementVerificationEvaluation
+    history: list[RevisionSnapshotRead] = Field(default_factory=list)
+    impact: ImpactResponse
+
+
+class TestCaseDetail(BaseModel):
+    test_case: TestCaseRead
+    links: list[LinkRead] = Field(default_factory=list)
+    artifact_links: list[ArtifactLinkRead] = Field(default_factory=list)
+    verification_evidence: list[VerificationEvidenceRead] = Field(default_factory=list)
+    runs: list[TestRunRead] = Field(default_factory=list)
+    history: list[RevisionSnapshotRead] = Field(default_factory=list)
+    impact: ImpactResponse
+
+
+class RequirementVerificationEvaluation(BaseModel):
+    status: RequirementVerificationStatus
+    linked_evidence_count: int = 0
+    fresh_evidence_count: int = 0
+    stale_evidence_count: int = 0
+    linked_operational_run_count: int = 0
+    fresh_operational_run_count: int = 0
+    stale_operational_run_count: int = 0
+    successful_operational_run_count: int = 0
+    degraded_operational_run_count: int = 0
+    failed_operational_run_count: int = 0
+    linked_test_case_count: int = 0
+    passed_test_case_count: int = 0
+    partial_test_case_count: int = 0
+    failed_test_case_count: int = 0
+    reasons: list[str] = Field(default_factory=list)
 
 
 class BaselineItemRead(ORMBase):
@@ -364,6 +441,49 @@ class ChangeRequestRead(ChangeRequestCreate, ORMBase):
     updated_at: datetime
 
 
+class ChangeRequestDetail(BaseModel):
+    change_request: ChangeRequestRead
+    impacts: list[ChangeImpactRead] = Field(default_factory=list)
+    impact_summary: list[ObjectSummary] = Field(default_factory=list)
+    history: list[ApprovalActionLogRead] = Field(default_factory=list)
+
+
+class NonConformityDetail(BaseModel):
+    non_conformity: NonConformityRead
+    links: list[LinkRead] = Field(default_factory=list)
+    verification_evidence: list[VerificationEvidenceRead] = Field(default_factory=list)
+    impact: ImpactResponse
+    impact_summary: list[ObjectSummary] = Field(default_factory=list)
+
+
+class NonConformityBase(BaseModel):
+    project_id: UUID
+    key: str
+    title: str
+    description: str = ""
+    status: NonConformityStatus = NonConformityStatus.detected
+    severity: Severity
+
+
+class NonConformityCreate(NonConformityBase):
+    pass
+
+
+class NonConformityUpdate(BaseModel):
+    project_id: UUID | None = None
+    key: str | None = None
+    title: str | None = None
+    description: str | None = None
+    status: NonConformityStatus | None = None
+    severity: Severity | None = None
+
+
+class NonConformityRead(NonConformityBase, ORMBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
 class ChangeImpactCreate(BaseModel):
     change_request_id: UUID
     object_type: str
@@ -374,6 +494,204 @@ class ChangeImpactCreate(BaseModel):
 
 class ChangeImpactRead(ChangeImpactCreate, ORMBase):
     id: UUID
+
+
+class ConnectorDefinitionBase(BaseModel):
+    project_id: UUID
+    name: str
+    connector_type: ConnectorType
+    base_url: str | None = None
+    description: str | None = None
+    is_active: bool = True
+    metadata_json: dict[str, Any] | None = None
+
+
+class ConnectorDefinitionCreate(ConnectorDefinitionBase):
+    pass
+
+
+class ConnectorDefinitionUpdate(BaseModel):
+    name: str | None = None
+    connector_type: ConnectorType | None = None
+    base_url: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
+    metadata_json: dict[str, Any] | None = None
+
+
+class ConnectorDefinitionRead(ConnectorDefinitionBase, ORMBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    artifact_count: int = 0
+
+
+class ExternalArtifactBase(BaseModel):
+    project_id: UUID
+    connector_definition_id: UUID | None = None
+    external_id: str
+    artifact_type: ExternalArtifactType
+    name: str
+    description: str | None = None
+    canonical_uri: str | None = None
+    native_tool_url: str | None = None
+    status: ExternalArtifactStatus = ExternalArtifactStatus.active
+    metadata_json: dict[str, Any] | None = None
+
+
+class ExternalArtifactCreate(ExternalArtifactBase):
+    pass
+
+
+class ExternalArtifactUpdate(BaseModel):
+    connector_definition_id: UUID | None = None
+    external_id: str | None = None
+    artifact_type: ExternalArtifactType | None = None
+    name: str | None = None
+    description: str | None = None
+    canonical_uri: str | None = None
+    native_tool_url: str | None = None
+    status: ExternalArtifactStatus | None = None
+    metadata_json: dict[str, Any] | None = None
+
+
+class ExternalArtifactVersionCreate(BaseModel):
+    version_label: str
+    revision_label: str | None = None
+    checksum_or_signature: str | None = None
+    effective_date: dt_date | None = None
+    source_timestamp: datetime | None = None
+    metadata_json: dict[str, Any] | None = None
+
+
+class ExternalArtifactVersionRead(ExternalArtifactVersionCreate, ORMBase):
+    id: UUID
+    external_artifact_id: UUID
+    created_at: datetime
+
+
+class ExternalArtifactRead(ExternalArtifactBase, ORMBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    connector_name: str | None = None
+    connector_type: ConnectorType | None = None
+    versions: list[ExternalArtifactVersionRead] = Field(default_factory=list)
+
+
+class ArtifactLinkCreate(BaseModel):
+    project_id: UUID
+    internal_object_type: FederatedInternalObjectType
+    internal_object_id: UUID
+    external_artifact_id: UUID
+    external_artifact_version_id: UUID | None = None
+    relation_type: ArtifactLinkRelationType
+    rationale: str | None = None
+
+
+class ArtifactLinkRead(ArtifactLinkCreate, ORMBase):
+    id: UUID
+    created_at: datetime
+    internal_object_label: str | None = None
+    external_artifact_name: str | None = None
+    external_artifact_version_label: str | None = None
+    connector_name: str | None = None
+
+
+class ConfigurationContextBase(BaseModel):
+    project_id: UUID
+    key: str
+    name: str
+    description: str | None = None
+    context_type: ConfigurationContextType = ConfigurationContextType.working
+    status: ConfigurationContextStatus = ConfigurationContextStatus.draft
+
+
+class ConfigurationContextCreate(ConfigurationContextBase):
+    pass
+
+
+class ConfigurationContextUpdate(BaseModel):
+    key: str | None = None
+    name: str | None = None
+    description: str | None = None
+    context_type: ConfigurationContextType | None = None
+    status: ConfigurationContextStatus | None = None
+
+
+class ConfigurationContextRead(ConfigurationContextBase, ORMBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    item_count: int = 0
+
+
+class ConfigurationContextComparisonEntry(BaseModel):
+    item_kind: ConfigurationItemKind
+    label: str
+    object_type: str | None = None
+    object_id: UUID | None = None
+    object_version: int | None = None
+    external_artifact_id: UUID | None = None
+    external_artifact_version_id: UUID | None = None
+    version_label: str | None = None
+    revision_label: str | None = None
+    connector_name: str | None = None
+    artifact_name: str | None = None
+    artifact_type: str | None = None
+    role_label: str | None = None
+    notes: str | None = None
+
+
+class ConfigurationContextComparisonChange(BaseModel):
+    key: str
+    left: ConfigurationContextComparisonEntry | None = None
+    right: ConfigurationContextComparisonEntry | None = None
+
+
+class ConfigurationContextComparisonGroup(BaseModel):
+    item_kind: ConfigurationItemKind
+    added: list[ConfigurationContextComparisonEntry] = Field(default_factory=list)
+    removed: list[ConfigurationContextComparisonEntry] = Field(default_factory=list)
+    version_changed: list[ConfigurationContextComparisonChange] = Field(default_factory=list)
+
+
+class ConfigurationContextComparisonSummary(BaseModel):
+    added: int = 0
+    removed: int = 0
+    version_changed: int = 0
+
+
+class ConfigurationContextComparisonResponse(BaseModel):
+    left_context: ConfigurationContextRead
+    right_context: ConfigurationContextRead
+    summary: ConfigurationContextComparisonSummary
+    groups: list[ConfigurationContextComparisonGroup]
+
+
+class ConfigurationItemMappingCreate(BaseModel):
+    item_kind: ConfigurationItemKind
+    internal_object_type: FederatedInternalObjectType | None = None
+    internal_object_id: UUID | None = None
+    internal_object_version: int | None = None
+    external_artifact_version_id: UUID | None = None
+    role_label: str | None = None
+    notes: str | None = None
+
+
+class ConfigurationItemMappingRead(ConfigurationItemMappingCreate, ORMBase):
+    id: UUID
+    configuration_context_id: UUID
+    created_at: datetime
+
+
+class AuthoritativeRegistrySummary(BaseModel):
+    connectors: int = 0
+    external_artifacts: int = 0
+    external_artifact_versions: int = 0
+    artifact_links: int = 0
+    configuration_contexts: int = 0
+    configuration_item_mappings: int = 0
 
 
 class ObjectSummary(BaseModel):

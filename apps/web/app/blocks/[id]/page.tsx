@@ -1,13 +1,16 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { api } from "@/lib/api-client";
+import { ArtifactLinkForm } from "@/components/artifact-link-form";
 import { Badge, Button, Card, CardBody, CardHeader, SectionTitle } from "@/components/ui";
 import { WorkflowActions } from "@/components/workflow-actions";
+import { ViewCue } from "@/components/view-cue";
 
 export const dynamic = "force-dynamic";
 
 export default async function BlockPage({ params }: { params: { id: string } }) {
   const data = await api.block(params.id).catch(() => null);
   if (!data) return <div className="text-sm text-muted">Block not found.</div>;
+  const artifacts = await api.externalArtifacts(data.block.project_id).catch(() => []);
 
   return (
     <div className="space-y-6">
@@ -27,7 +30,7 @@ export default async function BlockPage({ params }: { params: { id: string } }) 
           </CardHeader>
           <CardBody className="space-y-3">
             <Row label="Kind" value={data.block.block_kind} />
-            <Row label="Abstraction" value={data.block.abstraction_level} />
+            <Row label="Abstraction" value={<Badge tone={data.block.abstraction_level === "physical" ? "warning" : "accent"}>{data.block.abstraction_level}</Badge>} />
             <Row label="Status" value={<Badge>{data.block.status}</Badge>} />
             <Row label="Version" value={data.block.version} />
             <Row label="Owner" value={data.block.owner || "None"} />
@@ -46,6 +49,8 @@ export default async function BlockPage({ params }: { params: { id: string } }) 
         </Card>
       </div>
 
+      <ViewCue layer={data.block.abstraction_level} />
+
       {data.block.status === "approved" ? (
         <Card>
           <CardHeader><div className="font-semibold">Approved item editing</div></CardHeader>
@@ -57,17 +62,44 @@ export default async function BlockPage({ params }: { params: { id: string } }) 
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader><div className="font-semibold">Containment</div></CardHeader>
-        <CardBody className="space-y-3">
-          {(data.containments || []).map((rel: any) => (
-            <div key={rel.id} className="rounded-xl border border-line bg-panel2 p-3">
-              <div className="font-medium">{rel.parent_block_id} contains {rel.child_block_id}</div>
-              <div className="text-xs text-muted">{rel.relation_type}</div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader><div className="font-semibold">Containment</div></CardHeader>
+          <CardBody className="space-y-3">
+            {(data.containments || []).map((rel: any) => (
+              <div key={rel.id} className="rounded-xl border border-line bg-panel2 p-3">
+                <div className="font-medium">{rel.parent_block_id} contains {rel.child_block_id}</div>
+                <div className="text-xs text-muted">{rel.relation_type}</div>
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader><div className="font-semibold">Linked external sources</div></CardHeader>
+          <CardBody className="space-y-3">
+            {(data.artifact_links || []).length ? (
+              data.artifact_links.map((link: any) => (
+                <div key={link.id} className="rounded-xl border border-line bg-panel2 p-3">
+                  <div className="font-medium">{link.internal_object_label || "Block"} <span className="text-muted">→</span> {link.external_artifact_name}</div>
+                  <div className="text-xs text-muted">{link.relation_type} · {link.external_artifact_version_label || "unpinned"} · {link.connector_name || "no connector"}</div>
+                </div>
+              ))
+            ) : (
+              <div className="text-sm text-muted">No external sources linked yet.</div>
+            )}
+            <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
+              <div className="mb-3 text-sm font-medium">Add linked external source</div>
+              <ArtifactLinkForm
+                projectId={data.block.project_id}
+                internalObjectType="block"
+                internalObjectId={data.block.id}
+                internalObjectLabel={`${data.block.key} - ${data.block.name}`}
+                artifacts={artifacts}
+              />
             </div>
-          ))}
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader><div className="font-semibold">Traceability and history</div></CardHeader>

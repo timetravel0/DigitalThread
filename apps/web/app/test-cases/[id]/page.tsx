@@ -1,6 +1,9 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { api } from "@/lib/api-client";
+import { ArtifactLinkForm } from "@/components/artifact-link-form";
 import { Badge, Button, Card, CardBody, CardHeader, SectionTitle } from "@/components/ui";
+import { SimulationEvidenceMetadata } from "@/components/simulation-evidence-metadata";
+import { VerificationEvidenceForm } from "@/components/verification-evidence-form";
 import { WorkflowActions } from "@/components/workflow-actions";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +11,8 @@ export const dynamic = "force-dynamic";
 export default async function TestCasePage({ params }: { params: { id: string } }) {
   const data = await api.testCase(params.id).catch(() => null);
   if (!data) return <div className="text-sm text-muted">Test case not found.</div>;
+  const artifacts = await api.externalArtifacts(data.test_case.project_id).catch(() => []);
+
   return (
     <div className="space-y-6">
       <SectionTitle title={`${data.test_case.key} - ${data.test_case.title}`} description={data.test_case.description} />
@@ -39,20 +44,84 @@ export default async function TestCasePage({ params }: { params: { id: string } 
           </CardBody>
         </Card>
       ) : null}
-      <Card>
-        <CardHeader><div className="font-semibold">Runs</div></CardHeader>
-        <CardBody className="space-y-3">
-          {data.runs.map((run: any) => (
-            <div key={run.id} className="rounded-xl border border-line bg-panel2 p-3">
-              <div className="flex items-center justify-between gap-4">
-                <div className="font-medium">{run.summary}</div>
-                <Badge tone={run.result === "failed" ? "danger" : run.result === "passed" ? "success" : "warning"}>{run.result}</Badge>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader><div className="font-semibold">Runs</div></CardHeader>
+          <CardBody className="space-y-3">
+            {data.runs.map((run: any) => (
+              <div key={run.id} className="rounded-xl border border-line bg-panel2 p-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="font-medium">{run.summary}</div>
+                  <Badge tone={run.result === "failed" ? "danger" : run.result === "passed" ? "success" : "warning"}>{run.result}</Badge>
+                </div>
+                <div className="mt-1 text-xs text-muted">{run.execution_date}</div>
               </div>
-              <div className="mt-1 text-xs text-muted">{run.execution_date}</div>
+            ))}
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader><div className="font-semibold">Verification evidence</div></CardHeader>
+          <CardBody className="space-y-4">
+            {data.verification_evidence?.length ? (
+              <div className="space-y-3">
+                {data.verification_evidence.map((evidence: any) => (
+                  <div key={evidence.id} className="rounded-xl border border-line bg-panel2 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <div className="font-medium">{evidence.title}</div>
+                        <div className="mt-1 text-xs text-muted">{evidence.evidence_type} · {evidence.observed_at || "no observed date"}</div>
+                      </div>
+                      <Badge tone="accent">{evidence.evidence_type}</Badge>
+                    </div>
+                    <div className="mt-2 text-sm text-muted">{evidence.summary || "No summary provided."}</div>
+                    <div className="mt-2 text-xs text-muted">
+                      {evidence.source_name ? <span>{evidence.source_name}</span> : <span>No source name</span>}
+                      {evidence.source_reference ? <span> · {evidence.source_reference}</span> : null}
+                    </div>
+                    <SimulationEvidenceMetadata metadataJson={evidence.metadata_json} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-muted">No verification evidence linked yet.</div>
+            )}
+            <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
+              <div className="mb-3 text-sm font-medium">Add verification evidence</div>
+              <VerificationEvidenceForm
+                projectId={data.test_case.project_id}
+                subjectType="test_case"
+                subjectId={data.test_case.id}
+                subjectLabel={`${data.test_case.key} - ${data.test_case.title}`}
+              />
             </div>
-          ))}
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader><div className="font-semibold">Linked external sources</div></CardHeader>
+          <CardBody className="space-y-3">
+            {(data.artifact_links || []).length ? (
+              data.artifact_links.map((link: any) => (
+                <div key={link.id} className="rounded-xl border border-line bg-panel2 p-3">
+                  <div className="font-medium">{link.internal_object_label || "Test case"} <span className="text-muted">→</span> {link.external_artifact_name}</div>
+                  <div className="text-xs text-muted">{link.relation_type} · {link.external_artifact_version_label || "unpinned"} · {link.connector_name || "no connector"}</div>
+                </div>
+              ))
+            ) : (
+              <div className="text-sm text-muted">No external sources linked yet.</div>
+            )}
+            <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
+              <div className="mb-3 text-sm font-medium">Add linked external source</div>
+              <ArtifactLinkForm
+                projectId={data.test_case.project_id}
+                internalObjectType="test_case"
+                internalObjectId={data.test_case.id}
+                internalObjectLabel={`${data.test_case.key} - ${data.test_case.title}`}
+                artifacts={artifacts}
+              />
+            </div>
+          </CardBody>
+        </Card>
+      </div>
       <Card>
         <CardHeader><div className="font-semibold">Traceability</div></CardHeader>
         <CardBody className="space-y-3">

@@ -103,6 +103,201 @@ def project_dashboard_endpoint(project_id: UUID, session: Session = Depends(db))
         raise api_error(exc)
 
 
+@app.get("/api/projects/{project_id}/authoritative-registry-summary", response_model=AuthoritativeRegistrySummary)
+def authoritative_registry_summary_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return get_authoritative_registry_summary(session, project_id)
+
+
+@app.get("/api/projects/{project_id}/connectors", response_model=list[ConnectorDefinitionRead])
+def list_connectors_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return list_connectors(session, project_id)
+
+
+@app.post("/api/projects/{project_id}/connectors", response_model=ConnectorDefinitionRead, status_code=201)
+def create_connector_endpoint(project_id: UUID, payload: ConnectorDefinitionCreate, session: Session = Depends(db)):
+    try:
+        if payload.project_id != project_id:
+            raise ValueError("Connector project_id must match the route project_id")
+        return create_connector(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/connectors/{obj_id}", response_model=dict)
+def connector_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_connector_service(session, obj_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.patch("/api/connectors/{obj_id}", response_model=ConnectorDefinitionRead)
+def update_connector_endpoint(obj_id: UUID, payload: ConnectorDefinitionUpdate, session: Session = Depends(db)):
+    try:
+        return update_connector(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/projects/{project_id}/external-artifacts", response_model=list[ExternalArtifactRead])
+def list_external_artifacts_endpoint(
+    project_id: UUID,
+    connector_definition_id: UUID | None = None,
+    connector_type: ConnectorType | None = None,
+    artifact_type: ExternalArtifactType | None = None,
+    session: Session = Depends(db),
+):
+    return list_external_artifacts(
+        session,
+        project_id,
+        connector_definition_id=connector_definition_id,
+        connector_type=connector_type,
+        artifact_type=artifact_type,
+    )
+
+
+@app.post("/api/projects/{project_id}/external-artifacts", response_model=ExternalArtifactRead, status_code=201)
+def create_external_artifact_endpoint(project_id: UUID, payload: ExternalArtifactCreate, session: Session = Depends(db)):
+    try:
+        if payload.project_id != project_id:
+            raise ValueError("External artifact project_id must match the route project_id")
+        return create_external_artifact(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/external-artifacts/{obj_id}", response_model=dict)
+def external_artifact_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_external_artifact_service(session, obj_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.patch("/api/external-artifacts/{obj_id}", response_model=ExternalArtifactRead)
+def update_external_artifact_endpoint(obj_id: UUID, payload: ExternalArtifactUpdate, session: Session = Depends(db)):
+    try:
+        return update_external_artifact(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/external-artifacts/{obj_id}/versions", response_model=list[ExternalArtifactVersionRead])
+def list_external_artifact_versions_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    return list_external_artifact_versions(session, obj_id)
+
+
+@app.post("/api/external-artifacts/{obj_id}/versions", response_model=ExternalArtifactVersionRead, status_code=201)
+def create_external_artifact_version_endpoint(obj_id: UUID, payload: ExternalArtifactVersionCreate, session: Session = Depends(db)):
+    try:
+        return create_external_artifact_version(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/projects/{project_id}/artifact-links", response_model=list[ArtifactLinkRead])
+def list_artifact_links_endpoint(
+    project_id: UUID,
+    internal_object_type: FederatedInternalObjectType | None = None,
+    internal_object_id: UUID | None = None,
+    external_artifact_id: UUID | None = None,
+    session: Session = Depends(db),
+):
+    return list_artifact_links(
+        session,
+        project_id,
+        internal_object_type=internal_object_type,
+        internal_object_id=internal_object_id,
+        external_artifact_id=external_artifact_id,
+    )
+
+
+@app.post("/api/projects/{project_id}/artifact-links", response_model=ArtifactLinkRead, status_code=201)
+def create_artifact_link_endpoint(project_id: UUID, payload: ArtifactLinkCreate, session: Session = Depends(db)):
+    try:
+        if payload.project_id != project_id:
+            raise ValueError("Artifact link project_id must match the route project_id")
+        return create_artifact_link(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.delete("/api/artifact-links/{link_id}", status_code=204)
+def delete_artifact_link_endpoint(link_id: UUID, session: Session = Depends(db)):
+    try:
+        delete_artifact_link(session, link_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/projects/{project_id}/configuration-contexts", response_model=list[ConfigurationContextRead])
+def list_configuration_contexts_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return list_configuration_contexts(session, project_id)
+
+
+@app.post("/api/projects/{project_id}/configuration-contexts", response_model=ConfigurationContextRead, status_code=201)
+def create_configuration_context_endpoint(project_id: UUID, payload: ConfigurationContextCreate, session: Session = Depends(db)):
+    try:
+        if payload.project_id != project_id:
+            raise ValueError("Configuration context project_id must match the route project_id")
+        return create_configuration_context(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/configuration-contexts/{obj_id}", response_model=dict)
+def configuration_context_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_configuration_context_service(session, obj_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.patch("/api/configuration-contexts/{obj_id}", response_model=ConfigurationContextRead)
+def update_configuration_context_endpoint(obj_id: UUID, payload: ConfigurationContextUpdate, session: Session = Depends(db)):
+    try:
+        return update_configuration_context(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/configuration-contexts/{obj_id}/items", response_model=list[ConfigurationItemMappingRead])
+def list_configuration_item_mappings_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    return list_configuration_item_mappings(session, obj_id)
+
+
+@app.post("/api/configuration-contexts/{obj_id}/items", response_model=ConfigurationItemMappingRead, status_code=201)
+def create_configuration_item_mapping_endpoint(obj_id: UUID, payload: ConfigurationItemMappingCreate, session: Session = Depends(db)):
+    try:
+        return create_configuration_item_mapping(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.delete("/api/configuration-item-mappings/{mapping_id}", status_code=204)
+def delete_configuration_item_mapping_endpoint(mapping_id: UUID, session: Session = Depends(db)):
+    try:
+        delete_configuration_item_mapping(session, mapping_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/configuration-contexts/{obj_id}/resolved-view", response_model=dict)
+def configuration_context_resolved_view_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_configuration_context_service(session, obj_id)["resolved_view"]
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/configuration-contexts/{obj_id}/compare/{other_id}", response_model=ConfigurationContextComparisonResponse)
+def compare_configuration_contexts_endpoint(obj_id: UUID, other_id: UUID, session: Session = Depends(db)):
+    try:
+        return compare_configuration_contexts(session, obj_id, other_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
 @app.get("/api/requirements", response_model=list[RequirementRead])
 def list_requirements_endpoint(
     project_id: UUID = Query(...),
@@ -122,7 +317,7 @@ def create_requirement_endpoint(payload: RequirementCreate, session: Session = D
         raise api_error(exc)
 
 
-@app.get("/api/requirements/{obj_id}", response_model=dict)
+@app.get("/api/requirements/{obj_id}", response_model=RequirementDetail)
 def requirement_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
     try:
         return get_requirement_detail(session, obj_id)
@@ -263,6 +458,19 @@ def block_history_endpoint(obj_id: UUID, session: Session = Depends(db)):
         raise api_error(exc)
 
 
+@app.get("/api/projects/{project_id}/components", response_model=list[ComponentRead])
+def list_components_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return list_components(session, project_id)
+
+
+@app.get("/api/components/{obj_id}", response_model=ComponentDetail)
+def component_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_component_detail(session, obj_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
 @app.get("/api/test-cases", response_model=list[TestCaseRead])
 def list_test_cases_endpoint(project_id: UUID = Query(...), session: Session = Depends(db)):
     return list_test_cases(session, project_id)
@@ -276,7 +484,7 @@ def create_test_case_endpoint(payload: TestCaseCreate, session: Session = Depend
         raise api_error(exc)
 
 
-@app.get("/api/test-cases/{obj_id}", response_model=dict)
+@app.get("/api/test-cases/{obj_id}", response_model=TestCaseDetail)
 def test_case_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
     try:
         return get_test_case_detail(session, obj_id)
@@ -332,6 +540,39 @@ def test_case_create_draft_version_endpoint(obj_id: UUID, payload: WorkflowActio
         raise api_error(exc)
 
 
+@app.get("/api/projects/{project_id}/verification-evidence", response_model=list[VerificationEvidenceRead])
+def list_verification_evidence_endpoint(
+    project_id: UUID,
+    internal_object_type: FederatedInternalObjectType | None = None,
+    internal_object_id: UUID | None = None,
+    session: Session = Depends(db),
+):
+    return list_verification_evidence(
+        session,
+        project_id,
+        internal_object_type=internal_object_type,
+        internal_object_id=internal_object_id,
+    )
+
+
+@app.post("/api/projects/{project_id}/verification-evidence", response_model=VerificationEvidenceRead, status_code=201)
+def create_verification_evidence_endpoint(project_id: UUID, payload: VerificationEvidenceCreate, session: Session = Depends(db)):
+    try:
+        if payload.project_id != project_id:
+            raise ValueError("Verification evidence project_id must match the route project_id")
+        return create_verification_evidence(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/verification-evidence/{evidence_id}", response_model=VerificationEvidenceRead)
+def verification_evidence_detail_endpoint(evidence_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_verification_evidence_service(session, evidence_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
 @app.get("/api/test-cases/{obj_id}/history", response_model=list[RevisionSnapshotRead])
 def test_case_history_endpoint(obj_id: UUID, session: Session = Depends(db)):
     try:
@@ -362,6 +603,14 @@ def list_operational_runs_endpoint(project_id: UUID = Query(...), session: Sessi
 def create_operational_run_endpoint(payload: OperationalRunCreate, session: Session = Depends(db)):
     try:
         return create_operational_run(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/operational-runs/{obj_id}", response_model=OperationalRunDetail)
+def operational_run_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_operational_run_detail(session, obj_id)
     except Exception as exc:
         raise api_error(exc)
 
@@ -401,6 +650,35 @@ def list_change_requests_endpoint(project_id: UUID = Query(...), session: Sessio
     return list_change_requests(session, project_id)
 
 
+@app.get("/api/projects/{project_id}/non-conformities", response_model=list[NonConformityRead])
+def list_non_conformities_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return list_non_conformities(session, project_id)
+
+
+@app.post("/api/non-conformities", response_model=NonConformityRead, status_code=201)
+def create_non_conformity_endpoint(payload: NonConformityCreate, session: Session = Depends(db)):
+    try:
+        return create_non_conformity(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/non-conformities/{obj_id}", response_model=NonConformityDetail)
+def non_conformity_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_non_conformity_detail(session, obj_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.patch("/api/non-conformities/{obj_id}", response_model=NonConformityRead)
+def update_non_conformity_endpoint(obj_id: UUID, payload: NonConformityUpdate, session: Session = Depends(db)):
+    try:
+        return update_non_conformity(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
 @app.post("/api/change-requests", response_model=ChangeRequestRead, status_code=201)
 def create_change_request_endpoint(payload: ChangeRequestCreate, session: Session = Depends(db)):
     try:
@@ -409,7 +687,7 @@ def create_change_request_endpoint(payload: ChangeRequestCreate, session: Sessio
         raise api_error(exc)
 
 
-@app.get("/api/change-requests/{obj_id}")
+@app.get("/api/change-requests/{obj_id}", response_model=ChangeRequestDetail)
 def change_request_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
     try:
         return get_change_request_detail(session, obj_id)
@@ -421,6 +699,54 @@ def change_request_detail_endpoint(obj_id: UUID, session: Session = Depends(db))
 def update_change_request_endpoint(obj_id: UUID, payload: ChangeRequestUpdate, session: Session = Depends(db)):
     try:
         return update_change_request(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/change-requests/{obj_id}/submit-analysis", response_model=ChangeRequestRead)
+def submit_change_request_analysis_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return submit_change_request_for_analysis(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/change-requests/{obj_id}/approve", response_model=ChangeRequestRead)
+def approve_change_request_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return approve_change_request(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/change-requests/{obj_id}/reject", response_model=ChangeRequestRead)
+def reject_change_request_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return reject_change_request(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/change-requests/{obj_id}/implement", response_model=ChangeRequestRead)
+def implement_change_request_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return mark_change_request_implemented(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/change-requests/{obj_id}/close", response_model=ChangeRequestRead)
+def close_change_request_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return close_change_request(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/change-requests/{obj_id}/reopen", response_model=ChangeRequestRead)
+def reopen_change_request_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return reopen_change_request(session, obj_id, payload)
     except Exception as exc:
         raise api_error(exc)
 

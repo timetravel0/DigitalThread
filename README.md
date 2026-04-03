@@ -11,6 +11,9 @@ It is designed for SMEs that need traceability without adopting a heavy PLM or M
 - create traceability links and SysML-inspired relations
 - version approved artifacts through draft copies
 - build baselines from approved content
+- register authoritative external sources and version pointers
+- link internal objects to external DOORS, MBSE, PLM, and simulation artifacts
+- define configuration contexts that combine internal and external versions
 - export a complete project bundle for external validation
 - inspect coverage, impact, matrix, and SysML practice views
 
@@ -22,6 +25,7 @@ ThreadLite is intentionally narrow in scope:
 - explicit traceability links instead of a complex graph platform
 - simple version fields plus revision snapshots for authored objects
 - approval workflow for requirements, blocks, and test cases
+- authoritative metadata federation rather than file duplication
 - one-hop plus two-hop impact analysis
 - practical seed data so the product feels alive on first run
 
@@ -69,7 +73,9 @@ threadlite/
 
 - Dashboard with KPIs and recent activity
 - Project pages with tabs for requirements, blocks, tests, operational runs, traceability, SysML, review queue, matrix, baselines, and change requests
+- Project pages with an Authoritative Sources registry for connectors, external artifacts, artifact links, and configuration contexts
 - Requirement, block, and test detail pages with inbound/outbound traceability plus workflow controls
+- Requirement, block, and test detail pages with linked external sources for federated metadata visibility
 - Traceability matrix with component or test columns
 - Impact analysis with direct and two-hop traversal across requirements, blocks, and tests
 - Baselines for freezing approved versions of core objects
@@ -89,6 +95,30 @@ ThreadLite does not implement the full SysML standard. It implements a focused s
 - DeriveReqt: one requirement is derived from another requirement.
 
 In the drone demo, the top-level `Drone System` block contains subsystems such as `Power Subsystem` and `Flight Controller`, while the battery and controller satisfy endurance, telemetry, and temperature requirements.
+
+## Authoritative Sources & Federation
+
+ThreadLite now treats external tools as authoritative source systems rather than data to copy into the app.
+
+- `ConnectorDefinition` registers the owning tool or feed.
+- `ExternalArtifact` stores the external object pointer and metadata only.
+- `ExternalArtifactVersion` captures the specific revision or version to reference.
+- `ArtifactLink` connects internal requirements, blocks, and test cases to external authoritative objects.
+- `ConfigurationContext` groups approved internal versions and external artifact versions into a review gate or working snapshot.
+
+This is the key distinction:
+
+- Baseline = frozen internal snapshot of approved ThreadLite objects.
+- Configuration Context = broader review or release context that can include internal object versions and external authoritative versions together.
+
+Example mappings in the drone demo:
+
+- `DR-REQ-001` -> external DOORS requirement `REQ-DOORS-001` v7
+- `DR-BLK-004` -> external Cameo block `SYSML-BLOCK-BATTERY` v2
+- `DR-BLK-004` -> external Teamcenter part `PLM-PART-DR-BATT-01` rev C
+- `DR-TST-001` -> external Simulink model `SIM-FLIGHT-ENDURANCE` v1.4
+
+That makes ThreadLite a connective layer across domains, not a replacement for the tools that own the source artifacts.
 
 ## Approval Workflow
 
@@ -140,9 +170,13 @@ Each project can be exported as a single JSON bundle from the project workspace.
 - SysML relations
 - baselines and baseline items
 - change requests and change impacts
+- connectors, external artifacts, external artifact versions, artifact links
+- configuration contexts and configuration item mappings
 - revision snapshots
 
 The export is intentionally deterministic and flat enough that another tool can validate it without needing the web app.
+
+Future federation work will add lightweight import contracts, standards-oriented adapters, and richer configuration comparison, but those are intentionally out of scope for the current MVP.
 
 ## Local Setup
 

@@ -4,16 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui";
-import type { BlockStatus, RequirementStatus, TestCaseStatus, WorkflowActionPayload } from "@/lib/types";
+import type { BlockStatus, ChangeRequestStatus, RequirementStatus, TestCaseStatus, WorkflowActionPayload } from "@/lib/types";
 
-type Status = RequirementStatus | BlockStatus | TestCaseStatus;
+type Status = RequirementStatus | BlockStatus | TestCaseStatus | ChangeRequestStatus;
 
 export function WorkflowActions({
   kind,
   id,
   status,
 }: {
-  kind: "requirement" | "block" | "test_case";
+  kind: "requirement" | "block" | "test_case" | "change_request";
   id: string;
   status: Status;
 }) {
@@ -33,6 +33,53 @@ export function WorkflowActions({
   };
 
   const payload: WorkflowActionPayload = { actor: "local-user" };
+
+  if (kind === "change_request" && status === "analysis") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => run("approve", async () => {
+          await api.approveChangeRequest(id, payload);
+        })}>
+          {busy === "approve" ? "Approving..." : "Approve"}
+        </Button>
+        <Button variant="secondary" onClick={() => run("reject", async () => {
+          await api.rejectChangeRequest(id, { ...payload, reason: "Needs revision" });
+        })}>
+          {busy === "reject" ? "Rejecting..." : "Reject"}
+        </Button>
+      </div>
+    );
+  }
+
+  if (kind === "change_request" && status === "approved") {
+    return (
+      <Button onClick={() => run("implement", async () => {
+        await api.implementChangeRequest(id, payload);
+      })}>
+        {busy === "implement" ? "Marking implemented..." : "Mark implemented"}
+      </Button>
+    );
+  }
+
+  if (kind === "change_request" && status === "implemented") {
+    return (
+      <Button onClick={() => run("close", async () => {
+        await api.closeChangeRequest(id, payload);
+      })}>
+        {busy === "close" ? "Closing..." : "Close change request"}
+      </Button>
+    );
+  }
+
+  if (kind === "change_request" && status === "rejected") {
+    return (
+      <Button onClick={() => run("reopen", async () => {
+        await api.reopenChangeRequest(id, payload);
+      })}>
+        {busy === "reopen" ? "Reopening..." : "Reopen"}
+      </Button>
+    );
+  }
 
   if (status === "approved") {
     return (
