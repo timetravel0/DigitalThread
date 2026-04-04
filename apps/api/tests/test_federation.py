@@ -61,9 +61,13 @@ from app.services import (
     get_configuration_context_service,
     list_external_artifacts,
     seed_demo,
+    update_configuration_context,
 )
 from app.main import (
     compare_configuration_contexts_endpoint,
+    baseline_compare_endpoint,
+    baseline_compare_baseline_endpoint,
+    baseline_bridge_context_endpoint,
     baseline_detail_endpoint,
     create_configuration_item_mapping_endpoint,
     delete_configuration_item_mapping_endpoint,
@@ -248,7 +252,7 @@ def test_configuration_context_and_mappings():
                 key="CTX-1",
                 name="PDR 0.3",
                 context_type=ConfigurationContextType.review_gate,
-                status=ConfigurationContextStatus.frozen,
+                status=ConfigurationContextStatus.active,
             ),
         )
 
@@ -272,6 +276,8 @@ def test_configuration_context_and_mappings():
                 role_label="Authoritative external reference",
             ),
         )
+
+        update_configuration_context(session, context.id, ConfigurationContextUpdate(status=ConfigurationContextStatus.frozen))
 
         assert internal.configuration_context_id == context.id
         assert external.external_artifact_version_id == version.id
@@ -384,10 +390,66 @@ def test_baseline_detail_endpoint_exposes_related_configuration_contexts():
         )
 
         detail = baseline_detail_endpoint(baseline.id, session)
+        bridge = baseline_bridge_context_endpoint(baseline.id, session)
 
         assert detail["baseline"].id == baseline.id
+        assert detail["bridge_context"].baseline_id == baseline.id
         assert detail["related_configuration_contexts"]
         assert detail["related_configuration_contexts"][0].id == context.id
+        assert bridge.baseline_id == baseline.id
+        assert bridge.item_count == 3
+
+
+def test_baseline_compare_endpoint_rejects_cross_project_inputs():
+    with make_session() as session:
+        project_a = create_project(session, ProjectCreate(code="P-FED-12", name="P-FED-12", description=""))
+        project_b = create_project(session, ProjectCreate(code="P-FED-13", name="P-FED-13", description=""))
+        baseline, _ = create_baseline(
+            session,
+            BaselineCreate(
+                project_id=project_a.id,
+                name="Cross project baseline",
+                description="Baseline for compare",
+            ),
+        )
+        context = create_configuration_context(
+            session,
+            ConfigurationContextCreate(
+                project_id=project_b.id,
+                key="CTX-X",
+                name="Foreign context",
+                context_type=ConfigurationContextType.review_gate,
+                status=ConfigurationContextStatus.frozen,
+            ),
+        )
+
+        with pytest.raises(HTTPException, match="same project"):
+            baseline_compare_endpoint(baseline.id, context.id, session)
+
+
+def test_baseline_compare_baseline_endpoint_rejects_cross_project_inputs():
+    with make_session() as session:
+        project_a = create_project(session, ProjectCreate(code="P-FED-14", name="P-FED-14", description=""))
+        project_b = create_project(session, ProjectCreate(code="P-FED-15", name="P-FED-15", description=""))
+        left, _ = create_baseline(
+            session,
+            BaselineCreate(
+                project_id=project_a.id,
+                name="Left baseline",
+                description="Baseline for compare",
+            ),
+        )
+        right, _ = create_baseline(
+            session,
+            BaselineCreate(
+                project_id=project_b.id,
+                name="Right baseline",
+                description="Baseline for compare",
+            ),
+        )
+
+        with pytest.raises(HTTPException, match="same project"):
+            baseline_compare_baseline_endpoint(left.id, right.id, session)
 
 
 def test_configuration_context_resolved_view_exposes_external_revision_metadata():
@@ -419,7 +481,7 @@ def test_configuration_context_resolved_view_exposes_external_revision_metadata(
                 key="CTX-REV",
                 name="Revision context",
                 context_type=ConfigurationContextType.review_gate,
-                status=ConfigurationContextStatus.frozen,
+                status=ConfigurationContextStatus.active,
             ),
         )
         create_configuration_item_mapping(
@@ -431,6 +493,7 @@ def test_configuration_context_resolved_view_exposes_external_revision_metadata(
                 role_label="Authoritative reference",
             ),
         )
+        update_configuration_context(session, context.id, ConfigurationContextUpdate(status=ConfigurationContextStatus.frozen))
 
         detail = get_configuration_context_service(session, context.id)
         external = detail["resolved_view"]["external"][0]
@@ -512,7 +575,7 @@ def test_configuration_context_compare_groups_added_removed_and_version_changes(
                 key="CTX-LEFT",
                 name="Left context",
                 context_type=ConfigurationContextType.review_gate,
-                status=ConfigurationContextStatus.frozen,
+                status=ConfigurationContextStatus.active,
             ),
         )
         right = create_configuration_context(
@@ -522,7 +585,7 @@ def test_configuration_context_compare_groups_added_removed_and_version_changes(
                 key="CTX-RIGHT",
                 name="Right context",
                 context_type=ConfigurationContextType.review_gate,
-                status=ConfigurationContextStatus.frozen,
+                status=ConfigurationContextStatus.active,
             ),
         )
 
@@ -687,6 +750,28 @@ def test_immutable_configuration_context_routes_reject_mutation():
         )
         update_configuration_context(session, context.id, ConfigurationContextUpdate(status=ConfigurationContextStatus.frozen))
 
+        obsolete_context = create_configuration_context(
+            session,
+            ConfigurationContextCreate(
+                project_id=project.id,
+                key="CTX-OBS",
+                name="Obsolete context",
+                context_type=ConfigurationContextType.review_gate,
+                status=ConfigurationContextStatus.active,
+            ),
+        )
+        obsolete_mapping = create_configuration_item_mapping(
+            session,
+            obsolete_context.id,
+            ConfigurationItemMappingCreate(
+                item_kind=ConfigurationItemKind.internal_requirement,
+                internal_object_type=FederatedInternalObjectType.requirement,
+                internal_object_id=requirement.id,
+                internal_object_version=requirement.version,
+            ),
+        )
+        update_configuration_context(session, obsolete_context.id, ConfigurationContextUpdate(status=ConfigurationContextStatus.obsolete))
+
         with pytest.raises(HTTPException) as update_exc:
             update_configuration_context_endpoint(context.id, ConfigurationContextUpdate(name="Still locked"), session)
         assert update_exc.value.status_code == 400
@@ -717,6 +802,37 @@ def test_immutable_configuration_context_routes_reject_mutation():
         with pytest.raises(HTTPException) as delete_exc:
             delete_configuration_item_mapping_endpoint(mapping.id, session)
         assert delete_exc.value.status_code == 400
+
+        with pytest.raises(HTTPException) as obsolete_update_exc:
+            update_configuration_context_endpoint(obsolete_context.id, ConfigurationContextUpdate(name="Still obsolete"), session)
+        assert obsolete_update_exc.value.status_code == 400
+
+        with pytest.raises(HTTPException) as obsolete_create_exc:
+            create_configuration_item_mapping_endpoint(
+                obsolete_context.id,
+                ConfigurationItemMappingCreate(
+                    item_kind=ConfigurationItemKind.external_artifact_version,
+                    external_artifact_version_id=create_external_artifact_version(
+                        session,
+                        create_external_artifact(
+                            session,
+                            ExternalArtifactCreate(
+                                project_id=project.id,
+                                external_id="ART-OBS",
+                                artifact_type=ExternalArtifactType.document,
+                                name="Obsolete artifact",
+                            ),
+                        ).id,
+                        ExternalArtifactVersionCreate(version_label="1"),
+                    ).id,
+                ),
+                session,
+            )
+        assert obsolete_create_exc.value.status_code == 400
+
+        with pytest.raises(HTTPException) as obsolete_delete_exc:
+            delete_configuration_item_mapping_endpoint(obsolete_mapping.id, session)
+        assert obsolete_delete_exc.value.status_code == 400
 
 
 def test_baseline_detail_endpoint_exposes_related_configuration_contexts():

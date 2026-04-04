@@ -307,6 +307,13 @@ class BaselineRead(BaselineCreate, ORMBase):
     updated_at: datetime
 
 
+class BaselineDetailRead(BaseModel):
+    baseline: BaselineRead
+    bridge_context: BaselineBridgeContextRead
+    items: list[BaselineItemRead] = Field(default_factory=list)
+    related_configuration_contexts: list[ConfigurationContextRead] = Field(default_factory=list)
+
+
 class RequirementDetail(BaseModel):
     requirement: RequirementRead
     links: list[LinkRead] = Field(default_factory=list)
@@ -626,6 +633,11 @@ class ConfigurationContextRead(ConfigurationContextBase, ORMBase):
     item_count: int = 0
 
 
+class BaselineBridgeContextRead(ConfigurationContextRead):
+    baseline_id: UUID
+    baseline_name: str
+
+
 class ConfigurationContextComparisonEntry(BaseModel):
     item_kind: ConfigurationItemKind
     label: str
@@ -665,6 +677,20 @@ class ConfigurationContextComparisonSummary(BaseModel):
 class ConfigurationContextComparisonResponse(BaseModel):
     left_context: ConfigurationContextRead
     right_context: ConfigurationContextRead
+    summary: ConfigurationContextComparisonSummary
+    groups: list[ConfigurationContextComparisonGroup]
+
+
+class BaselineContextComparisonResponse(BaseModel):
+    baseline: BaselineRead
+    configuration_context: ConfigurationContextRead
+    summary: ConfigurationContextComparisonSummary
+    groups: list[ConfigurationContextComparisonGroup]
+
+
+class BaselineComparisonResponse(BaseModel):
+    left_baseline: BaselineRead
+    right_baseline: BaselineRead
     summary: ConfigurationContextComparisonSummary
     groups: list[ConfigurationContextComparisonGroup]
 

@@ -11,6 +11,7 @@ from app.models import (
     Component,
     ComponentType,
     ChangeRequestStatus,
+    ConnectorType,
     ConfigurationContextStatus,
     ConfigurationContextType,
     ConfigurationItemKind,
@@ -64,12 +65,15 @@ from app.schemas import (
     VerificationEvidenceCreate,
     WorkflowActionPayload,
     ComponentCreate,
+    ConnectorDefinitionCreate,
 )
 from app.models import TestMethod
 from app.services import (
     approve_requirement,
     build_impact,
     compare_configuration_contexts,
+    compare_baselines,
+    compare_baseline_to_configuration_context,
     create_configuration_context,
     create_configuration_item_mapping,
     create_baseline,
@@ -80,6 +84,7 @@ from app.services import (
     delete_configuration_item_mapping,
     create_link,
     create_component,
+    create_connector,
     create_project,
     create_requirement,
     create_external_artifact,
@@ -92,6 +97,7 @@ from app.services import (
     create_verification_evidence,
     export_project_bundle,
     get_baseline_detail,
+    get_baseline_bridge_context,
     get_component_detail,
     get_configuration_context_service,
     get_change_request_detail,
@@ -110,6 +116,7 @@ from app.services import (
     seed_demo,
     submit_requirement_for_review,
     update_requirement,
+    update_configuration_context,
     update_non_conformity,
     update_operational_run,
     update_change_request,
@@ -286,6 +293,37 @@ def test_requirement_verification_status_engine_uses_evidence_and_test_runs():
             ),
         )
         assert get_requirement_detail(session, verified_requirement.id)["verification_evaluation"].status == RequirementVerificationStatus.verified
+
+
+def test_verification_evidence_naive_observed_at_does_not_break_requirement_evaluation():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-VER-TZ", name="Verification TZ", description=""))
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-TZ",
+                title="Timezone evidence requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+            ),
+        )
+        create_verification_evidence(
+            session,
+            VerificationEvidenceCreate(
+                project_id=project.id,
+                title="Naive observed_at evidence",
+                evidence_type=VerificationEvidenceType.analysis,
+                summary="Naive timestamp should still be treated as UTC-safe.",
+                observed_at=datetime.now().replace(microsecond=0),
+                linked_requirement_ids=[requirement.id],
+            ),
+        )
+
+        detail = get_requirement_detail(session, requirement.id)
+        assert detail["verification_evaluation"].status == RequirementVerificationStatus.partially_verified
+        assert detail["verification_evaluation"].fresh_evidence_count == 1
 
 
 def test_operational_run_detail_and_requirement_status_track_reports_on_links():
@@ -788,10 +826,14 @@ def test_baseline_and_configuration_context_bridge_expose_related_objects():
         )
 
         baseline_detail = get_baseline_detail(session, baseline.id)
+        bridge_context = get_baseline_bridge_context(session, baseline.id)
         context_detail = get_configuration_context_service(session, context.id)
 
         assert baseline_detail["related_configuration_contexts"]
         assert baseline_detail["related_configuration_contexts"][0].id == context.id
+        assert baseline_detail["bridge_context"].baseline_id == baseline.id
+        assert bridge_context.baseline_id == baseline.id
+        assert bridge_context.item_count == 3
         assert context_detail["related_baselines"]
         assert context_detail["related_baselines"][0].id == baseline.id
 
@@ -871,6 +913,7 @@ def test_configuration_context_compare_groups_added_removed_and_version_changes_
                 context_type=ConfigurationContextType.review_gate,
             ),
         )
+        requirement = update_requirement(session, requirement.id, RequirementUpdate(version=2))
         create_configuration_item_mapping(
             session,
             right_context.id,
@@ -878,7 +921,7 @@ def test_configuration_context_compare_groups_added_removed_and_version_changes_
                 item_kind=ConfigurationItemKind.internal_requirement,
                 internal_object_type=FederatedInternalObjectType.requirement,
                 internal_object_id=requirement.id,
-                internal_object_version=2,
+                internal_object_version=requirement.version,
             ),
         )
         create_configuration_item_mapping(
@@ -1028,6 +1071,235 @@ def test_configuration_context_compare_handles_empty_and_cross_project_inputs():
             compare_configuration_contexts(session, left.id, foreign.id)
 
 
+def test_baseline_compare_groups_added_removed_and_version_changes():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-FED-6B", name="P-FED-6B", description=""))
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-BASE",
+                title="Baseline requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+                status=RequirementStatus.approved,
+                version=1,
+            ),
+        )
+        block = create_block(
+            session,
+            BlockCreate(
+                project_id=project.id,
+                key="BLK-BASE",
+                name="Baseline block",
+                block_kind=BlockKind.system,
+                abstraction_level=AbstractionLevel.logical,
+                status=BlockStatus.approved,
+                version=1,
+            ),
+        )
+        connector = create_connector(
+            session,
+            ConnectorDefinitionCreate(project_id=project.id, name="Cameo", connector_type=ConnectorType.sysml),
+        )
+        artifact = create_external_artifact(
+            session,
+            ExternalArtifactCreate(
+                project_id=project.id,
+                connector_definition_id=connector.id,
+                external_id="SYSML-BASE",
+                artifact_type=ExternalArtifactType.sysml_element,
+                name="Baseline artifact",
+            ),
+        )
+        version = create_external_artifact_version(
+            session,
+            artifact.id,
+            ExternalArtifactVersionCreate(version_label="3.0", revision_label="R3"),
+        )
+        baseline, _ = create_baseline(
+            session,
+            BaselineCreate(
+                project_id=project.id,
+                name="Baseline",
+                description="Approved snapshot",
+                requirement_ids=[requirement.id],
+                block_ids=[block.id],
+            ),
+        )
+        context = create_configuration_context(
+            session,
+            ConfigurationContextCreate(
+                project_id=project.id,
+                key="CTX-COMPARE",
+                name="Compare context",
+                context_type=ConfigurationContextType.review_gate,
+                status=ConfigurationContextStatus.active,
+            ),
+        )
+        requirement_model = session.get(Requirement, requirement.id)
+        assert requirement_model is not None
+        requirement_model.version = 2
+        session.add(requirement_model)
+        session.commit()
+        session.refresh(requirement_model)
+        create_configuration_item_mapping(
+            session,
+            context.id,
+            ConfigurationItemMappingCreate(
+                item_kind=ConfigurationItemKind.internal_requirement,
+                internal_object_type=FederatedInternalObjectType.requirement,
+                internal_object_id=requirement.id,
+                internal_object_version=requirement_model.version,
+            ),
+        )
+        create_configuration_item_mapping(
+            session,
+            context.id,
+            ConfigurationItemMappingCreate(
+                item_kind=ConfigurationItemKind.internal_test_case,
+                internal_object_type=FederatedInternalObjectType.test_case,
+                internal_object_id=create_test_case(
+                    session,
+                    TestCaseCreate(
+                        project_id=project.id,
+                        key="TST-CTX",
+                        title="Context test",
+                        method=TestMethod.bench,
+                        status=TestCaseStatus.approved,
+                    ),
+                ).id,
+                internal_object_version=1,
+            ),
+        )
+        create_configuration_item_mapping(
+            session,
+            context.id,
+            ConfigurationItemMappingCreate(
+                item_kind=ConfigurationItemKind.external_artifact_version,
+                external_artifact_version_id=version.id,
+            ),
+        )
+
+        comparison = compare_baseline_to_configuration_context(session, baseline.id, context.id)
+
+        assert comparison.baseline.id == baseline.id
+        assert comparison.configuration_context.id == context.id
+        assert comparison.summary.added == 2
+        assert comparison.summary.removed == 1
+        assert comparison.summary.version_changed == 1
+        requirement_group = next(group for group in comparison.groups if group.item_kind == ConfigurationItemKind.internal_requirement)
+        assert requirement_group.version_changed[0].left.object_version == 1
+        assert requirement_group.version_changed[0].right.object_version == 2
+        block_group = next(group for group in comparison.groups if group.item_kind == ConfigurationItemKind.internal_block)
+        assert block_group.removed[0].label == "BLK-BASE - Baseline block"
+        artifact_group = next(group for group in comparison.groups if group.item_kind == ConfigurationItemKind.external_artifact_version)
+        assert artifact_group.added[0].connector_name == "Cameo"
+        assert artifact_group.added[0].artifact_name == "Baseline artifact"
+        assert artifact_group.added[0].version_label == "3.0"
+
+
+def test_baseline_compare_groups_added_removed_and_version_changes_between_baselines():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-FED-6C", name="P-FED-6C", description=""))
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-BASE-2",
+                title="Baseline requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+                status=RequirementStatus.approved,
+                version=1,
+            ),
+        )
+        requirement_model = session.exec(select(Requirement).where(Requirement.id == requirement.id)).one()
+        block = create_block(
+            session,
+            BlockCreate(
+                project_id=project.id,
+                key="BLK-BASE-2",
+                name="Baseline block",
+                block_kind=BlockKind.system,
+                abstraction_level=AbstractionLevel.logical,
+                status=BlockStatus.approved,
+                version=1,
+            ),
+        )
+        test_case_one = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key="TST-BASE-1",
+                title="Baseline test one",
+                method=TestMethod.bench,
+                status=TestCaseStatus.approved,
+            ),
+        )
+        test_case_two = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key="TST-BASE-2",
+                title="Baseline test two",
+                method=TestMethod.field,
+                status=TestCaseStatus.approved,
+            ),
+        )
+
+        left_baseline, _ = create_baseline(
+            session,
+            BaselineCreate(
+                project_id=project.id,
+                name="Left baseline",
+                description="Approved snapshot",
+                requirement_ids=[requirement.id],
+                block_ids=[block.id],
+                test_case_ids=[test_case_one.id],
+            ),
+        )
+
+        requirement_model.version = 2
+        session.add(requirement_model)
+        session.commit()
+        session.refresh(requirement_model)
+
+        block_model = session.exec(select(Block).where(Block.id == block.id)).one()
+        block_model.status = BlockStatus.obsolete
+        session.add(block_model)
+        session.commit()
+        session.refresh(block_model)
+
+        right_baseline, _ = create_baseline(
+            session,
+            BaselineCreate(
+                project_id=project.id,
+                name="Right baseline",
+                description="Approved snapshot",
+                requirement_ids=[requirement.id],
+                test_case_ids=[test_case_one.id, test_case_two.id],
+            ),
+        )
+
+        comparison = compare_baselines(session, left_baseline.id, right_baseline.id)
+
+        assert comparison.left_baseline.id == left_baseline.id
+        assert comparison.right_baseline.id == right_baseline.id
+        assert comparison.summary.added == 1
+        assert comparison.summary.removed == 1
+        assert comparison.summary.version_changed == 1
+        requirement_group = next(group for group in comparison.groups if group.item_kind == ConfigurationItemKind.internal_requirement)
+        assert requirement_group.version_changed[0].left.object_version == 1
+        assert requirement_group.version_changed[0].right.object_version == 2
+        block_group = next(group for group in comparison.groups if group.item_kind == ConfigurationItemKind.internal_block)
+        assert block_group.removed[0].label == "BLK-BASE-2 - Baseline block"
+        test_group = next(group for group in comparison.groups if group.item_kind == ConfigurationItemKind.internal_test_case)
+        assert any(item.label == "TST-BASE-2 - Baseline test two" for item in test_group.added)
+
+
 def test_configuration_context_immutability_blocks_edits_and_mapping_changes():
     with make_session() as session:
         project = create_project(session, ProjectCreate(code="P-FED-10", name="P-FED-10", description=""))
@@ -1122,6 +1394,76 @@ def test_configuration_context_immutability_blocks_edits_and_mapping_changes():
 
         with pytest.raises(ValueError, match="cannot be modified"):
             update_configuration_context(session, locked.id, ConfigurationContextUpdate(name="Released lock"))
+
+
+def test_configuration_context_obsolete_is_immutable():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-FED-12", name="P-FED-12", description=""))
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-OBS",
+                title="Obsolete lock requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+            ),
+        )
+        context = create_configuration_context(
+            session,
+            ConfigurationContextCreate(
+                project_id=project.id,
+                key="CTX-OBS",
+                name="Obsolete context",
+                context_type=ConfigurationContextType.review_gate,
+                status=ConfigurationContextStatus.obsolete,
+            ),
+        )
+
+        with pytest.raises(ValueError, match="cannot be modified"):
+            update_configuration_context(session, context.id, ConfigurationContextUpdate(name="Still obsolete"))
+
+        with pytest.raises(ValueError, match="cannot be modified"):
+            create_configuration_item_mapping(
+                session,
+                context.id,
+                ConfigurationItemMappingCreate(
+                    item_kind=ConfigurationItemKind.internal_requirement,
+                    internal_object_type=FederatedInternalObjectType.requirement,
+                    internal_object_id=requirement.id,
+                    internal_object_version=requirement.version,
+                ),
+            )
+
+        mutable_mapping = create_configuration_item_mapping(
+            session,
+            create_configuration_context(
+                session,
+                ConfigurationContextCreate(
+                    project_id=project.id,
+                    key="CTX-OBS-MUT",
+                    name="Mutable context",
+                    context_type=ConfigurationContextType.review_gate,
+                    status=ConfigurationContextStatus.active,
+                ),
+            ).id,
+            ConfigurationItemMappingCreate(
+                item_kind=ConfigurationItemKind.internal_requirement,
+                internal_object_type=FederatedInternalObjectType.requirement,
+                internal_object_id=requirement.id,
+                internal_object_version=requirement.version,
+            ),
+        )
+        mutable_context = session.get(ConfigurationContext, mutable_mapping.configuration_context_id)
+        assert mutable_context is not None
+        mutable_context.status = ConfigurationContextStatus.obsolete
+        session.add(mutable_context)
+        session.commit()
+        session.refresh(mutable_context)
+
+        with pytest.raises(ValueError, match="cannot be modified"):
+            delete_configuration_item_mapping(session, mutable_mapping.id)
 
 
 def test_baseline_and_configuration_context_bridge_the_same_approved_item_set():

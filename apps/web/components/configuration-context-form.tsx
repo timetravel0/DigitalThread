@@ -21,7 +21,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export function ConfigurationContextForm({ initial }: { initial?: Partial<ConfigurationContext> }) {
-  const isLocked = initial?.status === "frozen" || initial?.context_type === "released";
+  const isLocked = initial?.status === "frozen" || initial?.status === "obsolete" || initial?.context_type === "released";
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const form = useForm<FormValues>({
@@ -39,7 +39,7 @@ export function ConfigurationContextForm({ initial }: { initial?: Partial<Config
   const submit = form.handleSubmit(async (values) => {
     setError(null);
     if (isLocked) {
-      setError("This configuration context is frozen or released and cannot be edited.");
+      setError("This configuration context is frozen, released, or obsolete and cannot be edited.");
       return;
     }
     try {
@@ -57,7 +57,7 @@ export function ConfigurationContextForm({ initial }: { initial?: Partial<Config
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      {isLocked ? <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">This configuration context is frozen or released and cannot be edited in place.</div> : null}
+      {isLocked ? <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">This configuration context is frozen, released, or obsolete and cannot be edited in place.</div> : null}
       <div className="grid gap-4 md:grid-cols-2">
         <Input placeholder="Project ID" disabled={isLocked} {...form.register("project_id")} />
         <Input placeholder="Context key" disabled={isLocked} {...form.register("key")} />

@@ -637,10 +637,34 @@ def create_baseline_endpoint(payload: BaselineCreate, session: Session = Depends
         raise api_error(exc)
 
 
-@app.get("/api/baselines/{obj_id}")
+@app.get("/api/baselines/{obj_id}", response_model=BaselineDetailRead)
 def baseline_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
     try:
         return get_baseline_detail(session, obj_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/baselines/{obj_id}/compare/{context_id}", response_model=BaselineContextComparisonResponse)
+def baseline_compare_endpoint(obj_id: UUID, context_id: UUID, session: Session = Depends(db)):
+    try:
+        return compare_baseline_to_configuration_context(session, obj_id, context_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/baselines/{obj_id}/bridge-context", response_model=BaselineBridgeContextRead)
+def baseline_bridge_context_endpoint(obj_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_baseline_bridge_context(session, obj_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/baselines/{obj_id}/compare-baseline/{other_id}", response_model=BaselineComparisonResponse)
+def baseline_compare_baseline_endpoint(obj_id: UUID, other_id: UUID, session: Session = Depends(db)):
+    try:
+        return compare_baselines(session, obj_id, other_id)
     except Exception as exc:
         raise api_error(exc)
 

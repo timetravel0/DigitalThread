@@ -72,7 +72,7 @@ export function InternalConfigurationItemMappingForm({
   const submit = form.handleSubmit(async (values) => {
     setError(null);
     if (disabled) {
-      setError("This configuration context is frozen or released and cannot accept new mappings.");
+      setError("This configuration context is frozen, released, or obsolete and cannot accept new mappings.");
       return;
     }
     try {
@@ -171,7 +171,7 @@ export function ExternalConfigurationItemMappingForm({
   const submit = form.handleSubmit(async (values) => {
     setError(null);
     if (disabled) {
-      setError("This configuration context is frozen or released and cannot accept new mappings.");
+      setError("This configuration context is frozen, released, or obsolete and cannot accept new mappings.");
       return;
     }
     try {

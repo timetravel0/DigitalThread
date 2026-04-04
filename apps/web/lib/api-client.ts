@@ -3,6 +3,9 @@ import type {
   AuthoritativeRegistrySummary,
   Baseline,
   BaselineDetail,
+  BaselineBridgeContext,
+  BaselineContextComparisonResponse,
+  BaselineComparisonResponse,
   ChangeImpact,
   ChangeRequest,
   ChangeRequestDetail,
@@ -156,6 +159,11 @@ export const api = {
     request<ImpactResponse>(`/projects/${projectId}/impact/${objectType}/${objectId}`),
   baselines: (projectId: string) => request<Baseline[]>(`/baselines?project_id=${projectId}`),
   baseline: (id: string) => request<BaselineDetail>(`/baselines/${id}`),
+  baselineBridgeContext: (id: string) => request<BaselineBridgeContext>(`/baselines/${id}/bridge-context`),
+  compareBaselines: (baselineId: string, otherBaselineId: string) =>
+    request<BaselineComparisonResponse>(`/baselines/${baselineId}/compare-baseline/${otherBaselineId}`),
+  compareBaselineToConfigurationContext: (baselineId: string, contextId: string) =>
+    request<BaselineContextComparisonResponse>(`/baselines/${baselineId}/compare/${contextId}`),
   createBaseline: (payload: Record<string, unknown>) => request<{ baseline: Baseline; items: unknown[] }>("/baselines", { method: "POST", body: JSON.stringify(payload) }),
   changeRequests: (projectId: string) => request<ChangeRequest[]>(`/change-requests?project_id=${projectId}`),
   changeRequest: (id: string) => request<ChangeRequestDetail>(`/change-requests/${id}`),

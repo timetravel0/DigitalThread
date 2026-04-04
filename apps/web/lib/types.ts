@@ -226,8 +226,38 @@ export interface Baseline {
 
 export interface BaselineDetail {
   baseline: Baseline;
+  bridge_context: BaselineBridgeContext;
   items: BaselineItem[];
   related_configuration_contexts: ConfigurationContext[];
+}
+
+export interface BaselineBridgeContext {
+  id: ID;
+  project_id: ID;
+  key: string;
+  name: string;
+  description: string | null;
+  context_type: ConfigurationContextType;
+  status: ConfigurationContextStatus;
+  created_at: string;
+  updated_at: string;
+  item_count: number;
+  baseline_id: ID;
+  baseline_name: string;
+}
+
+export interface BaselineContextComparisonResponse {
+  baseline: Baseline;
+  configuration_context: ConfigurationContext;
+  summary: ConfigurationContextComparisonSummary;
+  groups: ConfigurationContextComparisonGroup[];
+}
+
+export interface BaselineComparisonResponse {
+  left_baseline: Baseline;
+  right_baseline: Baseline;
+  summary: ConfigurationContextComparisonSummary;
+  groups: ConfigurationContextComparisonGroup[];
 }
 
 export interface BaselineItem {
@@ -645,9 +675,9 @@ export interface ImpactResponse {
   open_change_requests: ChangeRequest[];
 }
 
-export interface WorkflowActionPayload {
+export type WorkflowActionPayload = Record<string, unknown> & {
   actor?: string | null;
   comment?: string | null;
   reason?: string | null;
   change_summary?: string | null;
-}
+};

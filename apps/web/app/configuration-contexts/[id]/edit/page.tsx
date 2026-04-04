@@ -7,12 +7,12 @@ export const dynamic = "force-dynamic";
 export default async function EditConfigurationContextPage({ params }: { params: { id: string } }) {
   const data = await api.configurationContext(params.id).catch(() => null);
   if (!data) return <div className="text-sm text-muted">Configuration context not found.</div>;
-  const isImmutable = data.context.status === "frozen" || data.context.context_type === "released";
+  const isImmutable = data.context.status === "frozen" || data.context.status === "obsolete" || data.context.context_type === "released";
   if (isImmutable) {
     return (
       <EmptyState
         title="Context locked"
-        description="Frozen or released configuration contexts cannot be edited."
+        description="Frozen, released, or obsolete configuration contexts cannot be edited."
         action={<Button href={`/configuration-contexts/${data.context.id}`} variant="secondary">Back to context</Button>}
       />
     );

@@ -61,6 +61,14 @@ def _status_value(status: Any) -> str:
     return status.value if hasattr(status, "value") else str(status)
 
 
+def _utc_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _impact_node_key(object_type: str, object_id: UUID) -> tuple[str, UUID]:
     return object_type, object_id
 
@@ -251,8 +259,11 @@ def _resolve_external_artifact_version_for_project(
 
 
 def _ensure_configuration_context_mutable(context: ConfigurationContext) -> None:
-    if context.status == ConfigurationContextStatus.frozen or context.context_type == ConfigurationContextType.released:
-        raise ValueError("Frozen or released configuration contexts cannot be modified")
+    if (
+        context.status in {ConfigurationContextStatus.frozen, ConfigurationContextStatus.obsolete}
+        or context.context_type == ConfigurationContextType.released
+    ):
+        raise ValueError("Frozen, released, or obsolete configuration contexts cannot be modified")
 
 
 def _artifact_read(session: Session, artifact: ExternalArtifact) -> ExternalArtifactRead:
@@ -621,29 +632,41 @@ def _configuration_context_comparison_entry(
         }
     raise ValueError("Configuration item mapping is missing a concrete object reference")
 
-def compare_configuration_contexts(session: Session, left_context_id: UUID, right_context_id: UUID) -> ConfigurationContextComparisonResponse:
-    left_context = _get(session, ConfigurationContext, left_context_id)
-    if left_context is None:
-        raise LookupError("Configuration context not found")
-    right_context = _get(session, ConfigurationContext, right_context_id)
-    if right_context is None:
-        raise LookupError("Configuration context not found")
-    if left_context.project_id != right_context.project_id:
-        raise ValueError("Configuration contexts must belong to the same project")
+def _baseline_comparison_entry(session: Session, baseline_project_id: UUID, item: BaselineItemRead) -> dict[str, Any]:
+    internal_object_type = FederatedInternalObjectType(item.object_type.value)
+    internal = _validate_internal_object(session, internal_object_type, item.object_id, baseline_project_id)
+    object_code = internal.get("code") or str(item.object_id)
+    item_kind = {
+        BaselineObjectType.requirement: ConfigurationItemKind.internal_requirement,
+        BaselineObjectType.block: ConfigurationItemKind.internal_block,
+        BaselineObjectType.test_case: ConfigurationItemKind.internal_test_case,
+        BaselineObjectType.component: ConfigurationItemKind.baseline_item,
+    }[item.object_type]
+    return {
+        "item_kind": item_kind,
+        "key": f"{item_kind.value}:{item.object_type.value}:{object_code}",
+        "signature": item.object_version,
+        "entry": ConfigurationContextComparisonEntry(
+            item_kind=item_kind,
+            label=f"{object_code} - {internal['label']}" if internal.get("code") else internal["label"],
+            object_type=item.object_type.value,
+            object_id=item.object_id,
+            object_version=item.object_version,
+        ),
+    }
 
-    left_items = list_configuration_item_mappings(session, left_context_id)
-    right_items = list_configuration_item_mappings(session, right_context_id)
 
+def _compare_configuration_entry_groups(
+    left_entries: list[dict[str, Any]],
+    right_entries: list[dict[str, Any]],
+) -> tuple[list[ConfigurationContextComparisonGroup], ConfigurationContextComparisonSummary]:
     grouped_left: dict[ConfigurationItemKind, dict[str, dict[str, Any]]] = defaultdict(dict)
     grouped_right: dict[ConfigurationItemKind, dict[str, dict[str, Any]]] = defaultdict(dict)
 
-    for item in left_items:
-        comparison = _configuration_context_comparison_entry(session, left_context.project_id, item)
-        grouped_left[comparison["item_kind"]][comparison["key"]] = comparison
-
-    for item in right_items:
-        comparison = _configuration_context_comparison_entry(session, right_context.project_id, item)
-        grouped_right[comparison["item_kind"]][comparison["key"]] = comparison
+    for item in left_entries:
+        grouped_left[item["item_kind"]][item["key"]] = item
+    for item in right_entries:
+        grouped_right[item["item_kind"]][item["key"]] = item
 
     order = {kind: index for index, kind in enumerate(ConfigurationItemKind)}
     groups: list[ConfigurationContextComparisonGroup] = []
@@ -694,9 +717,92 @@ def compare_configuration_contexts(session: Session, left_context_id: UUID, righ
                 )
             )
 
+    return groups, summary
+
+
+def compare_configuration_contexts(session: Session, left_context_id: UUID, right_context_id: UUID) -> ConfigurationContextComparisonResponse:
+    left_context = _get(session, ConfigurationContext, left_context_id)
+    if left_context is None:
+        raise LookupError("Configuration context not found")
+    right_context = _get(session, ConfigurationContext, right_context_id)
+    if right_context is None:
+        raise LookupError("Configuration context not found")
+    if left_context.project_id != right_context.project_id:
+        raise ValueError("Configuration contexts must belong to the same project")
+
+    left_entries = [
+        _configuration_context_comparison_entry(session, left_context.project_id, item)
+        for item in list_configuration_item_mappings(session, left_context_id)
+    ]
+    right_entries = [
+        _configuration_context_comparison_entry(session, right_context.project_id, item)
+        for item in list_configuration_item_mappings(session, right_context_id)
+    ]
+    groups, summary = _compare_configuration_entry_groups(left_entries, right_entries)
+
     return ConfigurationContextComparisonResponse(
         left_context=_read(ConfigurationContextRead, left_context),
         right_context=_read(ConfigurationContextRead, right_context),
+        summary=summary,
+        groups=groups,
+    )
+
+
+def compare_baseline_to_configuration_context(
+    session: Session,
+    baseline_id: UUID,
+    context_id: UUID,
+) -> BaselineContextComparisonResponse:
+    baseline = _get(session, Baseline, baseline_id)
+    if baseline is None:
+        raise LookupError("Baseline not found")
+    context = _get(session, ConfigurationContext, context_id)
+    if context is None:
+        raise LookupError("Configuration context not found")
+    if baseline.project_id != context.project_id:
+        raise ValueError("Baseline and configuration context must belong to the same project")
+
+    baseline_entries = [
+        _baseline_comparison_entry(session, baseline.project_id, item)
+        for item in _items(session.exec(select(BaselineItem).where(BaselineItem.baseline_id == baseline_id)))
+    ]
+    context_entries = [
+        _configuration_context_comparison_entry(session, context.project_id, item)
+        for item in list_configuration_item_mappings(session, context_id)
+    ]
+    groups, summary = _compare_configuration_entry_groups(baseline_entries, context_entries)
+
+    return BaselineContextComparisonResponse(
+        baseline=_read(BaselineRead, baseline),
+        configuration_context=_read(ConfigurationContextRead, context),
+        summary=summary,
+        groups=groups,
+    )
+
+
+def compare_baselines(session: Session, left_baseline_id: UUID, right_baseline_id: UUID) -> BaselineComparisonResponse:
+    left_baseline = _get(session, Baseline, left_baseline_id)
+    if left_baseline is None:
+        raise LookupError("Baseline not found")
+    right_baseline = _get(session, Baseline, right_baseline_id)
+    if right_baseline is None:
+        raise LookupError("Baseline not found")
+    if left_baseline.project_id != right_baseline.project_id:
+        raise ValueError("Baselines must belong to the same project")
+
+    left_entries = [
+        _baseline_comparison_entry(session, left_baseline.project_id, item)
+        for item in _items(session.exec(select(BaselineItem).where(BaselineItem.baseline_id == left_baseline_id)))
+    ]
+    right_entries = [
+        _baseline_comparison_entry(session, right_baseline.project_id, item)
+        for item in _items(session.exec(select(BaselineItem).where(BaselineItem.baseline_id == right_baseline_id)))
+    ]
+    groups, summary = _compare_configuration_entry_groups(left_entries, right_entries)
+
+    return BaselineComparisonResponse(
+        left_baseline=_read(BaselineRead, left_baseline),
+        right_baseline=_read(BaselineRead, right_baseline),
         summary=summary,
         groups=groups,
     )
@@ -1445,11 +1551,31 @@ def get_baseline_detail(session: Session, baseline_id: UUID) -> dict[str, Any]:
             }
             if baseline_signature.issubset(context_signatures):
                 related_contexts.append(context)
+    bridge_context = BaselineBridgeContextRead(
+        id=baseline.id,
+        project_id=baseline.project_id,
+        key=f"BASELINE-{str(baseline.id)[:8].upper()}",
+        name=f"{baseline.name} bridge",
+        description=baseline.description or "Read-only configuration-context projection for this baseline.",
+        context_type=ConfigurationContextType.review_gate,
+        status=ConfigurationContextStatus.frozen,
+        created_at=baseline.created_at,
+        updated_at=baseline.updated_at,
+        item_count=len(items),
+        baseline_id=baseline.id,
+        baseline_name=baseline.name,
+    )
     return {
         "baseline": BaselineRead.model_validate(baseline),
+        "bridge_context": bridge_context,
         "items": items,
         "related_configuration_contexts": related_contexts,
     }
+
+
+def get_baseline_bridge_context(session: Session, baseline_id: UUID) -> BaselineBridgeContextRead:
+    detail = get_baseline_detail(session, baseline_id)
+    return detail["bridge_context"]
 
 
 def _related_baselines_for_configuration_context(session: Session, context: ConfigurationContext) -> list[BaselineRead]:
@@ -1980,7 +2106,8 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
     fresh_evidence_count = 0
     stale_evidence_count = 0
     for item in evidence:
-        if item.observed_at is None or item.observed_at < freshness_cutoff:
+        observed_at = _utc_datetime(item.observed_at)
+        if observed_at is None or observed_at < freshness_cutoff:
             stale_evidence_count += 1
         else:
             fresh_evidence_count += 1

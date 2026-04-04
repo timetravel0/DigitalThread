@@ -13,7 +13,7 @@ export default async function ConfigurationContextPage({ params, searchParams }:
   if (!data) return <div className="text-sm text-muted">Configuration context not found.</div>;
 
   const projectId = data.context.project_id;
-  const isImmutable = data.context.status === "frozen" || data.context.context_type === "released";
+  const isImmutable = data.context.status === "frozen" || data.context.status === "obsolete" || data.context.context_type === "released";
   const [requirements, blocks, tests, artifacts, contexts] = await Promise.all([
     api.requirements(projectId).catch(() => []),
     api.blocks(projectId).catch(() => []),
@@ -58,7 +58,7 @@ export default async function ConfigurationContextPage({ params, searchParams }:
             <Row label="Type" value={data.context.context_type} />
             <Row label="Status" value={<Badge tone={data.context.status === "frozen" ? "accent" : data.context.status === "active" ? "success" : "neutral"}>{data.context.status}</Badge>} />
             <Row label="Items" value={data.context.item_count || data.items.length} />
-            {isImmutable ? <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">This context is locked. Frozen or released contexts cannot be edited or remapped.</div> : null}
+            {isImmutable ? <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">This context is locked. Frozen, released, or obsolete contexts cannot be edited or remapped.</div> : null}
             <div className="space-y-2 pt-2">
               <div className="text-xs uppercase tracking-[0.2em] text-muted">Related baselines</div>
               <div className="rounded-xl border border-line bg-panel2 p-3 text-sm text-muted">
@@ -185,7 +185,7 @@ export default async function ConfigurationContextPage({ params, searchParams }:
           <CardBody>
             {isImmutable ? (
               <div className="rounded-xl border border-dashed border-line bg-panel2 p-4 text-sm text-muted">
-                Internal mappings cannot be changed once a context is frozen or released.
+                Internal mappings cannot be changed once a context is frozen, released, or obsolete.
               </div>
             ) : (
               <InternalConfigurationItemMappingForm contextId={data.context.id} internalOptions={internalOptions} />
@@ -197,7 +197,7 @@ export default async function ConfigurationContextPage({ params, searchParams }:
           <CardBody>
             {isImmutable ? (
               <div className="rounded-xl border border-dashed border-line bg-panel2 p-4 text-sm text-muted">
-                External mappings cannot be changed once a context is frozen or released.
+                External mappings cannot be changed once a context is frozen, released, or obsolete.
               </div>
             ) : (
               <ExternalConfigurationItemMappingForm contextId={data.context.id} artifactVersions={artifactVersions} />
