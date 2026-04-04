@@ -1,6 +1,7 @@
 ﻿import { api } from "@/lib/api-client";
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, SectionTitle, StatCard } from "@/components/ui";
 import { SeedButton } from "@/components/seed-button";
+import { VerificationStatusBreakdownCard } from "@/components/verification-status-breakdown";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
+        <VerificationStatusBreakdownCard breakdown={dashboard?.verification_status_breakdown ?? { verified: 0, partially_verified: 0, at_risk: 0, failed: 0, not_covered: 0 }} />
         <Card className="xl:col-span-2">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -97,4 +99,5 @@ export default async function DashboardPage() {
     </div>
   );
 }
+
 

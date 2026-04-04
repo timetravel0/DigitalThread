@@ -147,6 +147,8 @@ export interface TestCaseDetail {
 
 export interface RequirementVerificationEvaluation {
   status: RequirementVerificationStatus;
+  decision_source: string;
+  decision_summary: string;
   linked_evidence_count: number;
   fresh_evidence_count: number;
   stale_evidence_count: number;
@@ -161,6 +163,14 @@ export interface RequirementVerificationEvaluation {
   partial_test_case_count: number;
   failed_test_case_count: number;
   reasons: string[];
+}
+
+export interface VerificationStatusBreakdown {
+  verified: number;
+  partially_verified: number;
+  at_risk: number;
+  failed: number;
+  not_covered: number;
 }
 
 export interface TestRun {
@@ -620,6 +630,7 @@ export interface Dashboard {
   project?: Project;
   projects?: Project[];
   kpis: DashboardKpis;
+  verification_status_breakdown: VerificationStatusBreakdown;
   recent_test_runs: TestRun[];
   recent_changes: ChangeRequest[];
   recent_links: Link[];

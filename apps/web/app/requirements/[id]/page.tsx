@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { ArtifactLinkForm } from "@/components/artifact-link-form";
-import { Badge, Button, Card, CardBody, CardHeader, SectionTitle } from "@/components/ui";
+import { Badge, Button, Card, CardBody, CardHeader, EmptyState, SectionTitle } from "@/components/ui";
 import { SimulationEvidenceMetadata } from "@/components/simulation-evidence-metadata";
 import { VerificationEvidenceForm } from "@/components/verification-evidence-form";
 import { WorkflowActions } from "@/components/workflow-actions";
@@ -33,9 +33,12 @@ export default async function RequirementPage({ params }: { params: { id: string
             <Row label="Category" value={data.requirement.category} />
             <Row label="Priority" value={data.requirement.priority} />
             <Row label="Verification" value={data.requirement.verification_method} />
-            <Row label="Status" value={<Badge>{data.requirement.status}</Badge>} />
+            <Row label="Approval status" value={<Badge tone={approvalTone(data.requirement.status)}>{data.requirement.status}</Badge>} />
             <Row label="Version" value={data.requirement.version} />
             <Row label="Parent" value={data.requirement.parent_requirement_id || "None"} />
+            <div className="rounded-xl border border-dashed border-line bg-panel2 p-3 text-xs text-muted">
+              This is the authored lifecycle state. The computed verification status is shown separately below.
+            </div>
           </CardBody>
         </Card>
         <Card>
@@ -102,20 +105,37 @@ export default async function RequirementPage({ params }: { params: { id: string
         <Card>
           <CardHeader><div className="font-semibold">Verification evidence</div></CardHeader>
           <CardBody className="space-y-4">
-            <Row label="Verification status" value={<Badge tone={verificationTone(data.verification_evaluation.status)}>{data.verification_evaluation.status}</Badge>} />
-            <div className="rounded-xl border border-line bg-panel2 p-3 text-sm text-muted">
-              <div className="font-medium text-text">Engine result</div>
-              <div className="mt-1">
-                {data.verification_evaluation.reasons.length ? data.verification_evaluation.reasons.join(" ") : "No verification notes available."}
+            <Row label="Verification status" value={<Badge tone={verificationTone(data.verification_evaluation.status)}>{humanizeStatus(data.verification_evaluation.status)}</Badge>} />
+            <div className="rounded-2xl border border-line bg-panel2 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted">Why this status?</div>
+                  <div className="mt-1 text-sm font-medium text-text">A reviewer-friendly explanation of the computed result.</div>
+                </div>
+                <Badge tone={verificationTone(data.verification_evaluation.status)}>{humanizeStatus(data.verification_evaluation.status)}</Badge>
               </div>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+              <div className="grid gap-3 md:grid-cols-2">
+                <Info label="Decision source" value={humanizeDecisionSource(data.verification_evaluation.decision_source)} />
+                <Info label="Plain-language summary" value={data.verification_evaluation.decision_summary || "No summary available."} />
+              </div>
+              <div className="rounded-xl border border-dashed border-line bg-panel p-3">
+                <div className="text-xs uppercase tracking-[0.2em] text-muted">Main reasons</div>
+                {data.verification_evaluation.reasons.length ? (
+                  <ul className="mt-2 space-y-1 text-sm text-text">
+                    {data.verification_evaluation.reasons.map((reason: string) => <li key={reason} className="flex gap-2"><span className="mt-1 h-1.5 w-1.5 rounded-full bg-accent" />{reason}</li>)}
+                  </ul>
+                ) : (
+                  <div className="mt-2 text-sm text-muted">No verification notes available.</div>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full border border-line px-2 py-1">Evidence: {data.verification_evaluation.linked_evidence_count}</span>
                 <span className="rounded-full border border-line px-2 py-1">Operational batches: {data.verification_evaluation.linked_operational_run_count}</span>
                 <span className="rounded-full border border-line px-2 py-1">Tests: {data.verification_evaluation.linked_test_case_count}</span>
                 <span className="rounded-full border border-line px-2 py-1">Passed: {data.verification_evaluation.passed_test_case_count}</span>
               </div>
               {data.verification_evaluation.linked_operational_run_count ? (
-                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                <div className="flex flex-wrap gap-2 text-xs">
                   <span className="rounded-full border border-line px-2 py-1">Successful runs: {data.verification_evaluation.successful_operational_run_count}</span>
                   <span className="rounded-full border border-line px-2 py-1">Degraded runs: {data.verification_evaluation.degraded_operational_run_count}</span>
                   <span className="rounded-full border border-line px-2 py-1">Failed runs: {data.verification_evaluation.failed_operational_run_count}</span>
@@ -129,23 +149,41 @@ export default async function RequirementPage({ params }: { params: { id: string
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <div className="font-medium">{evidence.title}</div>
-                        <div className="mt-1 text-xs text-muted">{evidence.evidence_type} · {evidence.observed_at || "no observed date"}</div>
+                        <div className="mt-1 text-xs text-muted">Captured {evidence.observed_at || "no observed date"} · {evidence.evidence_type}</div>
                       </div>
                       <Badge tone="accent">{evidence.evidence_type}</Badge>
                     </div>
                     <div className="mt-2 text-sm text-muted">{evidence.summary || "No summary provided."}</div>
-                    <div className="mt-2 text-xs text-muted">
-                      {evidence.source_name ? <span>{evidence.source_name}</span> : <span>No source name</span>}
-                      {evidence.source_reference ? <span> · {evidence.source_reference}</span> : null}
+                    <div className="mt-3 grid gap-2 text-xs text-muted md:grid-cols-3">
+                      <div><span className="text-text">Source system:</span> {evidence.source_name || "Not recorded"}</div>
+                      <div><span className="text-text">Source reference:</span> {evidence.source_reference || "Not recorded"}</div>
+                      <div><span className="text-text">Evidence type:</span> {evidence.evidence_type}</div>
                     </div>
+                    {evidence.linked_objects?.length ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {evidence.linked_objects.map((object: any) => {
+                          const href = objectHref(object.object_type, object.object_id);
+                          const chip = (
+                            <span className="rounded-full border border-line bg-white/5 px-2 py-1 text-xs text-text">
+                              {object.label}
+                            </span>
+                          );
+                          return href ? <Link key={object.object_id} href={href}>{chip}</Link> : <span key={object.object_id}>{chip}</span>;
+                        })}
+                      </div>
+                    ) : null}
                     <SimulationEvidenceMetadata metadataJson={evidence.metadata_json} />
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-muted">No verification evidence linked yet.</div>
+              <EmptyState
+                title="No verification evidence linked yet"
+                description="Add evidence manually, or link this requirement to existing test or operational sources first. The computed verification status will remain not covered until evidence is linked."
+                action={<Button href="#add-verification-evidence" variant="secondary">Open evidence form</Button>}
+              />
             )}
-            <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
+            <div id="add-verification-evidence" className="rounded-xl border border-dashed border-line bg-panel2 p-4">
               <div className="mb-3 text-sm font-medium">Add verification evidence</div>
               <VerificationEvidenceForm
                 projectId={data.requirement.project_id}
@@ -192,6 +230,15 @@ function Row({ label, value }: { label: string; value: any }) {
   );
 }
 
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-panel p-3">
+      <div className="text-xs uppercase tracking-[0.2em] text-muted">{label}</div>
+      <div className="mt-1 text-sm text-text">{value}</div>
+    </div>
+  );
+}
+
 function ImpactItem({ item }: { item: any }) {
   return (
     <div className="rounded-xl border border-line bg-panel2 p-3">
@@ -206,4 +253,29 @@ function verificationTone(status: string) {
   if (status === "failed" || status === "not_covered") return "danger";
   if (status === "at_risk" || status === "partially_verified") return "warning";
   return "neutral";
+}
+
+function approvalTone(status: string) {
+  if (status === "approved" || status === "implemented") return "success";
+  if (status === "in_review") return "warning";
+  if (status === "rejected" || status === "failed") return "danger";
+  return "neutral";
+}
+
+function humanizeStatus(status: string) {
+  return status.replaceAll("_", " ");
+}
+
+function humanizeDecisionSource(source: string) {
+  if (!source) return "Not specified";
+  return source.charAt(0).toUpperCase() + source.slice(1);
+}
+
+function objectHref(objectType: string, objectId: string) {
+  if (objectType === "requirement") return `/requirements/${objectId}`;
+  if (objectType === "test_case") return `/test-cases/${objectId}`;
+  if (objectType === "operational_run") return `/operational-runs/${objectId}`;
+  if (objectType === "block") return `/blocks/${objectId}`;
+  if (objectType === "component") return `/components/${objectId}`;
+  return null;
 }

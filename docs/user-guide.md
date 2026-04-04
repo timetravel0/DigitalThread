@@ -25,6 +25,7 @@ What it shows:
 - projects summary
 - requirements coverage KPIs
 - failed tests
+- a simple distribution of verification states
 - recent change requests
 - recent test runs
 
@@ -90,6 +91,9 @@ Important detail:
 
 - approved requirements are immutable in place
 - if a requirement changes after approval, create a draft version instead of editing the approved record directly
+- the approval status and the computed verification status are different things
+- the requirement page includes a "Why this status?" panel to explain the computed verification result
+- when no evidence exists yet, the page explains what to do next and why the requirement is still not covered
 
 ## 6. Blocks
 
@@ -185,6 +189,7 @@ How to use it:
 4. reuse the same evidence record when you need to reference it in review or export workflows
 5. use the computed verification badge on the requirement detail page to see whether the requirement is `verified`, `partially_verified`, `at_risk`, `failed`, or `not_covered`
 6. note that verification evidence is evaluated first, with test or operational runs used only as compatibility fallback when the evidence itself is neutral
+7. inspect the "Why this status?" panel to see the decision source and the main reasons behind the computed result
 
 ## 12. Traceability
 
@@ -204,13 +209,19 @@ How to use it:
 
 What it shows:
 
-- a connected view of requirements, blocks, parts, tests, runs, evidence, and changes
+- a compact relationship explorer for the chosen focus, including requirements, blocks, parts, tests, runs, evidence, and changes
+- focus filters that let you reduce the view when you want less density
+- click-to-isolate behavior that opens a focused graph with separate Incoming / Focus / Outgoing columns
+- readable link explanations on each connection so you can see why the relation exists, with visible edge ports on the box boundary and extra spacing when multiple links connect the same pair of objects
+- direct links to open the related object detail pages
 
 How to use it:
 
 1. open `Graph`
-2. choose a focus filter such as requirements, blocks, tests, or evidence
-3. click nearby objects to understand the local impact pattern
+2. choose a focus mode when you want to narrow the network
+3. use `Core traceability` for the default review-oriented view
+4. use `All` when you want to inspect the entire project network
+5. click any box to open a focused graph for that object and its direct incoming/outgoing neighbors, with separated link tracks and clearer labels
 
 Tip:
 

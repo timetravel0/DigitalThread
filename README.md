@@ -103,6 +103,7 @@ threadlite/
 - Requirement, block, and test detail pages with inbound/outbound traceability plus workflow controls
 - Requirement, block, and test detail pages with linked external sources for federated metadata visibility
 - Traceability matrix with component or test columns
+- Traceability graph with a compact relationship explorer by default and a focused graph when you click an object, showing Incoming / Focus / Outgoing columns with readable link explanations, visible edge ports on box boundaries, and extra spacing for multiple links between the same objects
 - Impact analysis with direct and two-hop traversal across requirements, blocks, and tests
 - Baselines for freezing approved versions of core objects
 - Change requests with impact summaries
@@ -114,6 +115,9 @@ threadlite/
 Requirement verification state is computed from linked `VerificationEvidence` first.
 
 - the requirement detail page shows the computed state clearly
+- the requirement detail page includes a reviewer-friendly "Why this status?" panel
+- the panel explains whether the result came from verification evidence or fallback compatibility logic
+- the dashboard shows a simple breakdown of verification states, not just a single risk count
 - the dashboard rolls those computed states up into its risk metrics
 - compatible test runs and operational runs are used as fallback when evidence is neutral
 - approval and review status remain separate from verification status

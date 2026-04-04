@@ -336,6 +336,8 @@ class TestCaseDetail(BaseModel):
 
 class RequirementVerificationEvaluation(BaseModel):
     status: RequirementVerificationStatus
+    decision_source: str = ""
+    decision_summary: str = ""
     linked_evidence_count: int = 0
     fresh_evidence_count: int = 0
     stale_evidence_count: int = 0
@@ -350,6 +352,14 @@ class RequirementVerificationEvaluation(BaseModel):
     partial_test_case_count: int = 0
     failed_test_case_count: int = 0
     reasons: list[str] = Field(default_factory=list)
+
+
+class VerificationStatusBreakdown(BaseModel):
+    verified: int = 0
+    partially_verified: int = 0
+    at_risk: int = 0
+    failed: int = 0
+    not_covered: int = 0
 
 
 class BaselineItemRead(ORMBase):
@@ -741,6 +751,7 @@ class DashboardKpis(BaseModel):
 class ProjectDashboard(BaseModel):
     project: ProjectRead
     kpis: DashboardKpis
+    verification_status_breakdown: VerificationStatusBreakdown
     recent_test_runs: list[TestRunRead]
     recent_changes: list[ChangeRequestRead]
     recent_links: list[LinkRead]
@@ -749,6 +760,7 @@ class ProjectDashboard(BaseModel):
 class GlobalDashboard(BaseModel):
     projects: list[ProjectRead]
     kpis: DashboardKpis
+    verification_status_breakdown: VerificationStatusBreakdown
     recent_test_runs: list[TestRunRead]
     recent_changes: list[ChangeRequestRead]
     recent_links: list[LinkRead]

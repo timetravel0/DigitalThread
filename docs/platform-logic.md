@@ -81,6 +81,8 @@ Verification uses a layered model:
 - `TestRun` records the execution of a test case
 - `OperationalRun` records field or mission evidence
 - `VerificationEvidence` stores reusable evidence objects that can point to requirements, tests, components, and later simulation or telemetry inputs
+- requirement detail pages keep approval status separate from verification status
+- the verification engine also exposes a plain-language decision source and summary for reviewers
 
 Evaluation is evidence-led:
 
@@ -95,6 +97,14 @@ Why this matters:
 - evidence answers "what can we reuse and review"
 
 The requirement verification status engine derives the current state from linked evidence and test results.
+
+The dashboard and project summary pages use the computed verification states to show a small distribution across:
+
+- `verified`
+- `partially_verified`
+- `at_risk`
+- `failed`
+- `not_covered`
 
 ## 7. Baseline Logic
 
@@ -191,6 +201,14 @@ The seeded drone project is intentionally structured to exercise the main platfo
 - a change request and a baseline demonstrate review control
 
 The seed is designed to make the dashboard, matrix, graph, SysML, and export views useful immediately.
+
+The traceability graph is intentionally a compact relationship explorer rather than a node-link canvas.
+
+- the graph includes all objects that belong to the chosen focus
+- the focus buttons reduce the network only when the reviewer wants less density
+- clicking a box opens a focused graph with separate Incoming / Focus / Outgoing columns
+- the default view is compact and card-based, while the focused view uses a wider graph layout with visible link labels, visible edge ports on the box boundary, separators, and extra routing space for repeated links between the same objects
+- relation explanations sit on the link itself so reviewers can see why the relation exists
 
 ## 13. Export Logic
 

@@ -3,6 +3,7 @@ import { api } from "@/lib/api-client";
 import { ViewCue } from "@/components/view-cue";
 import { TraceabilityGraph } from "@/components/traceability-graph";
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, SectionTitle } from "@/components/ui";
+import { VerificationStatusBreakdownCard } from "@/components/verification-status-breakdown";
 
 export const dynamic = "force-dynamic";
 
@@ -43,22 +44,24 @@ const sysmlViews = [
   { key: "derivations", label: "Derivations" },
 ];
 
-type GraphFocus = "all" | "requirements" | "blocks" | "parts" | "tests" | "evidence";
+type GraphFocus = "core" | "all" | "requirements" | "blocks" | "parts" | "tests" | "evidence";
 
 const graphFocusViews: { key: GraphFocus; label: string }[] = [
-  { key: "all", label: "All" },
+  { key: "core", label: "Core traceability" },
   { key: "requirements", label: "Requirements" },
   { key: "blocks", label: "Blocks" },
   { key: "parts", label: "Parts" },
   { key: "tests", label: "Tests" },
   { key: "evidence", label: "Evidence" },
+  { key: "all", label: "All" },
 ];
 
-export default async function ProjectWorkspace({ params, searchParams }: { params: { id: string; section?: string[] }; searchParams?: { view?: string; focus?: string } }) {
+export default async function ProjectWorkspace({ params, searchParams }: { params: { id: string; section?: string[] }; searchParams?: { view?: string; focus?: string; selected?: string } }) {
   const projectId = params.id;
   const section = params.section?.[0] ?? "";
   const view = searchParams?.view || "block-structure";
-  const focus: GraphFocus = graphFocusViews.some((item) => item.key === searchParams?.focus) ? (searchParams?.focus as GraphFocus) : "all";
+  const focus: GraphFocus = graphFocusViews.some((item) => item.key === searchParams?.focus) ? (searchParams?.focus as GraphFocus) : "core";
+  const selectedNodeId = typeof searchParams?.selected === "string" ? searchParams.selected : null;
   const [project, dashboard, requirements, blocks, components, tests, runs, links, baselines, nonConformities, changeRequests, reviewQueue, registrySummary] = await Promise.all([
     api.project(projectId).catch(() => null),
     api.projectDashboard(projectId).catch(() => null),
@@ -124,7 +127,7 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
       <div className="space-y-6">
         <SectionTitle
           title={`${project.code} - Traceability Graph`}
-          description="A filtered map of requirements, blocks, parts, tests, operational evidence, and verification evidence."
+          description="A compact relationship explorer for requirements, blocks, parts, tests, operational evidence, and verification evidence."
           action={
             <div className="flex flex-wrap gap-2">
               <Button href={`/projects/${project.id}/links`} variant="secondary">Traceability links</Button>
@@ -140,8 +143,15 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
             </Button>
           ))}
         </div>
+        <div className="rounded-2xl border border-dashed border-line bg-panel px-4 py-3 text-sm text-muted">
+          {selectedNodeId
+            ? "Clicking a box opens the focused graph for that object. The view now shows only the selected object plus the boxes with direct incoming and outgoing links."
+            : "The graph shows the full project network for the chosen focus. Click any box to open a focused graph with direct incoming and outgoing links."}
+        </div>
         <TraceabilityGraph
           focus={focus}
+          selectedNodeId={selectedNodeId}
+          selectionBaseHref={`/projects/${project.id}/graph?focus=${focus}`}
           blocks={blocks}
           tree={tree?.roots || []}
           requirements={requirements}
@@ -226,6 +236,9 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
               <Mini metric="Verified requirements" value={dashboard?.kpis.requirements_with_verifying_tests ?? 0} />
               <Mini metric="Requirements at risk" value={dashboard?.kpis.requirements_at_risk ?? 0} />
               <Mini metric="Open change requests" value={dashboard?.kpis.open_change_requests ?? 0} />
+            </div>
+            <div className="mt-5">
+              <VerificationStatusBreakdownCard breakdown={dashboard?.verification_status_breakdown ?? { verified: 0, partially_verified: 0, at_risk: 0, failed: 0, not_covered: 0 }} title="Verification status distribution" />
             </div>
           </CardBody>
         </Card>

@@ -279,6 +279,128 @@ def test_verification_evidence_explicit_signals_override_test_run_compatibility(
         assert get_requirement_detail(session, failed_requirement.id)["verification_evaluation"].status == RequirementVerificationStatus.failed
 
 
+def test_verification_status_explainability_and_dashboard_breakdown():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-VER-UX", name="Verification UX", description=""))
+
+        not_covered = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-UX-NC",
+                title="Uncovered requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+            ),
+        )
+
+        partial = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-UX-PART",
+                title="Partial requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+            ),
+        )
+        create_verification_evidence(
+            session,
+            VerificationEvidenceCreate(
+                project_id=project.id,
+                title="Partial evidence",
+                evidence_type=VerificationEvidenceType.analysis,
+                summary="Coverage is incomplete and pending additional review.",
+                observed_at=datetime.now(timezone.utc),
+                linked_requirement_ids=[partial.id],
+            ),
+        )
+
+        at_risk = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-UX-RISK",
+                title="Risk requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.analysis,
+            ),
+        )
+        create_verification_evidence(
+            session,
+            VerificationEvidenceCreate(
+                project_id=project.id,
+                title="Risk evidence",
+                evidence_type=VerificationEvidenceType.analysis,
+                summary="Warning: unstable trend and degraded evidence quality.",
+                observed_at=datetime.now(timezone.utc),
+                linked_requirement_ids=[at_risk.id],
+            ),
+        )
+
+        failed = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-UX-FAIL",
+                title="Failed requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.analysis,
+            ),
+        )
+        create_verification_evidence(
+            session,
+            VerificationEvidenceCreate(
+                project_id=project.id,
+                title="Failed evidence",
+                evidence_type=VerificationEvidenceType.analysis,
+                summary="Verification failed because the harness broke.",
+                observed_at=datetime.now(timezone.utc),
+                linked_requirement_ids=[failed.id],
+            ),
+        )
+
+        verified = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-UX-VER",
+                title="Verified requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.analysis,
+            ),
+        )
+        create_verification_evidence(
+            session,
+            VerificationEvidenceCreate(
+                project_id=project.id,
+                title="Verified evidence",
+                evidence_type=VerificationEvidenceType.analysis,
+                summary="Verification result passed with no open issues.",
+                observed_at=datetime.now(timezone.utc),
+                linked_requirement_ids=[verified.id],
+                metadata_json={"verification": {"result": "passed"}},
+            ),
+        )
+
+        dashboard = get_project_dashboard(session, project.id)
+        assert dashboard.verification_status_breakdown.not_covered == 1
+        assert dashboard.verification_status_breakdown.partially_verified == 1
+        assert dashboard.verification_status_breakdown.at_risk == 1
+        assert dashboard.verification_status_breakdown.failed == 1
+        assert dashboard.verification_status_breakdown.verified == 1
+
+        evaluation = get_requirement_detail(session, verified.id)["verification_evaluation"]
+        assert evaluation.decision_source == "verification evidence"
+        assert evaluation.decision_summary
+        assert evaluation.status == RequirementVerificationStatus.verified
+
+
 def test_requirement_verification_status_engine_uses_evidence_and_test_runs():
     with make_session() as session:
         project = create_project(session, ProjectCreate(code="P-VER", name="Verification", description=""))
