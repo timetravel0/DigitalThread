@@ -57,6 +57,11 @@ def _items(result: Any) -> list[Any]:
     return items
 
 
+def _first_item(result: Any) -> Any | None:
+    items = _items(result)
+    return items[0] if items else None
+
+
 def _status_value(status: Any) -> str:
     return status.value if hasattr(status, "value") else str(status)
 
@@ -2341,7 +2346,7 @@ def get_verification_evidence_service(session: Session, evidence_id: UUID) -> Ve
 
 
 def seed_demo(session: Session) -> dict[str, Any]:
-    project = session.exec(select(Project).where(Project.code == "DRONE-001")).first()
+    project = _first_item(session.exec(select(Project).where(Project.code == "DRONE-001")))
     if project is None:
         project = _add(session, Project(code="DRONE-001", name="Inspection Drone MVP", description="Demo project for ThreadLite", status=ProjectStatus.active))
 
@@ -2354,8 +2359,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {"project_id": project.id, "key": "DR-REQ-005", "title": "Drone shall support remote monitoring of battery and mission status", "description": "Telemetry requirement.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.demonstration, "status": RequirementStatus.draft, "version": 1},
         {"project_id": project.id, "key": "DR-REQ-006", "title": "Battery pack shall support mission reserve margin of 10 percent", "description": "Derived reserve requirement.", "category": RequirementCategory.performance, "priority": Priority.medium, "verification_method": VerificationMethod.analysis, "status": RequirementStatus.draft, "version": 1, "parent_requirement_id": None},
     ]:
-        item = _items(session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == p["key"])))
-        item = item[0] if item else None
+        item = _first_item(session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == p["key"])))
         reqs[p["key"]] = item or _add(session, Requirement.model_validate(p))
 
     if reqs["DR-REQ-006"].parent_requirement_id is None:
@@ -2377,8 +2381,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {"project_id": project.id, "key": "DR-BLK-006", "name": "Camera Module", "description": "Streaming camera.", "block_kind": BlockKind.component, "abstraction_level": AbstractionLevel.physical, "status": BlockStatus.draft, "version": 1},
         {"project_id": project.id, "key": "DR-BLK-007", "name": "Obstacle Detection Subsystem", "description": "Obstacle sensing and avoidance.", "block_kind": BlockKind.subsystem, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
     ]:
-        item = _items(session.exec(select(Block).where(Block.project_id == project.id, Block.key == p["key"])))
-        item = item[0] if item else None
+        item = _first_item(session.exec(select(Block).where(Block.project_id == project.id, Block.key == p["key"])))
         blocks[p["key"]] = item or _add(session, Block.model_validate(p))
 
     for block in blocks.values():
@@ -2405,8 +2408,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {"project_id": project.id, "key": "DR-CMP-005", "name": "Obstacle Sensor", "description": "Obstacle detection sensor.", "type": ComponentType.sensor, "part_number": "OBS-LIDAR-1", "supplier": "SenseWorks", "status": ComponentStatus.selected, "version": 1, "metadata_json": {"range_m": 18}},
         {"project_id": project.id, "key": "DR-CMP-006", "name": "Flight Software", "description": "Autonomy and control software.", "type": ComponentType.software_module, "part_number": "SW-FLT-1", "supplier": "ThreadLite Labs", "status": ComponentStatus.validated, "version": 3, "metadata_json": {"repository": "git@example.com:drone/flight.git", "branch": "main", "entry_point": "src/autonomy/main.py"}},
     ]:
-        item = _items(session.exec(select(Component).where(Component.project_id == project.id, Component.key == p["key"])))
-        item = item[0] if item else None
+        item = _first_item(session.exec(select(Component).where(Component.project_id == project.id, Component.key == p["key"])))
         comps[p["key"]] = item or _add(session, Component.model_validate(p))
 
     tests = {}
@@ -2416,8 +2418,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {"project_id": project.id, "key": "DR-TST-003", "title": "Temperature Envelope Test", "description": "Validate temperature range.", "method": TestMethod.simulation, "status": TestCaseStatus.ready, "version": 1},
         {"project_id": project.id, "key": "DR-TST-004", "title": "Obstacle Detection Test", "description": "Validate obstacle detection.", "method": TestMethod.field, "status": TestCaseStatus.ready, "version": 1},
     ]:
-        item = _items(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == p["key"])))
-        item = item[0] if item else None
+        item = _first_item(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == p["key"])))
         tests[p["key"]] = item or _add(session, TestCase.model_validate(p))
 
     for test_case in tests.values():
@@ -2550,7 +2551,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
                 ),
             )
 
-    run = session.exec(select(OperationalRun).where(OperationalRun.project_id == project.id, OperationalRun.key == "DR-RUN-001")).first()
+    run = _first_item(session.exec(select(OperationalRun).where(OperationalRun.project_id == project.id, OperationalRun.key == "DR-RUN-001")))
     if run is None:
         run = _add(session, OperationalRun(project_id=project.id, key="DR-RUN-001", date=date.today(), drone_serial="DRN-1001", location="Bologna field test range", duration_minutes=22, max_temperature_c=31.5, battery_consumption_pct=88, outcome=OperationalOutcome.degraded, notes="Mission completed with early low-battery warning.", telemetry_json={"altitude_m": 43, "return_to_home": True}))
     if not session.exec(select(Link).where(Link.project_id == project.id, Link.source_type == LinkObjectType.operational_run, Link.source_id == run.id, Link.target_type == LinkObjectType.requirement, Link.target_id == reqs["DR-REQ-001"].id)).first():
@@ -2565,7 +2566,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         if not session.exec(select(TestRun).join(TestCase).where(TestCase.project_id == project.id, TestCase.key == test_key)).first():
             _add(session, TestRun(test_case_id=tests[test_key].id, execution_date=date.today(), result=result, summary=summary, measured_values_json=measured, notes="Seeded run", executed_by="QA Lead"))
 
-    cr = session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project.id, ChangeRequest.key == "CR-001")).first()
+    cr = _first_item(session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project.id, ChangeRequest.key == "CR-001")))
     if cr is None:
         cr = _add(session, ChangeRequest(project_id=project.id, key="CR-001", title="Increase battery endurance to support 35 minutes target", description="Investigate battery and propulsion changes to reach target endurance.", status=ChangeRequestStatus.open, severity=Severity.high))
     if not session.exec(select(ChangeImpact).where(ChangeImpact.change_request_id == cr.id)).first():
@@ -2574,7 +2575,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         _add(session, ChangeImpact(change_request_id=cr.id, object_type="requirement", object_id=reqs["DR-REQ-001"].id, impact_level=ImpactLevel.high, notes="Endurance requirement needs revision."))
         _add(session, ChangeImpact(change_request_id=cr.id, object_type="test_case", object_id=tests["DR-TST-001"].id, impact_level=ImpactLevel.medium, notes="Endurance verification test likely changes."))
 
-    nc = session.exec(select(NonConformity).where(NonConformity.project_id == project.id, NonConformity.key == "NC-001")).first()
+    nc = _first_item(session.exec(select(NonConformity).where(NonConformity.project_id == project.id, NonConformity.key == "NC-001")))
     if nc is None:
         nc = _add(session, NonConformity(project_id=project.id, key="NC-001", title="Battery pack overheating during endurance run", description="Observed battery thermal excursion above nominal limits.", status=NonConformityStatus.analyzing, severity=Severity.high))
     if not session.exec(
@@ -2603,7 +2604,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
             ),
         )
 
-    baseline = session.exec(select(Baseline).where(Baseline.project_id == project.id, Baseline.name == "Initial Drone Baseline")).first()
+    baseline = _first_item(session.exec(select(Baseline).where(Baseline.project_id == project.id, Baseline.name == "Initial Drone Baseline")))
     if baseline is None:
         create_baseline(session, BaselineCreate(project_id=project.id, name="Initial Drone Baseline", description="Baseline for the seeded drone MVP."))
 
@@ -2614,7 +2615,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {"name": "Teamcenter PLM", "connector_type": ConnectorType.plm, "base_url": "https://teamcenter.example.local", "description": "Physical part source."},
         {"name": "Simulink Verification Export", "connector_type": ConnectorType.simulation, "base_url": "https://simulink.example.local", "description": "Simulation evidence export."},
     ]:
-        connector = session.exec(select(ConnectorDefinition).where(ConnectorDefinition.project_id == project.id, ConnectorDefinition.name == p["name"])).first()
+        connector = _first_item(session.exec(select(ConnectorDefinition).where(ConnectorDefinition.project_id == project.id, ConnectorDefinition.name == p["name"])))
         connectors[p["name"]] = connector or _add(session, ConnectorDefinition(project_id=project.id, name=p["name"], connector_type=p["connector_type"], base_url=p["base_url"], description=p["description"], is_active=True, metadata_json={"seeded": True}))
 
     artifacts = {}
@@ -2624,7 +2625,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {"external_id": "PLM-PART-DR-BATT-01", "artifact_type": ExternalArtifactType.cad_part, "name": "Battery Pack Assembly", "description": "Authoritative Teamcenter part for the battery assembly.", "connector": "Teamcenter PLM", "canonical_uri": "plm://PLM-PART-DR-BATT-01", "native_tool_url": "https://teamcenter.example.local/items/PLM-PART-DR-BATT-01"},
         {"external_id": "SIM-FLIGHT-ENDURANCE", "artifact_type": ExternalArtifactType.simulation_model, "name": "Endurance Model", "description": "Simulink model used to validate endurance behavior.", "connector": "Simulink Verification Export", "canonical_uri": "federation://SIM-FLIGHT-ENDURANCE", "native_tool_url": "https://simulink.example.local/models/SIM-FLIGHT-ENDURANCE"},
     ]:
-        artifact = session.exec(select(ExternalArtifact).where(ExternalArtifact.project_id == project.id, ExternalArtifact.external_id == p["external_id"])).first()
+        artifact = _first_item(session.exec(select(ExternalArtifact).where(ExternalArtifact.project_id == project.id, ExternalArtifact.external_id == p["external_id"])))
         artifacts[p["external_id"]] = artifact or _add(
             session,
             ExternalArtifact(
@@ -2649,7 +2650,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {"artifact": "SIM-FLIGHT-ENDURANCE", "version_label": "1.4", "revision_label": "1.4", "metadata_json": {"solver": "Simulink"}},
     ]:
         artifact = artifacts[p["artifact"]]
-        version = session.exec(select(ExternalArtifactVersion).where(ExternalArtifactVersion.external_artifact_id == artifact.id, ExternalArtifactVersion.version_label == p["version_label"], ExternalArtifactVersion.revision_label == p["revision_label"])).first()
+        version = _first_item(session.exec(select(ExternalArtifactVersion).where(ExternalArtifactVersion.external_artifact_id == artifact.id, ExternalArtifactVersion.version_label == p["version_label"], ExternalArtifactVersion.revision_label == p["revision_label"])))
         versions[f'{p["artifact"]}:{p["version_label"]}'] = version or _add(
             session,
             ExternalArtifactVersion(
@@ -2691,7 +2692,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
                 ),
             )
 
-    context = session.exec(select(ConfigurationContext).where(ConfigurationContext.project_id == project.id, ConfigurationContext.key == "DRN-PDR-0.3")).first()
+    context = _first_item(session.exec(select(ConfigurationContext).where(ConfigurationContext.project_id == project.id, ConfigurationContext.key == "DRN-PDR-0.3")))
     if context is None:
         context = _add(
             session,

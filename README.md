@@ -17,6 +17,32 @@ It is designed for SMEs that need traceability without adopting a heavy PLM or M
 - export a complete project bundle for external validation
 - inspect coverage, impact, matrix, and SysML practice views
 
+## Documentation Set
+
+ThreadLite documentation is split into a small set of English-language guides:
+
+- [User Guide](docs/user-guide.md) - how to use each module and feature from the UI
+- [Platform Logic Guide](docs/platform-logic.md) - how the platform works internally and how the data flows
+- [Target Architecture](docs/target-architecture.md) - the intended next architecture layer
+- [Implementation Backlog](docs/implementation-backlog.md) - the backlog of planned stories
+- [Gap Analysis](docs/gap-analysis.md) - the current capability map and open gaps
+
+Documentation policy:
+
+- every implemented feature should update the root README and the affected docs
+- new product behavior should be reflected in the user guide and, when needed, the logic guide
+- keep documentation in English only
+
+## In-App Documentation
+
+ThreadLite includes a built-in documentation section inside the application.
+
+- open `Documentation` from the left navigation
+- browse the repository manuals without leaving the app
+- use `User Guide` for feature usage and `Platform Logic Guide` for the operating model
+
+The in-app documentation is the user-facing manual and should stay synchronized with the repository docs.
+
 ## Why this is a lightweight Digital Thread MVP
 
 ThreadLite is intentionally narrow in scope:
@@ -82,6 +108,18 @@ threadlite/
 - Change requests with impact summaries
 - Project export bundles for external validation
 - Demo seed for a drone inspection project
+
+## How To Use The Platform
+
+If you are new to ThreadLite, start here:
+
+1. Open the [User Guide](docs/user-guide.md) for task-oriented instructions by module.
+2. Open a project and use the tabs to move between requirements, blocks, tests, traceability, SysML, matrix, baselines, and change requests.
+3. Use the detail pages to create, edit, review, and approve engineering objects.
+4. Use the matrix and graph views to understand coverage and connectivity.
+5. Use the export bundle when you need a deterministic package for external validation.
+
+The [Platform Logic Guide](docs/platform-logic.md) explains the rules behind these screens so the UI and backend behavior stay understandable together.
 
 ## Implemented SysML-Inspired Concepts
 

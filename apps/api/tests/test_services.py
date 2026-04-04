@@ -147,7 +147,7 @@ def test_seed_demo_populates_sysml_driven_kpis():
         assert dashboard.kpis.total_requirements == 6
         assert dashboard.kpis.requirements_with_allocated_components == 5
         assert dashboard.kpis.requirements_with_verifying_tests == 4
-        assert dashboard.kpis.requirements_at_risk == 1
+        assert dashboard.kpis.requirements_at_risk == 2
         assert dashboard.kpis.failed_tests_last_30_days == 1
         assert dashboard.kpis.open_change_requests == 1
         assert req1_detail["verification_evaluation"].status == RequirementVerificationStatus.failed
