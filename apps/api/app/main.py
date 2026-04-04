@@ -12,6 +12,17 @@ from app.core import get_settings
 from app.db import get_session, init_db
 from app.schemas import *
 from app.services import *
+from app.impact_service import (
+    build_impact,
+    build_matrix,
+    get_change_request_detail,
+    get_component_detail,
+    get_global_dashboard,
+    get_project_dashboard,
+    get_requirement_detail,
+    get_test_case_detail,
+)
+from app.seed_service import seed_demo
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
@@ -573,6 +584,103 @@ def verification_evidence_detail_endpoint(evidence_id: UUID, session: Session = 
         raise api_error(exc)
 
 
+@app.post("/api/projects/{project_id}/imports", response_model=ProjectImportResponse, status_code=201)
+def import_project_records_endpoint(project_id: UUID, payload: ProjectImportCreate, session: Session = Depends(db)):
+    try:
+        return import_project_records(session, project_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/projects/{project_id}/simulation-evidence", response_model=list[SimulationEvidenceRead])
+def list_simulation_evidence_endpoint(
+    project_id: UUID,
+    internal_object_type: SimulationEvidenceLinkObjectType | None = None,
+    internal_object_id: UUID | None = None,
+    session: Session = Depends(db),
+):
+    return list_simulation_evidence(
+        session,
+        project_id,
+        internal_object_type=internal_object_type,
+        internal_object_id=internal_object_id,
+    )
+
+
+@app.get("/api/projects/{project_id}/fmi-contracts", response_model=list[FMIContractRead])
+def list_fmi_contracts_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return list_fmi_contracts(session, project_id)
+
+
+@app.post("/api/projects/{project_id}/fmi-contracts", response_model=FMIContractRead, status_code=201)
+def create_fmi_contract_endpoint(project_id: UUID, payload: FMIContractCreate, session: Session = Depends(db)):
+    try:
+        if payload.project_id != project_id:
+            raise ValueError("FMI contract project_id must match the route project_id")
+        return create_fmi_contract(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/fmi-contracts/{contract_id}", response_model=FMIContractDetail)
+def fmi_contract_detail_endpoint(contract_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_fmi_contract_service(session, contract_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/projects/{project_id}/simulation-evidence", response_model=SimulationEvidenceRead, status_code=201)
+def create_simulation_evidence_endpoint(project_id: UUID, payload: SimulationEvidenceCreate, session: Session = Depends(db)):
+    try:
+        if payload.project_id != project_id:
+            raise ValueError("Simulation evidence project_id must match the route project_id")
+        return create_simulation_evidence(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/simulation-evidence/{evidence_id}", response_model=SimulationEvidenceRead)
+def simulation_evidence_detail_endpoint(evidence_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_simulation_evidence_service(session, evidence_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/projects/{project_id}/operational-evidence", response_model=list[OperationalEvidenceRead])
+def list_operational_evidence_endpoint(
+    project_id: UUID,
+    internal_object_type: OperationalEvidenceLinkObjectType | None = None,
+    internal_object_id: UUID | None = None,
+    session: Session = Depends(db),
+):
+    return list_operational_evidence(
+        session,
+        project_id,
+        internal_object_type=internal_object_type,
+        internal_object_id=internal_object_id,
+    )
+
+
+@app.post("/api/projects/{project_id}/operational-evidence", response_model=OperationalEvidenceRead, status_code=201)
+def create_operational_evidence_endpoint(project_id: UUID, payload: OperationalEvidenceCreate, session: Session = Depends(db)):
+    try:
+        if payload.project_id != project_id:
+            raise ValueError("Operational evidence project_id must match the route project_id")
+        return create_operational_evidence(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.get("/api/operational-evidence/{evidence_id}", response_model=OperationalEvidenceRead)
+def operational_evidence_detail_endpoint(evidence_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_operational_evidence_service(session, evidence_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
 @app.get("/api/test-cases/{obj_id}/history", response_model=list[RevisionSnapshotRead])
 def test_case_history_endpoint(obj_id: UUID, session: Session = Depends(db)):
     try:
@@ -866,6 +974,16 @@ def verification_endpoint(project_id: UUID, session: Session = Depends(db)):
 @app.get("/api/projects/{project_id}/sysml/derivations", response_model=SysMLDerivationResponse)
 def derivations_endpoint(project_id: UUID, session: Session = Depends(db)):
     return build_derivation_view(session, project_id)
+
+
+@app.get("/api/projects/{project_id}/sysml/mapping-contract", response_model=SysMLMappingContractResponse)
+def mapping_contract_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return build_sysml_mapping_contract(session, project_id)
+
+
+@app.get("/api/projects/{project_id}/step-ap242-contract", response_model=STEPAP242ContractResponse)
+def step_ap242_contract_endpoint(project_id: UUID, session: Session = Depends(db)):
+    return build_step_ap242_contract(session, project_id)
 
 
 @app.get("/api/projects/{project_id}/matrix", response_model=MatrixResponse)

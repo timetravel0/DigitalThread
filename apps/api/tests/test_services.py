@@ -1,48 +1,64 @@
-from datetime import datetime, timedelta, timezone
+﻿from datetime import datetime, timedelta, timezone
+import json
 
 import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.models import (
+    ArtifactLinkRelationType,
     AbstractionLevel,
     Block,
+    BlockContainmentRelationType,
     BlockKind,
     BlockStatus,
-    Component,
-    ComponentType,
     ChangeRequestStatus,
-    ConnectorType,
+    Component,
+    ComponentStatus,
+    ComponentType,
+    ConfigurationContext,
     ConfigurationContextStatus,
     ConfigurationContextType,
     ConfigurationItemKind,
-    ConfigurationContext,
+    ConnectorType,
+    ExternalArtifactType,
+    ExternalArtifactStatus,
+    FederatedInternalObjectType,
+    ImpactLevel,
     Link,
     LinkObjectType,
-    ImpactLevel,
+    NonConformityStatus,
+    NonConformityDisposition,
     OperationalOutcome,
+    OperationalEvidence,
+    OperationalEvidenceLinkObjectType,
+    OperationalEvidenceQualityStatus,
+    OperationalEvidenceSourceType,
     Priority,
     Project,
-    NonConformityStatus,
-    Severity,
     RelationType,
-    ExternalArtifactType,
-    FederatedInternalObjectType,
     Requirement,
     RequirementCategory,
     RequirementStatus,
     RequirementVerificationStatus,
+    Severity,
+    RevisionSnapshot,
+    SimulationEvidenceResult,
     SysMLObjectType,
     SysMLRelation,
     SysMLRelationType,
     TestCase,
     TestCaseStatus,
+    TestMethod,
     TestRunResult,
     VerificationEvidenceType,
     VerificationMethod,
 )
 from app.schemas import (
+    ArtifactLinkCreate,
     BlockCreate,
+    BlockContainmentCreate,
     BaselineCreate,
+    FMIContractCreate,
     ConfigurationContextCreate,
     ConfigurationItemMappingCreate,
     ConfigurationContextUpdate,
@@ -54,6 +70,8 @@ from app.schemas import (
     LinkCreate,
     ExternalArtifactCreate,
     ExternalArtifactVersionCreate,
+    ProjectImportCreate,
+    OperationalEvidenceCreate,
     OperationalRunCreate,
     OperationalRunUpdate,
     ProjectCreate,
@@ -61,26 +79,31 @@ from app.schemas import (
     RequirementUpdate,
     TestRunCreate,
     SysMLRelationCreate,
+    SimulationEvidenceCreate,
     TestCaseCreate,
     VerificationEvidenceCreate,
     WorkflowActionPayload,
     ComponentCreate,
     ConnectorDefinitionCreate,
 )
-from app.models import TestMethod
 from app.services import (
     approve_requirement,
+    approve_change_request,
     build_impact,
+    build_sysml_mapping_contract,
     compare_configuration_contexts,
     compare_baselines,
     compare_baseline_to_configuration_context,
     create_configuration_context,
     create_configuration_item_mapping,
     create_baseline,
+    create_block_containment,
+    create_artifact_link,
     create_block,
     create_change_impact,
     create_change_request,
     create_non_conformity,
+    create_operational_evidence,
     delete_configuration_item_mapping,
     create_link,
     create_component,
@@ -90,25 +113,35 @@ from app.services import (
     create_external_artifact,
     create_external_artifact_version,
     create_operational_run,
+    create_simulation_evidence,
+    import_project_records,
     create_requirement_draft_version,
     create_sysml_relation,
     create_test_run,
     create_test_case,
     create_verification_evidence,
+    build_step_ap242_contract,
+    create_fmi_contract,
     export_project_bundle,
     get_baseline_detail,
     get_baseline_bridge_context,
     get_component_detail,
+    get_fmi_contract_service,
     get_configuration_context_service,
+    get_authoritative_registry_summary,
     get_change_request_detail,
     get_non_conformity_detail,
     get_operational_run_detail,
+    get_operational_evidence_service,
     get_requirement_detail,
+    get_simulation_evidence_service,
     get_test_case_detail,
     get_project_dashboard,
     list_requirement_history,
+    list_fmi_contracts,
+    list_operational_evidence,
     reject_requirement,
-    approve_change_request,
+    reject_change_request,
     close_change_request,
     mark_change_request_implemented,
     reopen_change_request,
@@ -745,6 +778,205 @@ def test_sysml_relation_validation_and_baseline_filters_non_approved_items():
         assert baseline.name == "Baseline"
         assert any(item.object_id == requirement.id for item in items)
         assert all(item.object_id != draft_requirement.id for item in items)
+
+
+def test_sysml_mapping_contract_exposes_requirement_and_block_semantics():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P2-SYSML", name="P2-SYSML", description=""))
+        base_requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-BASE",
+                title="Base requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+                status=RequirementStatus.approved,
+            ),
+        )
+        derived_requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-DERIVED",
+                title="Derived requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.medium,
+                verification_method=VerificationMethod.analysis,
+                status=RequirementStatus.approved,
+            ),
+        )
+        logical_block = create_block(
+            session,
+            BlockCreate(
+                project_id=project.id,
+                key="BLK-LOG",
+                name="Logical block",
+                block_kind=BlockKind.system,
+                abstraction_level=AbstractionLevel.logical,
+                status=BlockStatus.approved,
+            ),
+        )
+        physical_block = create_block(
+            session,
+            BlockCreate(
+                project_id=project.id,
+                key="BLK-PHY",
+                name="Physical block",
+                block_kind=BlockKind.assembly,
+                abstraction_level=AbstractionLevel.physical,
+                status=BlockStatus.approved,
+            ),
+        )
+        test_case = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key="TST-SYSML",
+                title="SysML verification",
+                method=TestMethod.simulation,
+                status=TestCaseStatus.approved,
+            ),
+        )
+
+        create_sysml_relation(
+            session,
+            SysMLRelationCreate(
+                project_id=project.id,
+                source_type=SysMLObjectType.block,
+                source_id=logical_block.id,
+                target_type=SysMLObjectType.requirement,
+                target_id=base_requirement.id,
+                relation_type=SysMLRelationType.satisfy,
+            ),
+        )
+        create_sysml_relation(
+            session,
+            SysMLRelationCreate(
+                project_id=project.id,
+                source_type=SysMLObjectType.test_case,
+                source_id=test_case.id,
+                target_type=SysMLObjectType.requirement,
+                target_id=base_requirement.id,
+                relation_type=SysMLRelationType.verify,
+            ),
+        )
+        create_sysml_relation(
+            session,
+            SysMLRelationCreate(
+                project_id=project.id,
+                source_type=SysMLObjectType.requirement,
+                source_id=base_requirement.id,
+                target_type=SysMLObjectType.requirement,
+                target_id=derived_requirement.id,
+                relation_type=SysMLRelationType.deriveReqt,
+            ),
+        )
+        create_block_containment(
+            session,
+            BlockContainmentCreate(
+                project_id=project.id,
+                parent_block_id=logical_block.id,
+                child_block_id=physical_block.id,
+                relation_type=BlockContainmentRelationType.contains,
+            ),
+        )
+
+        contract = build_sysml_mapping_contract(session, project.id)
+
+        assert contract.contract_schema == "threadlite.sysml.mapping-contract.v1"
+        assert contract.summary.requirement_count == 2
+        assert contract.summary.block_count == 2
+        assert contract.summary.logical_block_count == 1
+        assert contract.summary.physical_block_count == 1
+        assert contract.summary.satisfy_relation_count == 1
+        assert contract.summary.verify_relation_count == 1
+        assert contract.summary.derive_relation_count == 1
+        assert contract.summary.contain_relation_count == 1
+
+        base_row = next(row for row in contract.requirements if row.requirement.id == base_requirement.id)
+        assert any(block.object_id == logical_block.id for block in base_row.satisfy_blocks)
+        assert any(test.object_id == test_case.id for test in base_row.verify_tests)
+        derived_row = next(row for row in contract.requirements if row.requirement.id == derived_requirement.id)
+        assert any(source.object_id == base_requirement.id for source in derived_row.derived_from)
+
+        logical_row = next(row for row in contract.blocks if row.block.id == logical_block.id)
+        assert logical_row.abstraction_level == AbstractionLevel.logical
+        assert any(child.object_id == physical_block.id for child in logical_row.contained_blocks)
+        assert any(req.object_id == base_requirement.id for req in logical_row.satisfies_requirements)
+
+        bundle = export_project_bundle(session, project.id)
+        assert bundle["sysml_mapping_contract"]["summary"]["satisfy_relation_count"] == 1
+
+
+def test_step_ap242_contract_exposes_part_metadata_and_links():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P2-AP242", name="P2-AP242", description=""))
+        component = create_component(
+            session,
+            ComponentCreate(
+                project_id=project.id,
+                key="CMP-AP242",
+                name="Battery Pack",
+                description="Physical battery assembly",
+                type=ComponentType.battery,
+                part_number="BAT-3000",
+                supplier="VoltCraft",
+                status=ComponentStatus.selected,
+                version=2,
+                metadata_json={"mass_kg": 1.2},
+            ),
+        )
+        connector = create_connector(
+            session,
+            ConnectorDefinitionCreate(project_id=project.id, name="Teamcenter PLM", connector_type=ConnectorType.plm),
+        )
+        artifact = create_external_artifact(
+            session,
+            ExternalArtifactCreate(
+                project_id=project.id,
+                connector_definition_id=connector.id,
+                external_id="PLM-PART-DR-BATT-01",
+                artifact_type=ExternalArtifactType.cad_part,
+                name="Battery Pack Assembly",
+                canonical_uri="plm://PLM-PART-DR-BATT-01",
+                native_tool_url="https://teamcenter.example.local/items/PLM-PART-DR-BATT-01",
+                status=ExternalArtifactStatus.active,
+            ),
+        )
+        version = create_external_artifact_version(
+            session,
+            artifact.id,
+            ExternalArtifactVersionCreate(version_label="C", revision_label="C", metadata_json={"supplier": "VoltCraft"}),
+        )
+        create_artifact_link(
+            session,
+            ArtifactLinkCreate(
+                project_id=project.id,
+                internal_object_type=FederatedInternalObjectType.component,
+                internal_object_id=component.id,
+                external_artifact_id=artifact.id,
+                relation_type=ArtifactLinkRelationType.maps_to,
+            ),
+        )
+
+        contract = build_step_ap242_contract(session, project.id)
+
+        assert contract.contract_schema == "threadlite.step.ap242.contract.v1"
+        assert contract.summary.physical_component_count == 1
+        assert contract.summary.cad_artifact_count == 1
+        assert contract.summary.linked_cad_artifact_count == 1
+        assert contract.summary.identifier_count >= 3
+        assert contract.parts[0].component.id == component.id
+        assert contract.parts[0].part_number == "BAT-3000"
+        assert any(identifier.kind == "part_number" for identifier in contract.parts[0].identifiers)
+        assert contract.parts[0].linked_cad_artifacts[0].id == artifact.id
+        assert contract.relations[0].relation_type == ArtifactLinkRelationType.maps_to.value
+        assert contract.relations[0].cad_artifact.id == artifact.id
+        assert version.external_artifact_id == artifact.id
+        bundle = export_project_bundle(session, project.id)
+        assert bundle["step_ap242_contract"]["summary"]["cad_artifact_count"] == 1
 
 
 def test_impact_analysis_includes_blocks_and_tests_from_sysml_relations():
@@ -1925,6 +2157,231 @@ def test_simulation_verification_evidence_preserves_model_scenario_inputs_and_ou
         assert bundle["verification_evidence"][0]["metadata_json"]["simulation"]["model"] == "Endurance Model"
 
 
+def test_simulation_evidence_links_requirements_tests_and_verification_evidence_and_exports():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-SIM-2", name="P-SIM-2", description=""))
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-SIM-2",
+                title="Simulation evidence requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.analysis,
+                status=RequirementStatus.approved,
+            ),
+        )
+        test_case = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key="TST-SIM-2",
+                title="Simulation evidence test",
+                method=TestMethod.simulation,
+                status=TestCaseStatus.ready,
+            ),
+        )
+        verification_evidence = create_verification_evidence(
+            session,
+            VerificationEvidenceCreate(
+                project_id=project.id,
+                title="Existing verification evidence",
+                evidence_type=VerificationEvidenceType.simulation,
+                summary="Legacy evidence that simulation can reference.",
+                observed_at=datetime.now(timezone.utc),
+                source_name="Simulink",
+                source_reference="SIM-LEGACY-1",
+                linked_requirement_ids=[requirement.id],
+                linked_test_case_ids=[test_case.id],
+            ),
+        )
+
+        evidence = create_simulation_evidence(
+            session,
+            SimulationEvidenceCreate(
+                project_id=project.id,
+                title="Thermal simulation result",
+                model_reference="Thermal Model",
+                scenario_name="Envelope validation",
+                input_summary="Ambient sweep across the flight envelope.",
+                inputs_json={"ambient_low_c": -6, "ambient_high_c": 41},
+                expected_behavior="Remain inside the thermal envelope.",
+                observed_behavior="Remain inside the thermal envelope with margin.",
+                result=SimulationEvidenceResult.passed,
+                execution_timestamp=datetime.now(timezone.utc),
+                metadata_json={"contract_reference": "FMI-placeholder:THERMAL"},
+                linked_requirement_ids=[requirement.id],
+                linked_test_case_ids=[test_case.id],
+                linked_verification_evidence_ids=[verification_evidence.id],
+            ),
+        )
+
+        requirement_detail = get_requirement_detail(session, requirement.id)
+        test_case_detail = get_test_case_detail(session, test_case.id)
+        service_detail = get_simulation_evidence_service(session, evidence.id)
+        bundle = export_project_bundle(session, project.id)
+
+        assert service_detail.id == evidence.id
+        assert service_detail.linked_objects
+        assert any(item.object_type == "verification_evidence" for item in service_detail.linked_objects)
+        assert requirement_detail["simulation_evidence"]
+        assert requirement_detail["simulation_evidence"][0].id == evidence.id
+        assert test_case_detail["simulation_evidence"]
+        assert test_case_detail["simulation_evidence"][0].id == evidence.id
+        assert bundle["simulation_evidence"]
+        assert bundle["simulation_evidence"][0]["title"] == "Thermal simulation result"
+        assert bundle["simulation_evidence_links"]
+
+def test_fmi_placeholder_contract_links_simulation_evidence_and_exports():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-FMI-1", name="P-FMI-1", description=""))
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-FMI",
+                title="FMI-backed requirement",
+                category=RequirementCategory.environment,
+                priority=Priority.medium,
+                verification_method=VerificationMethod.analysis,
+            ),
+        )
+        test_case = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key="TST-FMI",
+                title="FMI-backed test case",
+                method=TestMethod.simulation,
+                status=TestCaseStatus.approved,
+            ),
+        )
+        contract = create_fmi_contract(
+            session,
+            FMIContractCreate(
+                project_id=project.id,
+                key="FMI-ENV-001",
+                name="Environment simulation contract",
+                description="Placeholder contract for an environment model.",
+                model_identifier="SIM-FLIGHT-ENDURANCE",
+                model_version="1.4",
+                model_uri="federation://SIM-FLIGHT-ENDURANCE",
+                adapter_profile="simulink-placeholder",
+                metadata_json={"adapter_capability": "simulation_metadata"},
+            ),
+        )
+        evidence = create_simulation_evidence(
+            session,
+            SimulationEvidenceCreate(
+                project_id=project.id,
+                title="FMI simulation result",
+                model_reference="Environment Model",
+                scenario_name="Thermal envelope validation",
+                input_summary="Ambient sweep across the flight envelope.",
+                inputs_json={"ambient_low_c": -6, "ambient_high_c": 41},
+                expected_behavior="Remain inside the thermal envelope.",
+                observed_behavior="Remain inside the thermal envelope with margin.",
+                result=SimulationEvidenceResult.passed,
+                execution_timestamp=datetime.now(timezone.utc),
+                fmi_contract_id=contract.id,
+                metadata_json={"contract_reference": "FMI-placeholder:THERMAL"},
+                linked_requirement_ids=[requirement.id],
+                linked_test_case_ids=[test_case.id],
+            ),
+        )
+
+        contract_detail = get_fmi_contract_service(session, contract.id)
+        listed_contracts = list_fmi_contracts(session, project.id)
+        evidence_detail = get_simulation_evidence_service(session, evidence.id)
+        bundle = export_project_bundle(session, project.id)
+
+        assert contract_detail.fmi_contract.id == contract.id
+        assert contract_detail.fmi_contract.linked_simulation_evidence_count == 1
+        assert contract_detail.simulation_evidence[0].id == evidence.id
+        assert listed_contracts[0].id == contract.id
+        assert evidence_detail.fmi_contract_id == contract.id
+        assert evidence_detail.fmi_contract_key == contract.key
+        assert bundle["fmi_contracts"][0]["id"] == str(contract.id)
+        assert bundle["simulation_evidence"][0]["fmi_contract_id"] == str(contract.id)
+
+
+def test_operational_evidence_batches_link_requirements_and_verification_evidence_and_exports():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-OP-1", name="P-OP-1", description=""))
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-OP",
+                title="Operational evidence requirement",
+                category=RequirementCategory.operations,
+                priority=Priority.high,
+                verification_method=VerificationMethod.demonstration,
+                status=RequirementStatus.approved,
+            ),
+        )
+        verification_evidence = create_verification_evidence(
+            session,
+            VerificationEvidenceCreate(
+                project_id=project.id,
+                title="Operational verification evidence",
+                evidence_type=VerificationEvidenceType.telemetry,
+                summary="Telemetry can be referenced by operational batches.",
+                observed_at=datetime.now(timezone.utc),
+                source_name="Telemetry hub",
+                source_reference="OP-VER-1",
+                linked_requirement_ids=[requirement.id],
+            ),
+        )
+
+        batch = create_operational_evidence(
+            session,
+            OperationalEvidenceCreate(
+                project_id=project.id,
+                title="Endurance field evidence batch",
+                source_name="Telemetry aggregator",
+                source_type=OperationalEvidenceSourceType.system,
+                captured_at=datetime.now(timezone.utc),
+                coverage_window_start=datetime.now(timezone.utc) - timedelta(minutes=22),
+                coverage_window_end=datetime.now(timezone.utc),
+                observations_summary="Aggregated field telemetry from the endurance mission.",
+                aggregated_observations_json={"duration_minutes": 22, "battery_consumption_pct": 88},
+                quality_status=OperationalEvidenceQualityStatus.warning,
+                derived_metrics_json={"coverage_minutes": 22},
+                metadata_json={"contract_reference": "OP-EVBATCH:1"},
+                linked_requirement_ids=[requirement.id],
+                linked_verification_evidence_ids=[verification_evidence.id],
+            ),
+        )
+
+        requirement_detail = get_requirement_detail(session, requirement.id)
+        listed = list_operational_evidence(
+            session,
+            project.id,
+            internal_object_type=OperationalEvidenceLinkObjectType.requirement,
+            internal_object_id=requirement.id,
+        )
+        by_verification = list_operational_evidence(
+            session,
+            project.id,
+            internal_object_type=OperationalEvidenceLinkObjectType.verification_evidence,
+            internal_object_id=verification_evidence.id,
+        )
+        detail = get_operational_evidence_service(session, batch.id)
+        bundle = export_project_bundle(session, project.id)
+
+        assert requirement_detail["operational_evidence"]
+        assert requirement_detail["operational_evidence"][0].id == batch.id
+        assert listed and listed[0].id == batch.id
+        assert by_verification and by_verification[0].id == batch.id
+        assert detail.id == batch.id
+        assert {item.object_type for item in detail.linked_objects} == {"requirement", "verification_evidence"}
+        assert bundle["operational_evidence"]
+        assert bundle["operational_evidence"][0]["title"] == "Endurance field evidence batch"
+        assert bundle["operational_evidence_links"]
+
+
 def test_software_component_traceability_and_evidence_visibility():
     with make_session() as session:
         project = create_project(session, ProjectCreate(code="P-SW-1", name="P-SW-1", description=""))
@@ -2012,6 +2469,8 @@ def test_non_conformity_entity_links_evidence_and_impacts():
                 title="Overheated enclosure detected",
                 description="Thermal excursion observed during bench check.",
                 status=NonConformityStatus.detected,
+                disposition=NonConformityDisposition.rework,
+                review_comment="Investigate thermal mitigation before closure.",
                 severity=Severity.high,
             ),
         )
@@ -2045,12 +2504,213 @@ def test_non_conformity_entity_links_evidence_and_impacts():
         updated = update_non_conformity(
             session,
             non_conformity.id,
-            NonConformityUpdate(status=NonConformityStatus.contained),
+            NonConformityUpdate(status=NonConformityStatus.contained, disposition=NonConformityDisposition.accept, review_comment="Accepted with mitigation."),
         )
 
         assert detail["non_conformity"].status == NonConformityStatus.detected
+        assert detail["non_conformity"].disposition == NonConformityDisposition.rework
         assert detail["verification_evidence"][0].id == evidence.id
         assert detail["verification_evidence"][0].linked_objects[0].object_id == non_conformity.id
+        assert detail["related_requirements"][0].object_id == requirement.id
         assert any(item.object_type == "requirement" for item in detail["impact_summary"])
         assert any(item.object_type == "requirement" for item in detail["impact"].likely_impacted)
         assert updated.status == NonConformityStatus.contained
+        assert updated.disposition == NonConformityDisposition.accept
+        snapshot = session.exec(select(RevisionSnapshot).where(RevisionSnapshot.object_type == "non_conformity", RevisionSnapshot.object_id == non_conformity.id)).all()
+        assert snapshot and snapshot[0].snapshot_hash
+
+
+def test_backend_coverage_spans_configuration_connectors_evidence_and_export():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-H2-1", name="P-H2-1", description=""))
+        connector = create_connector(
+            session,
+            ConnectorDefinitionCreate(project_id=project.id, name="DOORS NG", connector_type=ConnectorType.doors),
+        )
+        artifact = create_external_artifact(
+            session,
+            ExternalArtifactCreate(
+                project_id=project.id,
+                connector_definition_id=connector.id,
+                external_id="REQ-H2-1",
+                artifact_type=ExternalArtifactType.requirement,
+                name="Coverage requirement",
+                status=ExternalArtifactStatus.active,
+            ),
+        )
+        version = create_external_artifact_version(
+            session,
+            artifact.id,
+            ExternalArtifactVersionCreate(version_label="7.2", revision_label="R3"),
+        )
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-H2-1",
+                title="Coverage requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+                status=RequirementStatus.approved,
+            ),
+        )
+        test_case = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key="TST-H2-1",
+                title="Coverage test",
+                method=TestMethod.bench,
+                status=TestCaseStatus.approved,
+            ),
+        )
+        context = create_configuration_context(
+            session,
+            ConfigurationContextCreate(
+                project_id=project.id,
+                key="CC-H2-1",
+                name="Coverage context",
+                status=ConfigurationContextStatus.active,
+                context_type=ConfigurationContextType.working,
+            ),
+        )
+        create_configuration_item_mapping(
+            session,
+            context.id,
+            ConfigurationItemMappingCreate(
+                item_kind=ConfigurationItemKind.internal_requirement,
+                internal_object_type=FederatedInternalObjectType.requirement,
+                internal_object_id=requirement.id,
+                internal_object_version=requirement.version,
+                role_label="Tracked requirement",
+            ),
+        )
+        create_configuration_item_mapping(
+            session,
+            context.id,
+            ConfigurationItemMappingCreate(
+                item_kind=ConfigurationItemKind.external_artifact_version,
+                external_artifact_version_id=version.id,
+                role_label="Authoritative requirement source",
+            ),
+        )
+        non_conformity = create_non_conformity(
+            session,
+            NonConformityCreate(
+                project_id=project.id,
+                key="NC-H2-1",
+                title="Coverage non-conformity",
+                description="Regression note for coverage checks.",
+                status=NonConformityStatus.detected,
+                severity=Severity.medium,
+            ),
+        )
+        evidence = create_verification_evidence(
+            session,
+            VerificationEvidenceCreate(
+                project_id=project.id,
+                title="Coverage evidence",
+                evidence_type=VerificationEvidenceType.test_result,
+                summary="Verification evidence linked to the authored requirement and test case.",
+                observed_at=datetime.now(timezone.utc),
+                source_name="QA lab",
+                source_reference="QA-H2-1",
+                linked_requirement_ids=[requirement.id],
+                linked_test_case_ids=[test_case.id],
+                linked_non_conformity_ids=[non_conformity.id],
+            ),
+        )
+        create_link(
+            session,
+            LinkCreate(
+                project_id=project.id,
+                source_type=LinkObjectType.non_conformity,
+                source_id=non_conformity.id,
+                target_type=LinkObjectType.requirement,
+                target_id=requirement.id,
+                relation_type=RelationType.impacts,
+                rationale="Coverage issue impacts the requirement.",
+            ),
+        )
+
+        registry = get_authoritative_registry_summary(session, project.id)
+        context_detail = get_configuration_context_service(session, context.id)
+        non_conformity_detail = get_non_conformity_detail(session, non_conformity.id)
+        bundle = export_project_bundle(session, project.id)
+
+        assert registry.connectors == 1
+        assert registry.external_artifacts == 1
+        assert registry.external_artifact_versions == 1
+        assert context_detail["resolved_view"]["internal"]
+        assert context_detail["resolved_view"]["external"]
+        assert non_conformity_detail["verification_evidence"][0].id == evidence.id
+        assert bundle["connectors"][0]["name"] == "DOORS NG"
+        assert bundle["configuration_contexts"]
+        assert bundle["configuration_item_mappings"]
+        assert bundle["verification_evidence"]
+        assert bundle["non_conformities"]
+
+def test_json_import_creates_external_artifacts_and_verification_evidence():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-IMP-1", name="P-IMP-1", description=""))
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-IMP-1",
+                title="Imported requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+            ),
+        )
+        test_case = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key="TST-IMP-1",
+                title="Imported test case",
+                method=TestMethod.bench,
+                status=TestCaseStatus.approved,
+            ),
+        )
+
+        payload = ProjectImportCreate(
+            format="json",
+            content=json.dumps({
+                "external_artifacts": [
+                    {
+                        "record_type": "external_artifact",
+                        "external_id": "EXT-IMP-1",
+                        "artifact_type": "document",
+                        "name": "Imported document",
+                        "description": "Imported external artifact",
+                    }
+                ],
+                "verification_evidence": [
+                    {
+                        "record_type": "verification_evidence",
+                        "title": "Imported verification evidence",
+                        "evidence_type": "analysis",
+                        "summary": "Imported evidence from JSON.",
+                        "observed_at": datetime.now(timezone.utc).isoformat(),
+                        "source_name": "Import tool",
+                        "source_reference": "IMP-JSON-1",
+                        "linked_requirement_ids": [str(requirement.id)],
+                        "linked_test_case_ids": [str(test_case.id)],
+                    }
+                ],
+            }),
+        )
+
+        result = import_project_records(session, project.id, payload)
+        bundle = export_project_bundle(session, project.id)
+
+        assert result.summary.parsed_records == 2
+        assert result.summary.created_external_artifacts == 1
+        assert result.summary.created_verification_evidence == 1
+        assert result.external_artifacts[0].external_id == "EXT-IMP-1"
+        assert {item.object_id for item in result.verification_evidence[0].linked_objects} == {requirement.id, test_case.id}
+        assert any(item["external_id"] == "EXT-IMP-1" for item in bundle["external_artifacts"])
+        assert any(item["title"] == "Imported verification evidence" for item in bundle["verification_evidence"])

@@ -53,6 +53,7 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 
 ### C3 - Simulation evidence records
 
+- Status: Implemented in the current codebase.
 - Description: Add simulation-specific evidence records for model, scenario, input, and result capture.
 - Why it matters: simulation feedback needs its own semantics instead of hiding inside test runs.
 - Dependencies: C1.
@@ -62,6 +63,7 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 
 ### C4 - Operational evidence batches
 
+- Status: Implemented in the current codebase.
 - Description: Add operational or telemetry evidence batches that can be reviewed and attached to verification claims.
 - Why it matters: closed-loop feedback needs a stable ingestion shape without a streaming platform.
 - Dependencies: C1.
@@ -140,6 +142,7 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 
 ### F1 - JSON and CSV importer
 
+- Status: Implemented in the current codebase.
 - Description: Add simple import endpoints for external tool exports in JSON or CSV form.
 - Why it matters: it is the fastest practical path to demonstrate external federation without live integrations.
 - Dependencies: existing connector and external artifact models.
@@ -149,6 +152,7 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 
 ### F2 - SysML v2 mapping contract
 
+- Status: Implemented in the current codebase.
 - Description: Add a mapping layer from the current internal model to SysML v2-shaped concepts.
 - Why it matters: it gives the product a standards-aware path without pretending to be native SysML v2.
 - Dependencies: D1.
@@ -158,6 +162,7 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 
 ### F3 - STEP AP242 placeholder contract
 
+- Status: Implemented in the current codebase.
 - Description: Add a lightweight exchange contract for part metadata aligned to STEP AP242 semantics.
 - Why it matters: physical part linkage becomes more credible when the exchange shape is named.
 - Dependencies: existing external artifact model.
@@ -166,6 +171,8 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 - Complexity: S
 
 ### F4 - FMI placeholder contract
+
+- Status: implemented
 
 - Description: Add a lightweight exchange contract for model and simulation metadata aligned to FMI semantics.
 - Why it matters: simulation credibility improves when the exchange concept is explicit.
@@ -203,6 +210,9 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 - Suggested test coverage: data mapping tests, UI snapshot tests.
 - Complexity: M
 
+Status:
+Implemented as compact impact maps on requirement and change request detail pages.
+
 ## Epic H: Hardening, Tests, Docs
 
 ### H1 - Domain service split
@@ -214,6 +224,9 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 - Suggested test coverage: existing API regression tests, import smoke tests.
 - Complexity: L
 
+Status:
+Implemented with dedicated domain service entry points for impact and seed workflows while preserving the existing facade.
+
 ### H2 - Expanded backend coverage
 
 - Description: Add tests for configuration, evidence, non-conformity, and connector behavior.
@@ -223,9 +236,15 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 - Suggested test coverage: model tests, service tests, API tests, export tests.
 - Complexity: M
 
+Status:
+Implemented with a focused integration test covering configuration, connector, evidence, non-conformity, and export behavior.
+
 ### H3 - Aerospace demo narrative refresh
 
-- Description: Update seed data and copy so the drone scenario reads as mission need -> architecture -> parts -> evidence -> change.
+Status:
+Implemented with refreshed seed copy and docs that make the demo read as mission need -> architecture -> evidence -> change.
+
+- Description: Update seed data and copy so the drone scenario reads as mission need -> architecture -> evidence -> change.
 - Why it matters: the demo should communicate connective tissue value immediately.
 - Dependencies: D1, C1, E1.
 - Acceptance criteria: the workspace clearly shows the new aerospace story.
@@ -280,4 +299,3 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 6. Add connector import contracts and standards mappings.
 7. Add graph visualization and graph-aware traversal.
 8. Split the service layer and expand test coverage.
-

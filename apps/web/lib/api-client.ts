@@ -27,7 +27,13 @@ import type {
   ExternalArtifactType,
   ExternalArtifactVersion,
   ComponentDetail,
+  FMIContract,
+  FMIContractDetail,
+  ProjectImportFormat,
+  ProjectImportResponse,
   RequirementDetail,
+  SimulationEvidence,
+  SimulationEvidenceLinkObjectType,
   TestCaseDetail,
   VerificationEvidence,
   ReviewQueueResponse,
@@ -37,15 +43,19 @@ import type {
   MatrixResponse,
   OperationalRun,
   OperationalRunDetail,
+  OperationalEvidence,
+  OperationalEvidenceLinkObjectType,
   Project,
   Requirement,
   TestCase,
   TestRun,
   SysMLDerivationResponse,
+  SysMLMappingContractResponse,
   SysMLSatisfactionResponse,
   SysMLRelation,
   SysMLTreeResponse,
   SysMLVerificationResponse,
+  STEPAP242ContractResponse,
   WorkflowActionPayload,
   FederatedInternalObjectType,
 } from "./types";
@@ -123,6 +133,29 @@ export const api = {
   },
   createVerificationEvidence: (projectId: string, payload: Record<string, unknown>) => request<VerificationEvidence>(`/projects/${projectId}/verification-evidence`, { method: "POST", body: JSON.stringify(payload) }),
   verificationEvidenceDetail: (id: string) => request<VerificationEvidence>(`/verification-evidence/${id}`),
+  simulationEvidence: (projectId: string, query?: { internal_object_type?: SimulationEvidenceLinkObjectType; internal_object_id?: string }) => {
+    const qs = new URLSearchParams();
+    if (query?.internal_object_type && query.internal_object_id) {
+      qs.set("internal_object_type", query.internal_object_type);
+      qs.set("internal_object_id", query.internal_object_id);
+    }
+    return request<SimulationEvidence[]>(`/projects/${projectId}/simulation-evidence${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  createSimulationEvidence: (projectId: string, payload: Record<string, unknown>) => request<SimulationEvidence>(`/projects/${projectId}/simulation-evidence`, { method: "POST", body: JSON.stringify(payload) }),
+  simulationEvidenceDetail: (id: string) => request<SimulationEvidence>(`/simulation-evidence/${id}`),
+  fmiContracts: (projectId: string) => request<FMIContract[]>(`/projects/${projectId}/fmi-contracts`),
+  createFmiContract: (projectId: string, payload: Record<string, unknown>) => request<FMIContract>(`/projects/${projectId}/fmi-contracts`, { method: "POST", body: JSON.stringify(payload) }),
+  fmiContractDetail: (id: string) => request<FMIContractDetail>(`/fmi-contracts/${id}`),
+  operationalEvidence: (projectId: string, query?: { internal_object_type?: OperationalEvidenceLinkObjectType; internal_object_id?: string }) => {
+    const qs = new URLSearchParams();
+    if (query?.internal_object_type && query.internal_object_id) {
+      qs.set("internal_object_type", query.internal_object_type);
+      qs.set("internal_object_id", query.internal_object_id);
+    }
+    return request<OperationalEvidence[]>(`/projects/${projectId}/operational-evidence${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  createOperationalEvidence: (projectId: string, payload: Record<string, unknown>) => request<OperationalEvidence>(`/projects/${projectId}/operational-evidence`, { method: "POST", body: JSON.stringify(payload) }),
+  operationalEvidenceDetail: (id: string) => request<OperationalEvidence>(`/operational-evidence/${id}`),
   testRuns: (projectId: string) => request<TestRun[]>(`/test-runs?project_id=${projectId}`),
   operationalRuns: (projectId: string) => request<OperationalRun[]>(`/operational-runs?project_id=${projectId}`),
   operationalRun: (id: string) => request<OperationalRunDetail>(`/operational-runs/${id}`),
@@ -140,6 +173,8 @@ export const api = {
   sysmlSatisfaction: (projectId: string) => request<SysMLSatisfactionResponse>(`/projects/${projectId}/sysml/satisfaction`),
   sysmlVerification: (projectId: string) => request<SysMLVerificationResponse>(`/projects/${projectId}/sysml/verification`),
   sysmlDerivations: (projectId: string) => request<SysMLDerivationResponse>(`/projects/${projectId}/sysml/derivations`),
+  sysmlMappingContract: (projectId: string) => request<SysMLMappingContractResponse>(`/projects/${projectId}/sysml/mapping-contract`),
+  stepAP242Contract: (projectId: string) => request<STEPAP242ContractResponse>(`/projects/${projectId}/step-ap242-contract`),
   sysmlRelations: (projectId: string, query?: { object_type?: string; object_id?: string }) => {
     const qs = new URLSearchParams({ project_id: projectId });
     if (query?.object_type && query.object_id) {
@@ -196,6 +231,8 @@ export const api = {
   updateExternalArtifact: (id: string, payload: Record<string, unknown>) => request<ExternalArtifact>(`/external-artifacts/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   externalArtifactVersions: (id: string) => request<ExternalArtifactVersion[]>(`/external-artifacts/${id}/versions`),
   createExternalArtifactVersion: (id: string, payload: Record<string, unknown>) => request<ExternalArtifactVersion>(`/external-artifacts/${id}/versions`, { method: "POST", body: JSON.stringify(payload) }),
+  importProjectRecords: (projectId: string, payload: { format: ProjectImportFormat; content: string }) =>
+    request<ProjectImportResponse>(`/projects/${projectId}/imports`, { method: "POST", body: JSON.stringify(payload) }),
   artifactLinks: (projectId: string, query?: { internal_object_type?: FederatedInternalObjectType; internal_object_id?: string; external_artifact_id?: string }) => {
     const qs = new URLSearchParams();
     if (query?.internal_object_type && query.internal_object_id) {

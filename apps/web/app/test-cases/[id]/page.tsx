@@ -2,6 +2,8 @@ import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { ArtifactLinkForm } from "@/components/artifact-link-form";
 import { Badge, Button, Card, CardBody, CardHeader, SectionTitle } from "@/components/ui";
+import { SimulationEvidenceCard } from "@/components/simulation-evidence-card";
+import { SimulationEvidenceForm } from "@/components/simulation-evidence-form";
 import { SimulationEvidenceMetadata } from "@/components/simulation-evidence-metadata";
 import { VerificationEvidenceForm } from "@/components/verification-evidence-form";
 import { WorkflowActions } from "@/components/workflow-actions";
@@ -11,7 +13,10 @@ export const dynamic = "force-dynamic";
 export default async function TestCasePage({ params }: { params: { id: string } }) {
   const data = await api.testCase(params.id).catch(() => null);
   if (!data) return <div className="text-sm text-muted">Test case not found.</div>;
-  const artifacts = await api.externalArtifacts(data.test_case.project_id).catch(() => []);
+  const [artifacts, fmiContracts] = await Promise.all([
+    api.externalArtifacts(data.test_case.project_id).catch(() => []),
+    api.fmiContracts(data.test_case.project_id).catch(() => []),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -97,6 +102,32 @@ export default async function TestCasePage({ params }: { params: { id: string } 
           </CardBody>
         </Card>
         <Card>
+          <CardHeader><div className="font-semibold">Simulation evidence</div></CardHeader>
+          <CardBody className="space-y-4">
+            {data.simulation_evidence?.length ? (
+              <div className="space-y-4">
+                {data.simulation_evidence.map((evidence: any) => (
+                  <SimulationEvidenceCard key={evidence.id} evidence={evidence} objectHref={objectHref} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-line bg-panel2 p-4 text-sm text-muted">
+                No simulation evidence linked yet.
+              </div>
+            )}
+            <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
+              <div className="mb-3 text-sm font-medium">Add simulation evidence</div>
+              <SimulationEvidenceForm
+              projectId={data.test_case.project_id}
+              linkedTestCaseIds={[data.test_case.id]}
+              verificationEvidenceOptions={(data.verification_evidence || []).map((item: any) => ({ id: item.id, label: item.title }))}
+              fmiContractOptions={fmiContracts.map((item: any) => ({ id: item.id, label: `${item.key} - ${item.name}` }))}
+              lockedSubjectLabel={`${data.test_case.key} - ${data.test_case.title}`}
+            />
+            </div>
+          </CardBody>
+        </Card>
+        <Card>
           <CardHeader><div className="font-semibold">Linked external sources</div></CardHeader>
           <CardBody className="space-y-3">
             {(data.artifact_links || []).length ? (
@@ -141,4 +172,13 @@ export default async function TestCasePage({ params }: { params: { id: string } 
 
 function Row({ label, value }: { label: string; value: any }) {
   return <div className="flex items-center justify-between rounded-xl border border-line bg-panel2 p-3"><div className="text-sm text-muted">{label}</div><div className="text-sm font-medium">{value}</div></div>;
+}
+
+function objectHref(objectType: string, objectId: string) {
+  if (objectType === "requirement") return `/requirements/${objectId}`;
+  if (objectType === "test_case") return `/test-cases/${objectId}`;
+  if (objectType === "simulation_evidence") return `/simulation-evidence/${objectId}`;
+  if (objectType === "verification_evidence") return `/verification-evidence/${objectId}`;
+  if (objectType === "fmi_contract") return `/fmi-contracts/${objectId}`;
+  return null;
 }

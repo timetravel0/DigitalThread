@@ -16,6 +16,11 @@ export type TestCaseStatus = "draft" | "in_review" | "approved" | "rejected" | "
 export type TestRunResult = "passed" | "failed" | "partial";
 export type OperationalOutcome = "success" | "degraded" | "failure";
 export type VerificationEvidenceType = "test_result" | "simulation" | "telemetry" | "analysis" | "inspection" | "other";
+export type SimulationEvidenceResult = "passed" | "failed" | "partial";
+export type SimulationEvidenceLinkObjectType = "requirement" | "test_case" | "verification_evidence";
+export type OperationalEvidenceSourceType = "sensor" | "system";
+export type OperationalEvidenceQualityStatus = "good" | "warning" | "poor" | "unknown";
+export type OperationalEvidenceLinkObjectType = "requirement" | "verification_evidence";
 export type BaselineStatus = "draft" | "released" | "obsolete";
 export type BaselineObjectType = "requirement" | "block" | "component" | "test_case";
 export type LinkObjectType = "requirement" | "component" | "test_case" | "test_run" | "operational_run" | "change_request" | "non_conformity";
@@ -24,6 +29,7 @@ export type SysMLObjectType = "requirement" | "block" | "test_case" | "component
 export type SysMLRelationType = "satisfy" | "verify" | "deriveReqt" | "refine" | "trace" | "allocate" | "contain";
 export type BlockContainmentRelationType = "contains" | "composed_of";
 export type ChangeRequestStatus = "open" | "analysis" | "approved" | "rejected" | "implemented" | "closed";
+export type NonConformityDisposition = "accept" | "rework" | "reject";
 export type Severity = "low" | "medium" | "high" | "critical";
 export type ImpactLevel = "low" | "medium" | "high";
 export type ConnectorType = "doors" | "sysml" | "plm" | "simulation" | "test" | "telemetry" | "custom";
@@ -130,6 +136,8 @@ export interface RequirementDetail {
   links: Link[];
   artifact_links: ArtifactLink[];
   verification_evidence: VerificationEvidence[];
+  simulation_evidence: SimulationEvidence[];
+  operational_evidence: OperationalEvidence[];
   verification_evaluation: RequirementVerificationEvaluation;
   history: RevisionSnapshot[];
   impact: ImpactResponse;
@@ -140,6 +148,7 @@ export interface TestCaseDetail {
   links: Link[];
   artifact_links: ArtifactLink[];
   verification_evidence: VerificationEvidence[];
+  simulation_evidence: SimulationEvidence[];
   runs: TestRun[];
   history: RevisionSnapshot[];
   impact: ImpactResponse;
@@ -218,6 +227,71 @@ export interface VerificationEvidence {
   observed_at?: string | null;
   source_name?: string | null;
   source_reference?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  linked_objects: ObjectSummary[];
+}
+
+export interface SimulationEvidence {
+  id: ID;
+  project_id: ID;
+  title: string;
+  model_reference: string;
+  scenario_name: string;
+  input_summary?: string | null;
+  inputs_json: Record<string, unknown>;
+  expected_behavior: string;
+  observed_behavior: string;
+  result: SimulationEvidenceResult;
+  execution_timestamp: string;
+  fmi_contract_id?: ID | null;
+  fmi_contract_key?: string | null;
+  fmi_contract_name?: string | null;
+  fmi_contract_model_identifier?: string | null;
+  fmi_contract_model_version?: string | null;
+  fmi_contract_contract_version?: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  linked_objects: ObjectSummary[];
+}
+
+export interface FMIContract {
+  id: ID;
+  project_id: ID;
+  key: string;
+  name: string;
+  description: string;
+  model_identifier: string;
+  model_version?: string | null;
+  model_uri?: string | null;
+  adapter_profile?: string | null;
+  contract_version: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  linked_simulation_evidence_count: number;
+}
+
+export interface FMIContractDetail {
+  fmi_contract: FMIContract;
+  simulation_evidence: SimulationEvidence[];
+}
+
+export interface OperationalEvidence {
+  id: ID;
+  project_id: ID;
+  title: string;
+  source_name: string;
+  source_type: OperationalEvidenceSourceType;
+  captured_at: string;
+  coverage_window_start: string;
+  coverage_window_end: string;
+  observations_summary: string;
+  aggregated_observations_json: Record<string, unknown>;
+  quality_status: OperationalEvidenceQualityStatus;
+  derived_metrics_json: Record<string, unknown>;
   metadata_json: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -347,6 +421,94 @@ export interface SysMLDerivationResponse {
   rows: DerivationRow[];
 }
 
+export interface SysMLMappingSummary {
+  requirement_count: number;
+  block_count: number;
+  logical_block_count: number;
+  physical_block_count: number;
+  satisfy_relation_count: number;
+  verify_relation_count: number;
+  derive_relation_count: number;
+  contain_relation_count: number;
+}
+
+export interface SysMLRequirementMappingRow {
+  requirement: Requirement;
+  sysml_concept: string;
+  satisfy_blocks: ObjectSummary[];
+  verify_tests: ObjectSummary[];
+  derived_from: ObjectSummary[];
+  derived_requirements: ObjectSummary[];
+}
+
+export interface SysMLBlockMappingRow {
+  block: Block;
+  sysml_concept: string;
+  abstraction_level: AbstractionLevel;
+  profile_label: string;
+  contained_blocks: ObjectSummary[];
+  contained_in: ObjectSummary[];
+  satisfies_requirements: ObjectSummary[];
+}
+
+export interface SysMLMappingRelationRow {
+  relation_type: string;
+  source: ObjectSummary;
+  target: ObjectSummary;
+  semantics: string;
+}
+
+export interface SysMLMappingContractResponse {
+  contract_schema: string;
+  project: Project;
+  generated_at: string;
+  summary: SysMLMappingSummary;
+  requirements: SysMLRequirementMappingRow[];
+  blocks: SysMLBlockMappingRow[];
+  relations: SysMLMappingRelationRow[];
+}
+
+export interface STEPAP242Summary {
+  physical_component_count: number;
+  cad_artifact_count: number;
+  linked_cad_artifact_count: number;
+  identifier_count: number;
+}
+
+export interface STEPAP242IdentifierRow {
+  kind: string;
+  value: string;
+  source: string;
+}
+
+export interface STEPAP242PartRow {
+  component: Component;
+  part_number?: string | null;
+  version: number;
+  status: string;
+  supplier?: string | null;
+  profile_label: string;
+  identifiers: STEPAP242IdentifierRow[];
+  linked_cad_artifacts: ExternalArtifact[];
+}
+
+export interface STEPAP242RelationRow {
+  relation_type: string;
+  component: ObjectSummary;
+  cad_artifact: ExternalArtifact;
+  semantics: string;
+}
+
+export interface STEPAP242ContractResponse {
+  contract_schema: string;
+  project: Project;
+  generated_at: string;
+  summary: STEPAP242Summary;
+  parts: STEPAP242PartRow[];
+  cad_artifacts: ExternalArtifact[];
+  relations: STEPAP242RelationRow[];
+}
+
 export interface Link {
   id: ID;
   project_id: ID;
@@ -412,6 +574,8 @@ export interface NonConformity {
   title: string;
   description: string;
   status: "detected" | "analyzing" | "contained" | "corrected" | "verified" | "closed";
+  disposition?: NonConformityDisposition | null;
+  review_comment?: string | null;
   severity: Severity;
   created_at: string;
   updated_at: string;
@@ -420,6 +584,7 @@ export interface NonConformity {
 export interface NonConformityDetail {
   non_conformity: NonConformity;
   links: Link[];
+  related_requirements: ObjectSummary[];
   verification_evidence: VerificationEvidence[];
   impact: ImpactResponse;
   impact_summary: ObjectSummary[];
@@ -539,6 +704,22 @@ export interface ExternalArtifactDetail {
   external_artifact: ExternalArtifact;
   versions: ExternalArtifactVersion[];
   artifact_links: ArtifactLink[];
+}
+
+export type ProjectImportFormat = "json" | "csv";
+
+export interface ProjectImportSummary {
+  parsed_records: number;
+  created_external_artifacts: number;
+  created_verification_evidence: number;
+}
+
+export interface ProjectImportResponse {
+  project: Project;
+  summary: ProjectImportSummary;
+  external_artifacts: ExternalArtifact[];
+  verification_evidence: VerificationEvidence[];
+  warnings: string[];
 }
 
 export interface ConfigurationContextDetail {

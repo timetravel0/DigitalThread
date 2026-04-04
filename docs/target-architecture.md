@@ -42,7 +42,15 @@ That foundation gives the product a usable federation registry, a version pointe
 - `ConfigurationContext`: project-scoped cross-domain configuration snapshot.
 - `ConfigurationItemMapping`: selection record for internal or external versions in a context.
 
-### Next Required Entities
+### Evidence and Domain Extensions
+
+The following entities are already implemented in the current codebase and form part of the current foundation:
+
+- `VerificationEvidence`
+- `SimulationEvidence`
+- `OperationalEvidence`
+
+The architecture below still describes the intended semantics and extension path for these objects and the remaining related entities.
 
 #### VerificationEvidence
 
@@ -50,7 +58,7 @@ That foundation gives the product a usable federation registry, a version pointe
 - Key fields: `id`, `project_id`, `evidence_type`, `title`, `status`, `source_type`, `source_reference`, `observed_at`, `expected_outcome`, `actual_outcome`, `metadata_json`.
 - Relations: linked to requirements, tests, simulation records, telemetry batches, and non-conformities.
 - Why needed: test runs alone are not enough to drive closed-loop verification.
-- Phase: mandatory next.
+- Phase: implemented.
 
 #### SimulationEvidence
 
@@ -58,7 +66,7 @@ That foundation gives the product a usable federation registry, a version pointe
 - Key fields: `id`, `project_id`, `model_reference`, `scenario_name`, `inputs_json`, `expected_behavior_json`, `observed_behavior_json`, `result`, `run_at`.
 - Relations: linked to requirements and verification evidence.
 - Why needed: simulation feedback should be queryable and comparable on its own terms.
-- Phase: mandatory next if simulation is part of the demo story.
+- Phase: implemented.
 
 #### OperationalEvidence
 
@@ -66,7 +74,7 @@ That foundation gives the product a usable federation registry, a version pointe
 - Key fields: `id`, `project_id`, `source_name`, `captured_at`, `coverage_window`, `telemetry_json`, `quality_status`, `derived_metrics_json`.
 - Relations: linked to requirements and verification evidence.
 - Why needed: enables a practical digital-twin style feedback loop without a streaming platform.
-- Phase: mandatory for a credible closed-loop story.
+- Phase: implemented.
 
 #### NonConformity
 
@@ -99,6 +107,30 @@ That foundation gives the product a usable federation registry, a version pointe
 - Relations: linked to logical blocks, software modules, and external artifact versions.
 - Why needed: a physical realization model makes PLM linkage easier to explain.
 - Phase: optional if existing `Component` semantics remain sufficient.
+
+#### SysMLMappingContract
+
+- Purpose: expose the current internal model as a contract-shaped SysML v2-inspired mapping surface without replacing the native ThreadLite objects.
+- Key fields: project, requirement mappings, block mappings, explicit satisfy/verify/deriveReqt/contain relations, and summary counts.
+- Relations: derived from requirements, blocks, SysML relations, and block containments.
+- Why needed: standards alignment should be explicit and exportable even before any native SysML v2 engine exists.
+- Phase: implemented.
+
+#### STEPAP242Contract
+
+- Purpose: expose a lightweight AP242-style part contract from the current component and external-artifact model.
+- Key fields: project, part rows, part numbers, identifiers, linked cad_part artifacts, and summary counts.
+- Relations: derived from physical components, `cad_part` external artifacts, and artifact links.
+- Why needed: physical part interoperability should be explicit without introducing a CAD integration layer.
+- Phase: implemented.
+
+#### FMIContract
+
+- Purpose: expose a lightweight FMI-style model reference contract from the current simulation evidence and contract model.
+- Key fields: project, model identifier, model version, model URI, adapter profile, linked simulation evidence, and summary counts.
+- Relations: derived from simulation evidence, requirement links, and the placeholder contract record.
+- Why needed: simulation interoperability should be explicit without introducing an FMI runtime or adapter engine.
+- Phase: implemented.
 
 ## Traceability Model
 
@@ -135,7 +167,8 @@ This does not need to become an enterprise configuration engine. It only needs t
 
 The connector model should remain intentionally lightweight.
 
-- Start with fake, JSON, and CSV adapters.
+- JSON and CSV import adapters are already implemented as the first inbound contract.
+- Keep future fake adapters lightweight when they are added.
 - Store connector definitions as data, not code branches.
 - Keep authoritative references as metadata only.
 - Allow future REST integrations without changing the object model.
@@ -172,7 +205,7 @@ The major UI additions after federation are:
 - graph or relationship visualization,
 - logical vs physical traceability views,
 - standards and connector contract pages,
-- evidence-driven impact summaries.
+  - evidence-driven impact summaries and compact impact maps.
 
 The existing dashboard, project workspace, matrix, and detail pages should remain the backbone. New views should extend that backbone rather than replacing it.
 
@@ -215,4 +248,3 @@ The near-term product should optimize for:
 - and a defensible connective-layer position.
 
 The product should stay lightweight, but the semantics need to become stricter. The architecture must become more precise, not just larger.
-

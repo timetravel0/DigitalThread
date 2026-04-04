@@ -2,6 +2,10 @@
 
 from collections import defaultdict, deque
 from collections import Counter
+import csv
+import hashlib
+import io
+import json
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -20,6 +24,9 @@ OBJECT_MODELS = {
     "test_case": TestCase,
     "test_run": TestRun,
     "operational_run": OperationalRun,
+    "simulation_evidence": SimulationEvidence,
+    "fmi_contract": FMIContract,
+    "operational_evidence": OperationalEvidence,
     "baseline": Baseline,
     "change_request": ChangeRequest,
     "non_conformity": NonConformity,
@@ -61,6 +68,127 @@ def _items(result: Any) -> list[Any]:
 def _first_item(result: Any) -> Any | None:
     items = _items(result)
     return items[0] if items else None
+
+
+def _normalize_import_row(row: dict[str, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key, value in row.items():
+        if key is None:
+            continue
+        normalized[key.strip()] = value
+    return normalized
+
+
+def _parse_import_json(content: str) -> list[dict[str, Any]]:
+    parsed = json.loads(content)
+    if isinstance(parsed, list):
+        return [_normalize_import_row(item if isinstance(item, dict) else {"value": item}) for item in parsed]
+    if not isinstance(parsed, dict):
+        raise ValueError("JSON import content must be an object or array")
+    if "records" in parsed and isinstance(parsed["records"], list):
+        return [_normalize_import_row(item if isinstance(item, dict) else {"value": item}) for item in parsed["records"]]
+    if "items" in parsed and isinstance(parsed["items"], list):
+        return [_normalize_import_row(item if isinstance(item, dict) else {"value": item}) for item in parsed["items"]]
+    if "external_artifacts" in parsed or "verification_evidence" in parsed:
+        rows: list[dict[str, Any]] = []
+        for item in parsed.get("external_artifacts", []):
+            row = _normalize_import_row(item if isinstance(item, dict) else {"value": item})
+            row.setdefault("record_type", "external_artifact")
+            rows.append(row)
+        for item in parsed.get("verification_evidence", []):
+            row = _normalize_import_row(item if isinstance(item, dict) else {"value": item})
+            row.setdefault("record_type", "verification_evidence")
+            rows.append(row)
+        return rows
+    return [_normalize_import_row(parsed)]
+
+
+def _parse_import_csv(content: str) -> list[dict[str, Any]]:
+    reader = csv.DictReader(io.StringIO(content))
+    return [_normalize_import_row(row) for row in reader]
+
+
+def _parse_import_rows(format_name: str, content: str) -> list[dict[str, Any]]:
+    if format_name == "json":
+        return _parse_import_json(content)
+    if format_name == "csv":
+        return _parse_import_csv(content)
+    raise ValueError("Unsupported import format")
+
+
+def _parse_import_json_value(value: Any, label: str, default: Any = None) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, (dict, list, bool, int, float)):
+        return value
+    text = str(value).strip()
+    if not text:
+        return default
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{label} must be valid JSON") from exc
+
+
+def _parse_import_datetime(value: Any, label: str) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return _utc_datetime(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{label} must be an ISO datetime string") from exc
+    return _utc_datetime(parsed)
+
+
+def _parse_import_uuid(value: Any, label: str) -> UUID | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return UUID(text)
+    except ValueError as exc:
+        raise ValueError(f"{label} must be a valid UUID") from exc
+
+
+def _parse_import_uuid_list(value: Any, label: str) -> list[UUID]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        items = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return []
+        if text.startswith("["):
+            parsed = _parse_import_json_value(text, label, default=[])
+            if isinstance(parsed, list):
+                items = parsed
+            else:
+                raise ValueError(f"{label} must be a JSON array or semicolon-separated list")
+        else:
+            items = [item.strip() for item in text.split(";") if item.strip()]
+    parsed_ids: list[UUID] = []
+    for item in items:
+        parsed_ids.append(_parse_import_uuid(item, label) or UUID(int=0))
+    return [item for item in parsed_ids if item.int != 0]
+
+
+def _infer_import_record_type(row: dict[str, Any]) -> str | None:
+    record_type = str(row.get("record_type") or row.get("kind") or row.get("type") or "").strip().lower()
+    if record_type:
+        return record_type
+    if "artifact_type" in row or "external_id" in row or "canonical_uri" in row:
+        return "external_artifact"
+    if "evidence_type" in row or "observed_at" in row or "source_name" in row:
+        return "verification_evidence"
+    return None
 
 
 def _status_value(status: Any) -> str:
@@ -170,17 +298,45 @@ def _impact_context_internal_ids(session: Session, project_id: UUID) -> set[UUID
 
 
 def _snapshot(session: Session, object_type: str, obj: Any, summary: str | None = None, actor: str | None = None) -> None:
+    previous_snapshot = _first_item(
+        session.exec(
+            select(RevisionSnapshot)
+            .where(
+                RevisionSnapshot.project_id == obj.project_id,
+                RevisionSnapshot.object_type == object_type,
+                RevisionSnapshot.object_id == obj.id,
+            )
+            .order_by(desc(RevisionSnapshot.version))
+        )
+    )
+    snapshot_json = obj.model_dump(mode="json")
+    content_seed = json.dumps(
+        {
+            "project_id": str(obj.project_id),
+            "object_type": object_type,
+            "object_id": str(obj.id),
+            "version": getattr(obj, "version", 1),
+            "snapshot_json": snapshot_json,
+            "previous_snapshot_hash": previous_snapshot.snapshot_hash if previous_snapshot else None,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    snapshot_hash = hashlib.sha256(content_seed.encode("utf-8")).hexdigest()
     session.add(
         RevisionSnapshot(
             project_id=obj.project_id,
             object_type=object_type,
             object_id=obj.id,
             version=getattr(obj, "version", 1),
-            snapshot_json=obj.model_dump(mode="json"),
+            snapshot_json=snapshot_json,
+            snapshot_hash=snapshot_hash,
+            previous_snapshot_hash=previous_snapshot.snapshot_hash if previous_snapshot else None,
             changed_by=actor,
             change_summary=summary,
         )
     )
+    session.commit()
 
 
 def _log_action(
@@ -244,6 +400,24 @@ def resolve_object(session: Session, object_type: str, object_id: UUID) -> dict[
         label = obj.title
         code = obj.source_reference or obj.source_name
         status = obj.evidence_type
+        version = None
+    elif object_type == "simulation_evidence":
+        project_id = obj.project_id
+        label = obj.title
+        code = obj.model_reference
+        status = obj.result
+        version = None
+    elif object_type == "fmi_contract":
+        project_id = obj.project_id
+        label = obj.name
+        code = obj.model_identifier
+        status = obj.contract_version
+        version = obj.model_version
+    elif object_type == "operational_evidence":
+        project_id = obj.project_id
+        label = obj.title
+        code = obj.source_name
+        status = obj.quality_status
         version = None
     else:
         project_id = obj.project_id
@@ -323,6 +497,15 @@ def _resolve_external_artifact_version_for_project(
     return version, artifact, connector
 
 
+def _validate_fmi_contract(session: Session, contract_id: UUID, project_id: UUID) -> FMIContract:
+    contract = _get(session, FMIContract, contract_id)
+    if contract is None:
+        raise LookupError("FMI contract not found")
+    if contract.project_id != project_id:
+        raise ValueError("Referenced FMI contract must stay within the same project")
+    return contract
+
+
 def _ensure_configuration_context_mutable(context: ConfigurationContext) -> None:
     if (
         context.status in {ConfigurationContextStatus.frozen, ConfigurationContextStatus.obsolete}
@@ -337,6 +520,21 @@ def _artifact_read(session: Session, artifact: ExternalArtifact) -> ExternalArti
     read.connector_name = connector.name if connector else None
     read.connector_type = connector.connector_type if connector else None
     read.versions = list_external_artifact_versions(session, artifact.id)
+    return read
+
+
+def _fmi_contract_read(session: Session, contract: FMIContract) -> FMIContractRead:
+    read = FMIContractRead.model_validate(contract)
+    read.linked_simulation_evidence_count = len(
+        _items(
+            session.exec(
+                select(SimulationEvidence).where(
+                    SimulationEvidence.project_id == contract.project_id,
+                    SimulationEvidence.fmi_contract_id == contract.id,
+                )
+            )
+        )
+    )
     return read
 
 
@@ -888,6 +1086,7 @@ def export_project_bundle(session: Session, project_id: UUID) -> dict[str, Any]:
     project = get_project_service(session, project_id)
     connectors = list_connectors(session, project_id)
     external_artifacts = list_external_artifacts(session, project_id)
+    fmi_contracts = list_fmi_contracts(session, project_id)
     external_artifact_versions = [
         ExternalArtifactVersionRead.model_validate(item)
         for item in _items(
@@ -901,6 +1100,32 @@ def export_project_bundle(session: Session, project_id: UUID) -> dict[str, Any]:
     ]
     artifact_links = list_artifact_links(session, project_id)
     verification_evidence = list_verification_evidence(session, project_id)
+    simulation_evidence = list_simulation_evidence(session, project_id)
+    operational_evidence = list_operational_evidence(session, project_id)
+    sysml_mapping_contract = build_sysml_mapping_contract(session, project_id)
+    step_ap242_contract = build_step_ap242_contract(session, project_id)
+    operational_evidence_links = [
+        OperationalEvidenceLinkRead.model_validate(item).model_dump(mode="json")
+        for item in _items(
+            session.exec(
+                select(OperationalEvidenceLink)
+                .join(OperationalEvidence)
+                .where(OperationalEvidence.project_id == project_id)
+                .order_by(OperationalEvidenceLink.created_at, OperationalEvidenceLink.id)
+            )
+        )
+    ]
+    simulation_evidence_links = [
+        SimulationEvidenceLinkRead.model_validate(item).model_dump(mode="json")
+        for item in _items(
+            session.exec(
+                select(SimulationEvidenceLink)
+                .join(SimulationEvidence)
+                .where(SimulationEvidence.project_id == project_id)
+                .order_by(SimulationEvidenceLink.created_at, SimulationEvidenceLink.id)
+            )
+        )
+    ]
     configuration_contexts = list_configuration_contexts(session, project_id)
     configuration_item_mappings = [
         ConfigurationItemMappingRead.model_validate(item)
@@ -936,6 +1161,13 @@ def export_project_bundle(session: Session, project_id: UUID) -> dict[str, Any]:
         ],
         "non_conformities": [NonConformityRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(NonConformity).where(NonConformity.project_id == project_id)))],
         "verification_evidence": [evidence.model_dump(mode="json") for evidence in verification_evidence],
+        "simulation_evidence": [evidence.model_dump(mode="json") for evidence in simulation_evidence],
+        "simulation_evidence_links": simulation_evidence_links,
+        "fmi_contracts": [contract.model_dump(mode="json") for contract in fmi_contracts],
+        "operational_evidence": [evidence.model_dump(mode="json") for evidence in operational_evidence],
+        "operational_evidence_links": operational_evidence_links,
+        "sysml_mapping_contract": sysml_mapping_contract.model_dump(mode="json"),
+        "step_ap242_contract": step_ap242_contract.model_dump(mode="json"),
         "change_requests": [ChangeRequestRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project_id)))],
         "change_impacts": [ChangeImpactRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(ChangeImpact).join(ChangeRequest).where(ChangeRequest.project_id == project_id)))],
         "revision_snapshots": [RevisionSnapshotRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(RevisionSnapshot).where(RevisionSnapshot.project_id == project_id)))],
@@ -1409,6 +1641,215 @@ def build_derivation_view(session: Session, project_id: UUID) -> SysMLDerivation
     return SysMLDerivationResponse(project=project, rows=rows)
 
 
+def build_sysml_mapping_contract(session: Session, project_id: UUID) -> SysMLMappingContractResponse:
+    project = get_project_service(session, project_id)
+    requirements = list_requirements(session, project_id)
+    blocks = list_blocks(session, project_id)
+    sysml_relations = _items(
+        session.exec(
+            select(SysMLRelation)
+            .where(SysMLRelation.project_id == project_id)
+            .order_by(SysMLRelation.created_at, SysMLRelation.id)
+        )
+    )
+    containments = list_block_containments(session, project_id)
+
+    requirement_rows: dict[UUID, SysMLRequirementMappingRow] = {
+        requirement.id: SysMLRequirementMappingRow(requirement=requirement) for requirement in requirements
+    }
+    block_rows: dict[UUID, SysMLBlockMappingRow] = {
+        block.id: SysMLBlockMappingRow(
+            block=block,
+            abstraction_level=block.abstraction_level,
+            profile_label="Logical block" if block.abstraction_level == AbstractionLevel.logical else "Physical block",
+        )
+        for block in blocks
+    }
+    relation_rows: list[SysMLMappingRelationRow] = []
+    summary_counts = Counter(
+        {
+            "requirement": len(requirements),
+            "block": len(blocks),
+            "logical_block": 0,
+            "physical_block": 0,
+            "satisfy": 0,
+            "verify": 0,
+            "deriveReqt": 0,
+            "contain": 0,
+        }
+    )
+    for block in blocks:
+        if block.abstraction_level == AbstractionLevel.logical:
+            summary_counts["logical_block"] += 1
+        else:
+            summary_counts["physical_block"] += 1
+
+    for containment in containments:
+        parent = summarize(resolve_object(session, "block", containment.parent_block_id))
+        child = summarize(resolve_object(session, "block", containment.child_block_id))
+        relation_rows.append(
+            SysMLMappingRelationRow(
+                relation_type="contain",
+                source=parent,
+                target=child,
+                semantics="Block containment relation",
+            )
+        )
+        summary_counts["contain"] += 1
+        parent_row = block_rows.get(containment.parent_block_id)
+        if parent_row is not None:
+            parent_row.contained_blocks.append(child)
+        child_row = block_rows.get(containment.child_block_id)
+        if child_row is not None:
+            child_row.contained_in.append(parent)
+
+    for relation in sysml_relations:
+        source = summarize(resolve_object(session, relation.source_type.value, relation.source_id))
+        target = summarize(resolve_object(session, relation.target_type.value, relation.target_id))
+        relation_rows.append(
+            SysMLMappingRelationRow(
+                relation_type=relation.relation_type.value,
+                source=source,
+                target=target,
+                semantics=_sysml_mapping_semantics(relation.relation_type),
+            )
+        )
+        if relation.relation_type == SysMLRelationType.satisfy and relation.source_type == SysMLObjectType.block and relation.target_type == SysMLObjectType.requirement:
+            summary_counts["satisfy"] += 1
+            requirement_rows[target.object_id].satisfy_blocks.append(source)
+            block_rows[source.object_id].satisfies_requirements.append(target)
+        elif relation.relation_type == SysMLRelationType.verify and relation.source_type == SysMLObjectType.test_case and relation.target_type == SysMLObjectType.requirement:
+            summary_counts["verify"] += 1
+            requirement_rows[target.object_id].verify_tests.append(source)
+        elif relation.relation_type == SysMLRelationType.deriveReqt and relation.source_type == SysMLObjectType.requirement and relation.target_type == SysMLObjectType.requirement:
+            summary_counts["deriveReqt"] += 1
+            requirement_rows[source.object_id].derived_requirements.append(target)
+            requirement_rows[target.object_id].derived_from.append(source)
+
+    return SysMLMappingContractResponse(
+        project=project,
+        generated_at=utcnow(),
+        summary=SysMLMappingSummary(
+            requirement_count=summary_counts["requirement"],
+            block_count=summary_counts["block"],
+            logical_block_count=summary_counts["logical_block"],
+            physical_block_count=summary_counts["physical_block"],
+            satisfy_relation_count=summary_counts["satisfy"],
+            verify_relation_count=summary_counts["verify"],
+            derive_relation_count=summary_counts["deriveReqt"],
+            contain_relation_count=summary_counts["contain"],
+        ),
+        requirements=sorted(requirement_rows.values(), key=lambda row: row.requirement.key),
+        blocks=sorted(block_rows.values(), key=lambda row: row.block.key),
+        relations=relation_rows,
+    )
+
+
+def _sysml_mapping_semantics(relation_type: SysMLRelationType) -> str:
+    mapping = {
+        SysMLRelationType.satisfy: "Requirement satisfied by a block",
+        SysMLRelationType.verify: "Requirement verified by a test case",
+        SysMLRelationType.deriveReqt: "Derived requirement relationship",
+        SysMLRelationType.refine: "Requirement refinement relationship",
+        SysMLRelationType.trace: "General trace relationship",
+        SysMLRelationType.allocate: "Allocation relationship",
+        SysMLRelationType.contain: "Block containment relationship",
+    }
+    return mapping.get(relation_type, relation_type.value)
+
+
+def build_step_ap242_contract(session: Session, project_id: UUID) -> STEPAP242ContractResponse:
+    project = get_project_service(session, project_id)
+    components = list_components(session, project_id)
+    cad_artifacts = list_external_artifacts(session, project_id, artifact_type=ExternalArtifactType.cad_part)
+    artifact_links = _items(
+        session.exec(
+            select(ArtifactLink)
+            .where(
+                ArtifactLink.project_id == project_id,
+                ArtifactLink.internal_object_type == FederatedInternalObjectType.component,
+            )
+            .order_by(ArtifactLink.created_at, ArtifactLink.id)
+        )
+    )
+    cad_artifact_map = {artifact.id: artifact for artifact in cad_artifacts}
+    part_rows: list[STEPAP242PartRow] = []
+    relation_rows: list[STEPAP242RelationRow] = []
+    identifier_count = 0
+
+    links_by_component: dict[UUID, list[ArtifactLink]] = defaultdict(list)
+    for link in artifact_links:
+        if link.external_artifact_id in cad_artifact_map:
+            links_by_component[link.internal_object_id].append(link)
+
+    for component in components:
+        linked_artifacts: list[ExternalArtifactRead] = []
+        identifiers: list[STEPAP242IdentifierRow] = []
+        if component.part_number:
+            identifiers.append(STEPAP242IdentifierRow(kind="part_number", value=component.part_number, source="component"))
+        if component.part_number or links_by_component.get(component.id):
+            component_artifacts = []
+            seen_artifact_ids: set[UUID] = set()
+            for link in links_by_component.get(component.id, []):
+                artifact = cad_artifact_map.get(link.external_artifact_id)
+                if artifact is None or artifact.id in seen_artifact_ids:
+                    continue
+                seen_artifact_ids.add(artifact.id)
+                component_artifacts.append(artifact)
+                identifiers.append(STEPAP242IdentifierRow(kind="external_id", value=artifact.external_id, source="external_artifact"))
+                if artifact.canonical_uri:
+                    identifiers.append(STEPAP242IdentifierRow(kind="canonical_uri", value=artifact.canonical_uri, source="external_artifact"))
+                if artifact.native_tool_url:
+                    identifiers.append(STEPAP242IdentifierRow(kind="native_tool_url", value=artifact.native_tool_url, source="external_artifact"))
+                relation_rows.append(
+                    STEPAP242RelationRow(
+                        relation_type=link.relation_type.value,
+                        component=summarize(resolve_object(session, "component", component.id)),
+                        cad_artifact=artifact,
+                        semantics=_step_ap242_semantics(link.relation_type),
+                    )
+                )
+            linked_artifacts = component_artifacts
+            identifier_count += len(identifiers)
+            part_rows.append(
+                STEPAP242PartRow(
+                    component=ComponentRead.model_validate(component),
+                    part_number=component.part_number,
+                    version=component.version,
+                    status=_status_value(component.status),
+                    supplier=component.supplier,
+                    identifiers=identifiers,
+                    linked_cad_artifacts=linked_artifacts,
+                )
+            )
+
+    return STEPAP242ContractResponse(
+        project=project,
+        generated_at=utcnow(),
+        summary=STEPAP242Summary(
+            physical_component_count=len(part_rows),
+            cad_artifact_count=len(cad_artifacts),
+            linked_cad_artifact_count=len({artifact.id for row in part_rows for artifact in row.linked_cad_artifacts}),
+            identifier_count=identifier_count,
+        ),
+        parts=sorted(part_rows, key=lambda row: (row.component.key, row.part_number or "")),
+        cad_artifacts=sorted(cad_artifacts, key=lambda artifact: artifact.external_id),
+        relations=relation_rows,
+    )
+
+
+def _step_ap242_semantics(relation_type: ArtifactLinkRelationType) -> str:
+    mapping = {
+        ArtifactLinkRelationType.authoritative_reference: "Authoritative AP242 part reference",
+        ArtifactLinkRelationType.derived_from_external: "Derived from authoritative part",
+        ArtifactLinkRelationType.synchronized_with: "Synchronized AP242 part record",
+        ArtifactLinkRelationType.validated_against: "Validated against AP242 part version",
+        ArtifactLinkRelationType.exported_to: "Exported to AP242 target",
+        ArtifactLinkRelationType.maps_to: "ThreadLite part maps to AP242 part",
+    }
+    return mapping.get(relation_type, relation_type.value)
+
+
 def create_test_case(session: Session, payload: TestCaseCreate) -> TestCaseRead:
     item = TestCase.model_validate(payload)
     if item.status == TestCaseStatus.approved and item.approved_at is None:
@@ -1798,17 +2239,33 @@ def list_change_impacts(session: Session, change_request_id: UUID) -> list[Chang
 def create_non_conformity(session: Session, payload: NonConformityCreate) -> NonConformityRead:
     if _get(session, Project, payload.project_id) is None:
         raise LookupError("Project not found")
-    return _read(NonConformityRead, _add(session, NonConformity.model_validate(payload)))
+    item = _add(session, NonConformity.model_validate(payload))
+    _snapshot(session, "non_conformity", item, "Created non-conformity", None)
+    return _read(NonConformityRead, item)
 
 
 def update_non_conformity(session: Session, obj_id: UUID, payload: NonConformityUpdate) -> NonConformityRead:
     item = _get(session, NonConformity, obj_id)
     if item is None:
         raise LookupError("Non-conformity not found")
+    before_status = _status_value(item.status)
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(item, k, v)
     _touch(item)
-    return _read(NonConformityRead, _add(session, item))
+    _commit(session, item)
+    if before_status != _status_value(item.status) or payload.disposition is not None:
+        _log_action(
+            session,
+            object_type="non_conformity",
+            obj=item,
+            from_status=before_status,
+            to_status=_status_value(item.status),
+            action="update",
+            actor=None,
+            comment=payload.description,
+        )
+    _snapshot(session, "non_conformity", item, "Updated non-conformity", None)
+    return _read(NonConformityRead, item)
 
 
 def list_non_conformities(session: Session, project_id: UUID) -> list[NonConformityRead]:
@@ -1820,12 +2277,24 @@ def get_non_conformity_detail(session: Session, obj_id: UUID) -> dict[str, Any]:
     if item is None:
         raise LookupError("Non-conformity not found")
     impacts = list_links(session, item.project_id, "non_conformity", item.id)
+    impact_summary: list[ObjectSummary] = []
+    for link in impacts:
+        if link.source_type == LinkObjectType.non_conformity and link.target_type.value in OBJECT_MODELS:
+            impact_summary.append(summarize(resolve_object(session, link.target_type.value, link.target_id)))
+        elif link.target_type == LinkObjectType.non_conformity and link.source_type.value in OBJECT_MODELS:
+            impact_summary.append(summarize(resolve_object(session, link.source_type.value, link.source_id)))
+    related_requirements = [
+        summarize(resolve_object(session, link.target_type.value, link.target_id))
+        for link in impacts
+        if link.source_type == LinkObjectType.non_conformity and link.target_type == LinkObjectType.requirement
+    ]
     return {
         "non_conformity": NonConformityRead.model_validate(item),
         "links": impacts,
+        "related_requirements": related_requirements,
         "verification_evidence": list_verification_evidence(session, item.project_id, internal_object_type=FederatedInternalObjectType.non_conformity, internal_object_id=item.id),
         "impact": build_impact(session, item.project_id, "non_conformity", item.id),
-        "impact_summary": [summarize(resolve_object(session, x.object_type, x.object_id)) for x in impacts if x.object_type in OBJECT_MODELS],
+        "impact_summary": impact_summary,
     }
 
 
@@ -2016,6 +2485,40 @@ def build_impact(session: Session, project_id: UUID, object_type: str, object_id
                 continue
             add_edge("verification_evidence", evidence.id, link.internal_object_type.value, link.internal_object_id)
 
+    operational_rows = _items(
+        session.exec(
+            select(OperationalEvidence)
+            .where(OperationalEvidence.project_id == project_id)
+            .order_by(desc(OperationalEvidence.captured_at), desc(OperationalEvidence.created_at))
+        )
+    )
+    operational_links = (
+        _items(
+            session.exec(
+                select(OperationalEvidenceLink)
+                .where(OperationalEvidenceLink.operational_evidence_id.in_([row.id for row in operational_rows]))
+                .order_by(OperationalEvidenceLink.created_at, OperationalEvidenceLink.id)
+            )
+        )
+        if operational_rows
+        else []
+    )
+    operational_links_by_evidence: dict[UUID, list[OperationalEvidenceLink]] = defaultdict(list)
+    for link in operational_links:
+        operational_links_by_evidence[link.operational_evidence_id].append(link)
+    for evidence in operational_rows:
+        linked_ids = {
+            link.internal_object_id
+            for link in operational_links_by_evidence.get(evidence.id, [])
+            if link.internal_object_id is not None
+        }
+        if active_context_internal_ids and not linked_ids.intersection(active_context_internal_ids):
+            continue
+        for link in operational_links_by_evidence.get(evidence.id, []):
+            if link.internal_object_id is None:
+                continue
+            add_edge("operational_evidence", evidence.id, link.internal_object_type.value, link.internal_object_id)
+
     baseline_items = _items(session.exec(select(BaselineItem).join(Baseline).where(Baseline.project_id == project_id)))
     for item in baseline_items:
         add_edge("baseline", item.baseline_id, item.object_type.value, item.object_id)
@@ -2103,6 +2606,8 @@ def get_requirement_detail(session: Session, obj_id: UUID) -> dict[str, Any]:
         "links": list_links(session, item.project_id, "requirement", item.id),
         "artifact_links": list_artifact_links(session, item.project_id, internal_object_type=FederatedInternalObjectType.requirement, internal_object_id=item.id),
         "verification_evidence": list_verification_evidence(session, item.project_id, internal_object_type=FederatedInternalObjectType.requirement, internal_object_id=item.id),
+        "simulation_evidence": list_simulation_evidence(session, item.project_id, internal_object_type=SimulationEvidenceLinkObjectType.requirement, internal_object_id=item.id),
+        "operational_evidence": list_operational_evidence(session, item.project_id, internal_object_type=OperationalEvidenceLinkObjectType.requirement, internal_object_id=item.id),
         "verification_evaluation": _evaluate_requirement_verification(session, item),
         "history": list_requirement_history(session, item.id),
         "impact": build_impact(session, item.project_id, "requirement", item.id),
@@ -2133,6 +2638,7 @@ def get_test_case_detail(session: Session, obj_id: UUID) -> dict[str, Any]:
         "links": list_links(session, item.project_id, "test_case", item.id),
         "artifact_links": list_artifact_links(session, item.project_id, internal_object_type=FederatedInternalObjectType.test_case, internal_object_id=item.id),
         "verification_evidence": list_verification_evidence(session, item.project_id, internal_object_type=FederatedInternalObjectType.test_case, internal_object_id=item.id),
+        "simulation_evidence": list_simulation_evidence(session, item.project_id, internal_object_type=SimulationEvidenceLinkObjectType.test_case, internal_object_id=item.id),
         "runs": runs,
         "history": list_test_case_history(session, item.id),
         "impact": build_impact(session, item.project_id, "test_case", item.id),
@@ -2499,19 +3005,399 @@ def get_verification_evidence_service(session: Session, evidence_id: UUID) -> Ve
     return _verification_evidence_read(session, evidence)
 
 
+def import_project_records(session: Session, project_id: UUID, payload: ProjectImportCreate) -> ProjectImportResponse:
+    project = _get(session, Project, project_id)
+    if project is None:
+        raise LookupError("Project not found")
+
+    rows = _parse_import_rows(payload.format.value, payload.content)
+    created_external_artifacts: list[ExternalArtifactRead] = []
+    created_verification_evidence: list[VerificationEvidenceRead] = []
+    warnings: list[str] = []
+
+    for index, row in enumerate(rows, start=1):
+        if not row:
+            continue
+        record_type = _infer_import_record_type(row)
+        if record_type is None:
+            raise ValueError(f"Import row {index} is missing a record_type")
+
+        if record_type == "external_artifact":
+            artifact_type_raw = row.get("artifact_type")
+            name = str(row.get("name") or "").strip()
+            external_id = str(row.get("external_id") or "").strip()
+            if not external_id:
+                raise ValueError(f"Import row {index} is missing external_id")
+            if not name:
+                raise ValueError(f"Import row {index} is missing name")
+            if not artifact_type_raw:
+                raise ValueError(f"Import row {index} is missing artifact_type")
+            connector_definition_id = _parse_import_uuid(row.get("connector_definition_id"), f"Import row {index} connector_definition_id")
+            status_raw = str(row.get("status") or ExternalArtifactStatus.active.value).strip()
+            metadata_json = _parse_import_json_value(row.get("metadata_json"), f"Import row {index} metadata_json", default={})
+            description = row.get("description")
+            canonical_uri = row.get("canonical_uri")
+            native_tool_url = row.get("native_tool_url")
+            created = create_external_artifact(
+                session,
+                ExternalArtifactCreate(
+                    project_id=project_id,
+                    connector_definition_id=connector_definition_id,
+                    external_id=external_id,
+                    artifact_type=ExternalArtifactType(str(artifact_type_raw).strip().lower()),
+                    name=name,
+                    description=str(description).strip() if description is not None and str(description).strip() else None,
+                    canonical_uri=str(canonical_uri).strip() if canonical_uri is not None and str(canonical_uri).strip() else None,
+                    native_tool_url=str(native_tool_url).strip() if native_tool_url is not None and str(native_tool_url).strip() else None,
+                    status=ExternalArtifactStatus(status_raw.strip().lower()),
+                    metadata_json=metadata_json if isinstance(metadata_json, dict) else {},
+                ),
+            )
+            created_external_artifacts.append(created)
+            continue
+
+        if record_type == "verification_evidence":
+            title = str(row.get("title") or "").strip()
+            if not title:
+                raise ValueError(f"Import row {index} is missing title")
+            evidence_type_raw = row.get("evidence_type")
+            if not evidence_type_raw:
+                raise ValueError(f"Import row {index} is missing evidence_type")
+            linked_requirement_ids = _parse_import_uuid_list(row.get("linked_requirement_ids"), f"Import row {index} linked_requirement_ids")
+            linked_test_case_ids = _parse_import_uuid_list(row.get("linked_test_case_ids"), f"Import row {index} linked_test_case_ids")
+            linked_component_ids = _parse_import_uuid_list(row.get("linked_component_ids"), f"Import row {index} linked_component_ids")
+            linked_non_conformity_ids = _parse_import_uuid_list(row.get("linked_non_conformity_ids"), f"Import row {index} linked_non_conformity_ids")
+            if not linked_requirement_ids and not linked_test_case_ids and not linked_component_ids and not linked_non_conformity_ids:
+                raise ValueError(f"Import row {index} must link to at least one requirement, test case, component, or non-conformity")
+            metadata_json = _parse_import_json_value(row.get("metadata_json"), f"Import row {index} metadata_json", default={})
+            observed_at = _parse_import_datetime(row.get("observed_at"), f"Import row {index} observed_at")
+            created = create_verification_evidence(
+                session,
+                VerificationEvidenceCreate(
+                    project_id=project_id,
+                    title=title,
+                    evidence_type=VerificationEvidenceType(str(evidence_type_raw).strip().lower()),
+                    summary=str(row.get("summary") or "").strip(),
+                    observed_at=observed_at,
+                    source_name=str(row.get("source_name")).strip() if row.get("source_name") is not None and str(row.get("source_name")).strip() else None,
+                    source_reference=str(row.get("source_reference")).strip() if row.get("source_reference") is not None and str(row.get("source_reference")).strip() else None,
+                    metadata_json=metadata_json if isinstance(metadata_json, dict) else {},
+                    linked_requirement_ids=linked_requirement_ids,
+                    linked_test_case_ids=linked_test_case_ids,
+                    linked_component_ids=linked_component_ids,
+                    linked_non_conformity_ids=linked_non_conformity_ids,
+                ),
+            )
+            created_verification_evidence.append(created)
+            continue
+
+        warnings.append(f"Import row {index} ignored unsupported record_type '{record_type}'")
+
+    return ProjectImportResponse(
+        project=_read(ProjectRead, project),
+        summary=ProjectImportSummary(
+            parsed_records=len(rows),
+            created_external_artifacts=len(created_external_artifacts),
+            created_verification_evidence=len(created_verification_evidence),
+        ),
+        external_artifacts=created_external_artifacts,
+        verification_evidence=created_verification_evidence,
+        warnings=warnings,
+    )
+
+
+def _simulation_evidence_read(
+    session: Session,
+    evidence: SimulationEvidence,
+    linked_objects: list[SimulationEvidenceLink] | None = None,
+) -> SimulationEvidenceRead:
+    read = SimulationEvidenceRead.model_validate(evidence)
+    if evidence.fmi_contract_id is not None:
+        contract = _get(session, FMIContract, evidence.fmi_contract_id)
+        if contract is not None:
+            read.fmi_contract_id = contract.id
+            read.fmi_contract_key = contract.key
+            read.fmi_contract_name = contract.name
+            read.fmi_contract_model_identifier = contract.model_identifier
+            read.fmi_contract_model_version = contract.model_version
+            read.fmi_contract_contract_version = contract.contract_version
+    links = linked_objects if linked_objects is not None else _items(
+        session.exec(
+            select(SimulationEvidenceLink)
+            .where(SimulationEvidenceLink.simulation_evidence_id == evidence.id)
+            .order_by(SimulationEvidenceLink.created_at, SimulationEvidenceLink.id)
+        )
+    )
+    read.linked_objects = [summarize(resolve_object(session, link.internal_object_type.value, link.internal_object_id)) for link in links]
+    return read
+
+
+def _validate_simulation_evidence_link(
+    session: Session,
+    project_id: UUID,
+    object_type: SimulationEvidenceLinkObjectType,
+    object_id: UUID,
+) -> None:
+    resolved = resolve_object(session, object_type.value, object_id)
+    if resolved["project_id"] != project_id:
+        raise ValueError("Simulation evidence links must stay within the same project")
+
+
+def list_fmi_contracts(session: Session, project_id: UUID) -> list[FMIContractRead]:
+    rows = _items(
+        session.exec(
+            select(FMIContract)
+            .where(FMIContract.project_id == project_id)
+            .order_by(desc(FMIContract.created_at), FMIContract.key)
+        )
+    )
+    return [_fmi_contract_read(session, row) for row in rows]
+
+
+def create_fmi_contract(session: Session, payload: FMIContractCreate) -> FMIContractRead:
+    if _get(session, Project, payload.project_id) is None:
+        raise LookupError("Project not found")
+    contract = FMIContract(**payload.model_dump())
+    return _fmi_contract_read(session, _add(session, contract))
+
+
+def get_fmi_contract_service(session: Session, contract_id: UUID) -> FMIContractDetail:
+    contract = _get(session, FMIContract, contract_id)
+    if contract is None:
+        raise LookupError("FMI contract not found")
+    evidence_rows = [
+        evidence
+        for evidence in list_simulation_evidence(session, contract.project_id)
+        if evidence.fmi_contract_id == contract.id
+    ]
+    return FMIContractDetail(
+        fmi_contract=_fmi_contract_read(session, contract),
+        simulation_evidence=evidence_rows,
+    )
+
+
+def list_simulation_evidence(
+    session: Session,
+    project_id: UUID,
+    internal_object_type: SimulationEvidenceLinkObjectType | None = None,
+    internal_object_id: UUID | None = None,
+) -> list[SimulationEvidenceRead]:
+    evidence_rows = _items(
+        session.exec(
+            select(SimulationEvidence)
+            .where(SimulationEvidence.project_id == project_id)
+            .order_by(desc(SimulationEvidence.execution_timestamp), desc(SimulationEvidence.created_at))
+        )
+    )
+    if not evidence_rows:
+        return []
+    links = _items(
+        session.exec(
+            select(SimulationEvidenceLink)
+            .where(SimulationEvidenceLink.simulation_evidence_id.in_([row.id for row in evidence_rows]))
+            .order_by(SimulationEvidenceLink.created_at, SimulationEvidenceLink.id)
+        )
+    )
+    grouped: dict[UUID, list[SimulationEvidenceLink]] = defaultdict(list)
+    for link in links:
+        grouped[link.simulation_evidence_id].append(link)
+    reads: list[SimulationEvidenceRead] = []
+    for evidence in evidence_rows:
+        evidence_links = grouped.get(evidence.id, [])
+        if internal_object_type is not None and internal_object_id is not None:
+            if not any(link.internal_object_type == internal_object_type and link.internal_object_id == internal_object_id for link in evidence_links):
+                continue
+        reads.append(_simulation_evidence_read(session, evidence, evidence_links))
+    return reads
+
+
+def create_simulation_evidence(session: Session, payload: SimulationEvidenceCreate) -> SimulationEvidenceRead:
+    if _get(session, Project, payload.project_id) is None:
+        raise LookupError("Project not found")
+    linked_requirement_ids = list(dict.fromkeys(payload.linked_requirement_ids))
+    linked_test_case_ids = list(dict.fromkeys(payload.linked_test_case_ids))
+    linked_verification_evidence_ids = list(dict.fromkeys(payload.linked_verification_evidence_ids))
+    if payload.fmi_contract_id is not None:
+        _validate_fmi_contract(session, payload.fmi_contract_id, payload.project_id)
+    if not linked_requirement_ids and not linked_test_case_ids and not linked_verification_evidence_ids:
+        raise ValueError("Simulation evidence must link to at least one requirement, test case, or verification evidence")
+    for requirement_id in linked_requirement_ids:
+        _validate_simulation_evidence_link(session, payload.project_id, SimulationEvidenceLinkObjectType.requirement, requirement_id)
+    for test_case_id in linked_test_case_ids:
+        _validate_simulation_evidence_link(session, payload.project_id, SimulationEvidenceLinkObjectType.test_case, test_case_id)
+    for verification_evidence_id in linked_verification_evidence_ids:
+        _validate_simulation_evidence_link(session, payload.project_id, SimulationEvidenceLinkObjectType.verification_evidence, verification_evidence_id)
+    evidence = SimulationEvidence(**payload.model_dump(exclude={"linked_requirement_ids", "linked_test_case_ids", "linked_verification_evidence_ids"}))
+    link_rows: list[SimulationEvidenceLink] = []
+    for requirement_id in linked_requirement_ids:
+        link_rows.append(
+            SimulationEvidenceLink(
+                simulation_evidence_id=evidence.id,
+                internal_object_type=SimulationEvidenceLinkObjectType.requirement,
+                internal_object_id=requirement_id,
+            )
+        )
+    for test_case_id in linked_test_case_ids:
+        link_rows.append(
+            SimulationEvidenceLink(
+                simulation_evidence_id=evidence.id,
+                internal_object_type=SimulationEvidenceLinkObjectType.test_case,
+                internal_object_id=test_case_id,
+            )
+        )
+    for verification_evidence_id in linked_verification_evidence_ids:
+        link_rows.append(
+            SimulationEvidenceLink(
+                simulation_evidence_id=evidence.id,
+                internal_object_type=SimulationEvidenceLinkObjectType.verification_evidence,
+                internal_object_id=verification_evidence_id,
+            )
+        )
+    session.add(evidence)
+    for link in link_rows:
+        session.add(link)
+    session.commit()
+    session.refresh(evidence)
+    return _simulation_evidence_read(session, evidence, link_rows)
+
+
+def get_simulation_evidence_service(session: Session, evidence_id: UUID) -> SimulationEvidenceRead:
+    evidence = _get(session, SimulationEvidence, evidence_id)
+    if evidence is None:
+        raise LookupError("Simulation evidence not found")
+    return _simulation_evidence_read(session, evidence)
+
+
+def _operational_evidence_read(
+    session: Session,
+    evidence: OperationalEvidence,
+    linked_objects: list[OperationalEvidenceLink] | None = None,
+) -> OperationalEvidenceRead:
+    read = OperationalEvidenceRead.model_validate(evidence)
+    links = linked_objects if linked_objects is not None else _items(
+        session.exec(
+            select(OperationalEvidenceLink)
+            .where(OperationalEvidenceLink.operational_evidence_id == evidence.id)
+            .order_by(OperationalEvidenceLink.created_at, OperationalEvidenceLink.id)
+        )
+    )
+    read.linked_objects = [summarize(resolve_object(session, link.internal_object_type.value, link.internal_object_id)) for link in links]
+    return read
+
+
+def _validate_operational_evidence_link(
+    session: Session,
+    project_id: UUID,
+    object_type: OperationalEvidenceLinkObjectType,
+    object_id: UUID,
+) -> None:
+    resolved = resolve_object(session, object_type.value, object_id)
+    if resolved["project_id"] != project_id:
+        raise ValueError("Operational evidence links must stay within the same project")
+
+
+def list_operational_evidence(
+    session: Session,
+    project_id: UUID,
+    internal_object_type: OperationalEvidenceLinkObjectType | None = None,
+    internal_object_id: UUID | None = None,
+) -> list[OperationalEvidenceRead]:
+    evidence_rows = _items(
+        session.exec(
+            select(OperationalEvidence)
+            .where(OperationalEvidence.project_id == project_id)
+            .order_by(desc(OperationalEvidence.captured_at), desc(OperationalEvidence.created_at))
+        )
+    )
+    if not evidence_rows:
+        return []
+    links = _items(
+        session.exec(
+            select(OperationalEvidenceLink)
+            .where(OperationalEvidenceLink.operational_evidence_id.in_([row.id for row in evidence_rows]))
+            .order_by(OperationalEvidenceLink.created_at, OperationalEvidenceLink.id)
+        )
+    )
+    grouped: dict[UUID, list[OperationalEvidenceLink]] = defaultdict(list)
+    for link in links:
+        grouped[link.operational_evidence_id].append(link)
+    reads: list[OperationalEvidenceRead] = []
+    for evidence in evidence_rows:
+        evidence_links = grouped.get(evidence.id, [])
+        if internal_object_type is not None and internal_object_id is not None:
+            if not any(link.internal_object_type == internal_object_type and link.internal_object_id == internal_object_id for link in evidence_links):
+                continue
+        reads.append(_operational_evidence_read(session, evidence, evidence_links))
+    return reads
+
+
+def create_operational_evidence(session: Session, payload: OperationalEvidenceCreate) -> OperationalEvidenceRead:
+    if _get(session, Project, payload.project_id) is None:
+        raise LookupError("Project not found")
+    linked_requirement_ids = list(dict.fromkeys(payload.linked_requirement_ids))
+    linked_verification_evidence_ids = list(dict.fromkeys(payload.linked_verification_evidence_ids))
+    if not linked_requirement_ids and not linked_verification_evidence_ids:
+        raise ValueError("Operational evidence must link to at least one requirement or verification evidence")
+    if payload.coverage_window_end < payload.coverage_window_start:
+        raise ValueError("Operational evidence coverage window end must be after the start")
+    for requirement_id in linked_requirement_ids:
+        _validate_operational_evidence_link(session, payload.project_id, OperationalEvidenceLinkObjectType.requirement, requirement_id)
+    for verification_evidence_id in linked_verification_evidence_ids:
+        _validate_operational_evidence_link(session, payload.project_id, OperationalEvidenceLinkObjectType.verification_evidence, verification_evidence_id)
+    evidence = OperationalEvidence(**payload.model_dump(exclude={"linked_requirement_ids", "linked_verification_evidence_ids"}))
+    link_rows: list[OperationalEvidenceLink] = []
+    for requirement_id in linked_requirement_ids:
+        link_rows.append(
+            OperationalEvidenceLink(
+                operational_evidence_id=evidence.id,
+                internal_object_type=OperationalEvidenceLinkObjectType.requirement,
+                internal_object_id=requirement_id,
+            )
+        )
+    for verification_evidence_id in linked_verification_evidence_ids:
+        link_rows.append(
+            OperationalEvidenceLink(
+                operational_evidence_id=evidence.id,
+                internal_object_type=OperationalEvidenceLinkObjectType.verification_evidence,
+                internal_object_id=verification_evidence_id,
+            )
+        )
+    session.add(evidence)
+    for link in link_rows:
+        session.add(link)
+    session.commit()
+    session.refresh(evidence)
+    return _operational_evidence_read(session, evidence, link_rows)
+
+
+def get_operational_evidence_service(session: Session, evidence_id: UUID) -> OperationalEvidenceRead:
+    evidence = _get(session, OperationalEvidence, evidence_id)
+    if evidence is None:
+        raise LookupError("Operational evidence not found")
+    return _operational_evidence_read(session, evidence)
+
+
 def seed_demo(session: Session) -> dict[str, Any]:
     project = _first_item(session.exec(select(Project).where(Project.code == "DRONE-001")))
     if project is None:
-        project = _add(session, Project(code="DRONE-001", name="Inspection Drone MVP", description="Demo project for ThreadLite", status=ProjectStatus.active))
+        project = _add(
+            session,
+            Project(
+                code="DRONE-001",
+                name="Inspection Drone MVP",
+                description="Mission-driven drone demo that traces need -> design -> evidence -> change.",
+                status=ProjectStatus.active,
+            ),
+        )
 
     reqs = {}
     for p in [
-        {"project_id": project.id, "key": "DR-REQ-001", "title": "Drone shall fly for at least 30 minutes", "description": "Mission endurance target.", "category": RequirementCategory.performance, "priority": Priority.critical, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
-        {"project_id": project.id, "key": "DR-REQ-002", "title": "Drone shall stream real-time video to ground operator", "description": "Low latency live video stream.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
-        {"project_id": project.id, "key": "DR-REQ-003", "title": "Drone shall operate between -5C and 40C", "description": "Environmental envelope.", "category": RequirementCategory.environment, "priority": Priority.high, "verification_method": VerificationMethod.analysis, "status": RequirementStatus.in_review, "version": 1},
-        {"project_id": project.id, "key": "DR-REQ-004", "title": "Drone shall detect obstacles during low altitude flight", "description": "Safety obstacle detection.", "category": RequirementCategory.safety, "priority": Priority.critical, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
-        {"project_id": project.id, "key": "DR-REQ-005", "title": "Drone shall support remote monitoring of battery and mission status", "description": "Telemetry requirement.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.demonstration, "status": RequirementStatus.draft, "version": 1},
-        {"project_id": project.id, "key": "DR-REQ-006", "title": "Battery pack shall support mission reserve margin of 10 percent", "description": "Derived reserve requirement.", "category": RequirementCategory.performance, "priority": Priority.medium, "verification_method": VerificationMethod.analysis, "status": RequirementStatus.draft, "version": 1, "parent_requirement_id": None},
+        {"project_id": project.id, "key": "DR-REQ-001", "title": "Drone shall fly for at least 30 minutes", "description": "Mission endurance target for the inspection route, with reserve for recovery.", "category": RequirementCategory.performance, "priority": Priority.critical, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-REQ-002", "title": "Drone shall stream real-time video to ground operator", "description": "Operator situational awareness requirement for the inspection mission.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-REQ-003", "title": "Drone shall operate between -5C and 40C", "description": "Environmental constraint derived from the intended mission profile.", "category": RequirementCategory.environment, "priority": Priority.high, "verification_method": VerificationMethod.analysis, "status": RequirementStatus.in_review, "version": 1},
+        {"project_id": project.id, "key": "DR-REQ-004", "title": "Drone shall detect obstacles during low altitude flight", "description": "Safety requirement for the inspection route and landing approach.", "category": RequirementCategory.safety, "priority": Priority.critical, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-REQ-005", "title": "Drone shall support remote monitoring of battery and mission status", "description": "Ground-control visibility requirement for mission health and endurance.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.demonstration, "status": RequirementStatus.draft, "version": 1},
+        {"project_id": project.id, "key": "DR-REQ-006", "title": "Battery pack shall support mission reserve margin of 10 percent", "description": "Derived reserve requirement created from the endurance mission need.", "category": RequirementCategory.performance, "priority": Priority.medium, "verification_method": VerificationMethod.analysis, "status": RequirementStatus.draft, "version": 1, "parent_requirement_id": None},
     ]:
         item = _first_item(session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == p["key"])))
         reqs[p["key"]] = item or _add(session, Requirement.model_validate(p))
@@ -2527,13 +3413,13 @@ def seed_demo(session: Session) -> dict[str, Any]:
 
     blocks = {}
     for p in [
-        {"project_id": project.id, "key": "DR-BLK-001", "name": "Drone System", "description": "Top-level drone system.", "block_kind": BlockKind.system, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
-        {"project_id": project.id, "key": "DR-BLK-002", "name": "Power Subsystem", "description": "Power distribution and management.", "block_kind": BlockKind.subsystem, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
-        {"project_id": project.id, "key": "DR-BLK-003", "name": "Propulsion Subsystem", "description": "Lift and propulsion.", "block_kind": BlockKind.subsystem, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.in_review, "version": 1},
-        {"project_id": project.id, "key": "DR-BLK-004", "name": "Battery Pack", "description": "High density battery.", "block_kind": BlockKind.component, "abstraction_level": AbstractionLevel.physical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
-        {"project_id": project.id, "key": "DR-BLK-005", "name": "Flight Controller", "description": "Primary flight control unit.", "block_kind": BlockKind.component, "abstraction_level": AbstractionLevel.physical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
-        {"project_id": project.id, "key": "DR-BLK-006", "name": "Camera Module", "description": "Streaming camera.", "block_kind": BlockKind.component, "abstraction_level": AbstractionLevel.physical, "status": BlockStatus.draft, "version": 1},
-        {"project_id": project.id, "key": "DR-BLK-007", "name": "Obstacle Detection Subsystem", "description": "Obstacle sensing and avoidance.", "block_kind": BlockKind.subsystem, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-BLK-001", "name": "Drone System", "description": "Mission-level architecture for the inspection drone.", "block_kind": BlockKind.system, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-BLK-002", "name": "Power Subsystem", "description": "Logical power architecture for endurance and reserve management.", "block_kind": BlockKind.subsystem, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-BLK-003", "name": "Propulsion Subsystem", "description": "Logical lift and propulsion architecture for the mission profile.", "block_kind": BlockKind.subsystem, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.in_review, "version": 1},
+        {"project_id": project.id, "key": "DR-BLK-004", "name": "Battery Pack", "description": "Physical battery assembly selected to support endurance.", "block_kind": BlockKind.component, "abstraction_level": AbstractionLevel.physical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-BLK-005", "name": "Flight Controller", "description": "Physical controller coordinating flight, telemetry, and safety behavior.", "block_kind": BlockKind.component, "abstraction_level": AbstractionLevel.physical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-BLK-006", "name": "Camera Module", "description": "Physical inspection payload for live video evidence.", "block_kind": BlockKind.component, "abstraction_level": AbstractionLevel.physical, "status": BlockStatus.draft, "version": 1},
+        {"project_id": project.id, "key": "DR-BLK-007", "name": "Obstacle Detection Subsystem", "description": "Logical sensing and avoidance architecture for low-altitude safety.", "block_kind": BlockKind.subsystem, "abstraction_level": AbstractionLevel.logical, "status": BlockStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
     ]:
         item = _first_item(session.exec(select(Block).where(Block.project_id == project.id, Block.key == p["key"])))
         blocks[p["key"]] = item or _add(session, Block.model_validate(p))
@@ -2555,22 +3441,22 @@ def seed_demo(session: Session) -> dict[str, Any]:
 
     comps = {}
     for p in [
-        {"project_id": project.id, "key": "DR-CMP-001", "name": "Li-Ion Battery Pack", "description": "High density battery.", "type": ComponentType.battery, "part_number": "BAT-3000", "supplier": "VoltCraft", "status": ComponentStatus.selected, "version": 1, "metadata_json": {"capacity_mah": 12000}},
-        {"project_id": project.id, "key": "DR-CMP-002", "name": "Brushless Motor Set", "description": "Lift motors.", "type": ComponentType.motor, "part_number": "MTR-2208", "supplier": "AeroSpin", "status": ComponentStatus.selected, "version": 1, "metadata_json": {"kv": 920}},
-        {"project_id": project.id, "key": "DR-CMP-003", "name": "Flight Controller", "description": "Primary flight control unit.", "type": ComponentType.flight_controller, "part_number": "FC-REV2", "supplier": "SkyLogic", "status": ComponentStatus.validated, "version": 2, "metadata_json": {"firmware": "1.4.3"}},
-        {"project_id": project.id, "key": "DR-CMP-004", "name": "Camera Module", "description": "Streaming camera.", "type": ComponentType.camera, "part_number": "CAM-1080P", "supplier": "OptiView", "status": ComponentStatus.validated, "version": 1, "metadata_json": {"resolution": "1080p"}},
-        {"project_id": project.id, "key": "DR-CMP-005", "name": "Obstacle Sensor", "description": "Obstacle detection sensor.", "type": ComponentType.sensor, "part_number": "OBS-LIDAR-1", "supplier": "SenseWorks", "status": ComponentStatus.selected, "version": 1, "metadata_json": {"range_m": 18}},
-        {"project_id": project.id, "key": "DR-CMP-006", "name": "Flight Software", "description": "Autonomy and control software.", "type": ComponentType.software_module, "part_number": "SW-FLT-1", "supplier": "ThreadLite Labs", "status": ComponentStatus.validated, "version": 3, "metadata_json": {"repository": "git@example.com:drone/flight.git", "branch": "main", "entry_point": "src/autonomy/main.py"}},
+        {"project_id": project.id, "key": "DR-CMP-001", "name": "Li-Ion Battery Pack", "description": "Physical battery pack sized for the endurance target.", "type": ComponentType.battery, "part_number": "BAT-3000", "supplier": "VoltCraft", "status": ComponentStatus.selected, "version": 1, "metadata_json": {"capacity_mah": 12000}},
+        {"project_id": project.id, "key": "DR-CMP-002", "name": "Brushless Motor Set", "description": "Physical lift motors used in the propulsion chain.", "type": ComponentType.motor, "part_number": "MTR-2208", "supplier": "AeroSpin", "status": ComponentStatus.selected, "version": 1, "metadata_json": {"kv": 920}},
+        {"project_id": project.id, "key": "DR-CMP-003", "name": "Flight Controller", "description": "Physical controller implementing mission behavior and telemetry.", "type": ComponentType.flight_controller, "part_number": "FC-REV2", "supplier": "SkyLogic", "status": ComponentStatus.validated, "version": 2, "metadata_json": {"firmware": "1.4.3"}},
+        {"project_id": project.id, "key": "DR-CMP-004", "name": "Camera Module", "description": "Physical payload for the inspection video stream.", "type": ComponentType.camera, "part_number": "CAM-1080P", "supplier": "OptiView", "status": ComponentStatus.validated, "version": 1, "metadata_json": {"resolution": "1080p"}},
+        {"project_id": project.id, "key": "DR-CMP-005", "name": "Obstacle Sensor", "description": "Physical sensing hardware for low-altitude obstacle detection.", "type": ComponentType.sensor, "part_number": "OBS-LIDAR-1", "supplier": "SenseWorks", "status": ComponentStatus.selected, "version": 1, "metadata_json": {"range_m": 18}},
+        {"project_id": project.id, "key": "DR-CMP-006", "name": "Flight Software", "description": "Software realization of autonomy, telemetry, and control.", "type": ComponentType.software_module, "part_number": "SW-FLT-1", "supplier": "ThreadLite Labs", "status": ComponentStatus.validated, "version": 3, "metadata_json": {"repository": "git@example.com:drone/flight.git", "branch": "main", "entry_point": "src/autonomy/main.py"}},
     ]:
         item = _first_item(session.exec(select(Component).where(Component.project_id == project.id, Component.key == p["key"])))
         comps[p["key"]] = item or _add(session, Component.model_validate(p))
 
     tests = {}
     for p in [
-        {"project_id": project.id, "key": "DR-TST-001", "title": "Flight Endurance Test", "description": "Validate endurance.", "method": TestMethod.field, "status": TestCaseStatus.ready, "version": 1},
-        {"project_id": project.id, "key": "DR-TST-002", "title": "Video Streaming Test", "description": "Validate video pipeline.", "method": TestMethod.bench, "status": TestCaseStatus.ready, "version": 1},
-        {"project_id": project.id, "key": "DR-TST-003", "title": "Temperature Envelope Test", "description": "Validate temperature range.", "method": TestMethod.simulation, "status": TestCaseStatus.ready, "version": 1},
-        {"project_id": project.id, "key": "DR-TST-004", "title": "Obstacle Detection Test", "description": "Validate obstacle detection.", "method": TestMethod.field, "status": TestCaseStatus.ready, "version": 1},
+        {"project_id": project.id, "key": "DR-TST-001", "title": "Flight Endurance Test", "description": "Verification step for the mission endurance target.", "method": TestMethod.field, "status": TestCaseStatus.ready, "version": 1},
+        {"project_id": project.id, "key": "DR-TST-002", "title": "Video Streaming Test", "description": "Verification step for operator video awareness.", "method": TestMethod.bench, "status": TestCaseStatus.ready, "version": 1},
+        {"project_id": project.id, "key": "DR-TST-003", "title": "Temperature Envelope Test", "description": "Simulation-based verification of environmental limits.", "method": TestMethod.simulation, "status": TestCaseStatus.ready, "version": 1},
+        {"project_id": project.id, "key": "DR-TST-004", "title": "Obstacle Detection Test", "description": "Verification step for low-altitude safety behavior.", "method": TestMethod.field, "status": TestCaseStatus.ready, "version": 1},
     ]:
         item = _first_item(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == p["key"])))
         tests[p["key"]] = item or _add(session, TestCase.model_validate(p))
@@ -2629,7 +3515,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {
             "title": "Endurance verification evidence",
             "evidence_type": VerificationEvidenceType.test_result,
-            "summary": "Seeded endurance evidence tied to the first flight test.",
+            "summary": "Flight endurance evidence showing the mission falls short of the 30 minute target.",
             "observed_at": datetime.now(timezone.utc),
             "source_name": "QA Lab",
             "source_reference": "DR-TST-001",
@@ -2639,7 +3525,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {
             "title": "Streaming verification evidence",
             "evidence_type": VerificationEvidenceType.test_result,
-            "summary": "Seeded streaming evidence tied to the video test.",
+            "summary": "Video stream evidence showing the operator view is available during the mission.",
             "observed_at": datetime.now(timezone.utc),
             "source_name": "QA Lab",
             "source_reference": "DR-TST-002",
@@ -2649,7 +3535,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {
             "title": "Thermal simulation evidence",
             "evidence_type": VerificationEvidenceType.simulation,
-            "summary": "Seeded simulation evidence for the temperature envelope requirement.",
+            "summary": "Thermal simulation evidence showing the environment remains inside the declared envelope.",
             "observed_at": datetime.now(timezone.utc),
             "source_name": "Simulink Verification Export",
             "source_reference": "SIM-THERM-001",
@@ -2667,7 +3553,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {
             "title": "Obstacle verification evidence",
             "evidence_type": VerificationEvidenceType.test_result,
-            "summary": "Seeded obstacle verification evidence.",
+            "summary": "Obstacle verification evidence showing low-altitude safety checks are in place.",
             "observed_at": datetime.now(timezone.utc),
             "source_name": "QA Lab",
             "source_reference": "DR-TST-004",
@@ -2677,7 +3563,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {
             "title": "Flight software runtime evidence",
             "evidence_type": VerificationEvidenceType.telemetry,
-            "summary": "Software module telemetry confirms the flight-control pipeline is active.",
+            "summary": "Software telemetry evidence confirming the mission-control pipeline is active.",
             "observed_at": datetime.now(timezone.utc),
             "source_name": "Flight Software",
             "source_reference": "DR-CMP-006",
@@ -2700,10 +3586,111 @@ def seed_demo(session: Session) -> dict[str, Any]:
                     source_reference=p["source_reference"],
                     metadata_json=p.get("metadata_json", {}),
                     linked_requirement_ids=p["linked_requirement_ids"],
-                    linked_test_case_ids=p["linked_test_case_ids"],
-                    linked_component_ids=p.get("linked_component_ids", []),
-                ),
+                linked_test_case_ids=p["linked_test_case_ids"],
+                linked_component_ids=p.get("linked_component_ids", []),
+            ),
+        )
+
+    thermal_verification_evidence = _first_item(
+        session.exec(
+            select(VerificationEvidence).where(
+                VerificationEvidence.project_id == project.id,
+                VerificationEvidence.title == "Thermal simulation evidence",
             )
+        )
+    )
+    endurance_verification_evidence = _first_item(
+        session.exec(
+            select(VerificationEvidence).where(
+                VerificationEvidence.project_id == project.id,
+                VerificationEvidence.title == "Endurance verification evidence",
+            )
+        )
+    )
+    fmi_contract = _first_item(
+        session.exec(
+            select(FMIContract).where(
+                FMIContract.project_id == project.id,
+                FMIContract.key == "FMI-THERMAL-001",
+            )
+        )
+    )
+    if fmi_contract is None:
+        fmi_contract = _add(
+            session,
+            FMIContract(
+                project_id=project.id,
+                key="FMI-THERMAL-001",
+                name="Thermal Envelope FMI Placeholder",
+                description="Placeholder FMI-style contract for the endurance simulation model used in the mission narrative.",
+                model_identifier="SIM-FLIGHT-ENDURANCE",
+                model_version="1.4",
+                model_uri="federation://SIM-FLIGHT-ENDURANCE",
+                adapter_profile="simulink-placeholder",
+                contract_version="fmi.placeholder.v1",
+                metadata_json={"seeded": True, "adapter_capability": "simulation_metadata"},
+            ),
+        )
+    if not session.exec(
+        select(SimulationEvidence).where(
+            SimulationEvidence.project_id == project.id,
+            SimulationEvidence.title == "Thermal simulation result",
+        )
+    ).first():
+        create_simulation_evidence(
+            session,
+            SimulationEvidenceCreate(
+                project_id=project.id,
+                title="Thermal simulation result",
+                model_reference="Endurance Model",
+                scenario_name="Thermal envelope validation",
+                input_summary="Ambient temperature sweep from -6C to 41C.",
+                inputs_json={"ambient_low_c": -6, "ambient_high_c": 41},
+                expected_behavior="Maintain thermal envelope and preserve margin.",
+                observed_behavior="Simulation maintained the thermal envelope with 1.0C margin.",
+                result=SimulationEvidenceResult.passed,
+                execution_timestamp=datetime.now(timezone.utc),
+                fmi_contract_id=fmi_contract.id,
+                metadata_json={"contract_reference": "FMI-placeholder:THERMAL-ENVELOPE"},
+                linked_requirement_ids=[reqs["DR-REQ-003"].id],
+                linked_test_case_ids=[tests["DR-TST-003"].id],
+                linked_verification_evidence_ids=[thermal_verification_evidence.id] if thermal_verification_evidence else [],
+            ),
+        )
+
+    if not session.exec(
+        select(OperationalEvidence).where(
+            OperationalEvidence.project_id == project.id,
+            OperationalEvidence.title == "Endurance field evidence batch",
+        )
+    ).first():
+        create_operational_evidence(
+            session,
+            OperationalEvidenceCreate(
+                project_id=project.id,
+                title="Endurance field evidence batch",
+                source_name="Telemetry aggregator",
+                source_type=OperationalEvidenceSourceType.system,
+                captured_at=datetime.now(timezone.utc),
+                coverage_window_start=datetime.now(timezone.utc) - timedelta(minutes=22),
+                coverage_window_end=datetime.now(timezone.utc),
+                observations_summary="Aggregated field telemetry from the endurance mission and the resulting change trigger.",
+                aggregated_observations_json={
+                    "duration_minutes": 22,
+                    "battery_consumption_pct": 88,
+                    "altitude_m": 43,
+                    "return_to_home": True,
+                },
+                quality_status=OperationalEvidenceQualityStatus.warning,
+                derived_metrics_json={
+                    "coverage_minutes": 22,
+                    "low_battery_warning": True,
+                },
+                metadata_json={"contract_reference": "OP-EVBATCH:DR-RUN-001"},
+                linked_requirement_ids=[reqs["DR-REQ-001"].id],
+                linked_verification_evidence_ids=[endurance_verification_evidence.id] if endurance_verification_evidence else [],
+            ),
+        )
 
     run = _first_item(session.exec(select(OperationalRun).where(OperationalRun.project_id == project.id, OperationalRun.key == "DR-RUN-001")))
     if run is None:
@@ -2722,16 +3709,28 @@ def seed_demo(session: Session) -> dict[str, Any]:
 
     cr = _first_item(session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project.id, ChangeRequest.key == "CR-001")))
     if cr is None:
-        cr = _add(session, ChangeRequest(project_id=project.id, key="CR-001", title="Increase battery endurance to support 35 minutes target", description="Investigate battery and propulsion changes to reach target endurance.", status=ChangeRequestStatus.open, severity=Severity.high))
+        cr = _add(session, ChangeRequest(project_id=project.id, key="CR-001", title="Increase battery endurance to support 35 minutes target", description="Change request raised after endurance evidence showed the mission stops short of the target. Investigate battery and propulsion changes to close the gap.", status=ChangeRequestStatus.open, severity=Severity.high))
     if not session.exec(select(ChangeImpact).where(ChangeImpact.change_request_id == cr.id)).first():
-        _add(session, ChangeImpact(change_request_id=cr.id, object_type="component", object_id=comps["DR-CMP-001"].id, impact_level=ImpactLevel.high, notes="Battery pack is primary driver."))
-        _add(session, ChangeImpact(change_request_id=cr.id, object_type="component", object_id=comps["DR-CMP-002"].id, impact_level=ImpactLevel.medium, notes="Motors influence power draw."))
-        _add(session, ChangeImpact(change_request_id=cr.id, object_type="requirement", object_id=reqs["DR-REQ-001"].id, impact_level=ImpactLevel.high, notes="Endurance requirement needs revision."))
-        _add(session, ChangeImpact(change_request_id=cr.id, object_type="test_case", object_id=tests["DR-TST-001"].id, impact_level=ImpactLevel.medium, notes="Endurance verification test likely changes."))
+        _add(session, ChangeImpact(change_request_id=cr.id, object_type="component", object_id=comps["DR-CMP-001"].id, impact_level=ImpactLevel.high, notes="Battery pack is the primary design driver behind the endurance gap."))
+        _add(session, ChangeImpact(change_request_id=cr.id, object_type="component", object_id=comps["DR-CMP-002"].id, impact_level=ImpactLevel.medium, notes="Motors affect power draw and endurance margin."))
+        _add(session, ChangeImpact(change_request_id=cr.id, object_type="requirement", object_id=reqs["DR-REQ-001"].id, impact_level=ImpactLevel.high, notes="Mission endurance requirement needs revision or decomposition."))
+        _add(session, ChangeImpact(change_request_id=cr.id, object_type="test_case", object_id=tests["DR-TST-001"].id, impact_level=ImpactLevel.medium, notes="Endurance verification test likely changes as the design is updated."))
 
     nc = _first_item(session.exec(select(NonConformity).where(NonConformity.project_id == project.id, NonConformity.key == "NC-001")))
     if nc is None:
-        nc = _add(session, NonConformity(project_id=project.id, key="NC-001", title="Battery pack overheating during endurance run", description="Observed battery thermal excursion above nominal limits.", status=NonConformityStatus.analyzing, severity=Severity.high))
+        nc = _add(
+            session,
+            NonConformity(
+                project_id=project.id,
+                key="NC-001",
+                title="Battery pack overheating during endurance run",
+                description="Observed battery thermal excursion above nominal limits.",
+                status=NonConformityStatus.analyzing,
+                disposition=NonConformityDisposition.rework,
+                review_comment="Investigate thermal mitigation before closing the deviation.",
+                severity=Severity.high,
+            ),
+        )
     if not session.exec(
         select(Link).where(
             Link.project_id == project.id,

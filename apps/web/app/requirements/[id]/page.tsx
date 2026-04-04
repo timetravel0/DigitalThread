@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { ArtifactLinkForm } from "@/components/artifact-link-form";
+import { ImpactVisualization, type ImpactVisualizationNode, type ImpactVisualizationSection } from "@/components/impact-visualization";
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, SectionTitle } from "@/components/ui";
+import { OperationalEvidenceCard } from "@/components/operational-evidence-card";
+import { OperationalEvidenceForm } from "@/components/operational-evidence-form";
+import { SimulationEvidenceCard } from "@/components/simulation-evidence-card";
+import { SimulationEvidenceForm } from "@/components/simulation-evidence-form";
 import { SimulationEvidenceMetadata } from "@/components/simulation-evidence-metadata";
 import { VerificationEvidenceForm } from "@/components/verification-evidence-form";
 import { WorkflowActions } from "@/components/workflow-actions";
@@ -11,7 +16,50 @@ export const dynamic = "force-dynamic";
 export default async function RequirementPage({ params }: { params: { id: string } }) {
   const data = await api.requirement(params.id).catch(() => null);
   if (!data) return <div className="text-sm text-muted">Requirement not found.</div>;
-  const artifacts = await api.externalArtifacts(data.requirement.project_id).catch(() => []);
+  const [artifacts, fmiContracts] = await Promise.all([
+    api.externalArtifacts(data.requirement.project_id).catch(() => []),
+    api.fmiContracts(data.requirement.project_id).catch(() => []),
+  ]);
+  const impactSections = [
+    {
+      title: "Direct impacts",
+      description: "Objects immediately connected to the requirement.",
+      tone: "accent",
+      items: (data.impact.direct || []).map((item: any) => impactNode(item, objectHref)),
+      emptyText: "No direct impacts detected yet.",
+    },
+    {
+      title: "Secondary impacts",
+      description: "Objects reached through the next hop in the impact traversal.",
+      tone: "warning",
+      items: (data.impact.secondary || []).map((item: any) => impactNode(item, objectHref)),
+      emptyText: "No secondary impacts detected yet.",
+    },
+    {
+      title: "Related baselines",
+      description: "Approved snapshots that include this requirement or its dependencies.",
+      tone: "neutral",
+      items: (data.impact.related_baselines || []).map((item: any) => ({
+        label: item.name,
+        objectType: "baseline",
+        href: `/baselines/${item.id}`,
+        meta: `${item.status} snapshot`,
+      })),
+      emptyText: "No related baselines found.",
+    },
+    {
+      title: "Open change requests",
+      description: "Active change records that may affect this requirement.",
+      tone: "danger",
+      items: (data.impact.open_change_requests || []).map((item: any) => ({
+        label: `${item.key} - ${item.title}`,
+        objectType: "change_request",
+        href: `/change-requests/${item.id}`,
+        meta: `${item.status} · ${item.severity}`,
+      })),
+      emptyText: "No open change requests found.",
+    },
+  ] satisfies ImpactVisualizationSection[];
 
   return (
     <div className="space-y-6">
@@ -41,17 +89,20 @@ export default async function RequirementPage({ params }: { params: { id: string
             </div>
           </CardBody>
         </Card>
-        <Card>
-          <CardHeader><div className="font-semibold">Impact preview</div></CardHeader>
-          <CardBody className="space-y-3">
-            {(data.impact.likely_impacted || []).slice(0, 8).map((item: any) => (
-              <div key={item.object_id} className="rounded-xl border border-line bg-panel2 p-3">
-                <div className="font-medium">{item.label}</div>
-                <div className="text-xs text-muted">{item.object_type}</div>
-              </div>
-            ))}
-          </CardBody>
-        </Card>
+        <ImpactVisualization
+          title="Impact map"
+          description="A compact view of objects affected by this requirement and the review records that stay linked to it."
+          root={{
+            eyebrow: "Requirement root",
+            label: `${data.requirement.key} - ${data.requirement.title}`,
+            description: data.requirement.description || "No description provided.",
+            badges: [
+              { label: `Approval: ${data.requirement.status}`, tone: approvalTone(data.requirement.status) as "neutral" | "success" | "warning" | "danger" | "accent" },
+              { label: `Verification: ${humanizeStatus(data.verification_evaluation.status)}`, tone: verificationTone(data.verification_evaluation.status) as "neutral" | "success" | "warning" | "danger" | "accent" },
+            ],
+          }}
+          sections={impactSections}
+        />
       </div>
 
       {data.requirement.status === "approved" ? (
@@ -197,10 +248,59 @@ export default async function RequirementPage({ params }: { params: { id: string
       </div>
 
       <Card>
-        <CardHeader><div className="font-semibold">Impact objects</div></CardHeader>
-        <CardBody className="space-y-3">
-          {(data.impact.direct || []).map((item: any) => <ImpactItem key={item.object_id} item={item} />)}
-          {(data.impact.secondary || []).map((item: any) => <ImpactItem key={item.object_id} item={item} />)}
+        <CardHeader><div className="font-semibold">Simulation evidence</div></CardHeader>
+        <CardBody className="space-y-4">
+          {data.simulation_evidence?.length ? (
+            <div className="space-y-4">
+              {data.simulation_evidence.map((evidence: any) => (
+                <SimulationEvidenceCard key={evidence.id} evidence={evidence} objectHref={objectHref} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No simulation evidence linked yet"
+              description="Capture simulation evidence when the requirement is assessed with a model or scenario. Link it to the requirement, related tests, or supporting verification evidence."
+              action={<Button href="#add-simulation-evidence" variant="secondary">Open simulation evidence form</Button>}
+            />
+          )}
+          <div id="add-simulation-evidence" className="rounded-xl border border-dashed border-line bg-panel2 p-4">
+            <div className="mb-3 text-sm font-medium">Add simulation evidence</div>
+            <SimulationEvidenceForm
+              projectId={data.requirement.project_id}
+              linkedRequirementIds={[data.requirement.id]}
+              verificationEvidenceOptions={(data.verification_evidence || []).map((item: any) => ({ id: item.id, label: item.title }))}
+              fmiContractOptions={fmiContracts.map((item: any) => ({ id: item.id, label: `${item.key} - ${item.name}` }))}
+              lockedSubjectLabel={`${data.requirement.key} - ${data.requirement.title}`}
+            />
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader><div className="font-semibold">Operational evidence</div></CardHeader>
+        <CardBody className="space-y-4">
+          {data.operational_evidence?.length ? (
+            <div className="space-y-4">
+              {data.operational_evidence.map((evidence: any) => (
+                <OperationalEvidenceCard key={evidence.id} evidence={evidence} objectHref={objectHref} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No operational evidence linked yet"
+              description="Capture a field or telemetry batch when operational feedback is available. Link it to this requirement or to a supporting verification record."
+              action={<Button href="#add-operational-evidence" variant="secondary">Open evidence form</Button>}
+            />
+          )}
+          <div id="add-operational-evidence" className="rounded-xl border border-dashed border-line bg-panel2 p-4">
+            <div className="mb-3 text-sm font-medium">Add operational evidence</div>
+            <OperationalEvidenceForm
+              projectId={data.requirement.project_id}
+              linkedRequirementIds={[data.requirement.id]}
+              verificationEvidenceOptions={(data.verification_evidence || []).map((item: any) => ({ id: item.id, label: item.title }))}
+              lockedSubjectLabel={`${data.requirement.key} - ${data.requirement.title}`}
+            />
+          </div>
         </CardBody>
       </Card>
 
@@ -239,15 +339,6 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ImpactItem({ item }: { item: any }) {
-  return (
-    <div className="rounded-xl border border-line bg-panel2 p-3">
-      <div className="font-medium">{item.label}</div>
-      <div className="text-xs text-muted">{item.object_type}</div>
-    </div>
-  );
-}
-
 function verificationTone(status: string) {
   if (status === "verified") return "success";
   if (status === "failed" || status === "not_covered") return "danger";
@@ -277,5 +368,20 @@ function objectHref(objectType: string, objectId: string) {
   if (objectType === "operational_run") return `/operational-runs/${objectId}`;
   if (objectType === "block") return `/blocks/${objectId}`;
   if (objectType === "component") return `/components/${objectId}`;
+  if (objectType === "simulation_evidence") return `/simulation-evidence/${objectId}`;
+  if (objectType === "verification_evidence") return `/verification-evidence/${objectId}`;
+  if (objectType === "operational_evidence") return `/operational-evidence/${objectId}`;
+  if (objectType === "fmi_contract") return `/fmi-contracts/${objectId}`;
   return null;
+}
+
+function impactNode(item: any, hrefResolver: (objectType: string, objectId: string) => string | null): ImpactVisualizationNode {
+  const href = hrefResolver(item.object_type, item.object_id);
+  return {
+    label: item.label,
+    objectType: item.object_type,
+    href,
+    meta: [item.code, item.status, item.version != null ? `v${item.version}` : null].filter(Boolean).join(" · ") || null,
+    tone: item.object_type === "change_request" ? "danger" : item.object_type === "baseline" ? "accent" : "neutral",
+  };
 }

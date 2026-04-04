@@ -26,6 +26,7 @@ What it shows:
 - requirements coverage KPIs
 - failed tests
 - a simple distribution of verification states
+- a manager / engineering switch for different review perspectives
 - recent change requests
 - recent test runs
 
@@ -60,6 +61,8 @@ Tabs you will use:
 - `Blocks` for SysML-inspired structural elements
 - `Components` for realization objects
 - `Tests` for verification test cases and runs
+- `Simulation Evidence` for model-based evidence records
+- `Operational Evidence` for field or telemetry batches
 - `Operational Runs` for field evidence
 - `Traceability` for links between engineering objects
 - `Graph` for visual relationship exploration
@@ -70,6 +73,7 @@ Tabs you will use:
 - `Change Requests` for change control
 - `Non-Conformities` for issue tracking
 - `Authoritative Sources` for external tool references and configuration contexts
+- `Import` for JSON and CSV ingestion into external artifacts and verification evidence
 
 ## 5. Requirements
 
@@ -114,6 +118,20 @@ Useful labels:
 
 - `Block (SysML-inspired structural element)`
 - `contains`
+
+Logical vs Physical Toggle:
+
+- `Logical` shows architecture intent and subsystem decomposition
+- `Physical` shows realization-oriented blocks and implementation structure
+- `All layers` shows both views together
+
+How to use it:
+
+1. open the `Blocks` tab or `SysML -> Block Structure`
+2. switch between `Logical`, `Physical`, and `All layers`
+3. use the filtered view to inspect either design intent or physical realization
+
+The toggle only filters the view. It does not change the underlying model.
 - `satisfies`
 - `verified by`
 
@@ -174,7 +192,52 @@ How to use them:
 3. attach telemetry JSON and notes when needed
 4. link the run to requirements if it supports traceability
 
-## 11. Verification Evidence
+## 11. Operational Evidence
+
+What operational evidence is for:
+
+- capture reviewable field or telemetry batches as reusable evidence records
+- keep operational evidence separate from raw operational runs
+- link the batch to requirements and supporting verification evidence
+
+How to use it:
+
+1. open `Operational Evidence` in the project workspace
+2. create a batch from a field observation or telemetry summary
+3. link it to the relevant requirement and any supporting verification evidence
+4. open the operational evidence detail page to inspect the batch metadata and links
+
+## 12. Simulation Evidence
+
+What simulation evidence is for:
+
+- capture model-based verification results as reusable records
+- keep simulation semantics separate from generic verification evidence and raw test runs
+- store the model reference, scenario, inputs, expected behavior, observed behavior, result, and execution timestamp
+
+How to use it:
+
+1. open the `Simulation Evidence` tab in a project workspace
+2. create a simulation evidence record for a requirement or test case
+3. link the record to the relevant requirement, test case, or supporting verification evidence
+4. open the simulation evidence detail page to review the captured fields and related objects
+
+## 13. FMI Placeholder Contract
+
+What the FMI placeholder contract is for:
+
+- store a lightweight model reference contract for simulation interoperability
+- keep the contract separate from simulation evidence so the model reference can be reused
+- give simulation evidence a named contract record to point at when needed
+
+How to use it:
+
+1. open the `FMI` tab in a project workspace
+2. create a placeholder contract with the model identifier, version, and adapter profile
+3. open a simulation evidence record and link it to the contract when you want an explicit model reference
+4. open the contract detail page to review its linked simulation evidence
+
+## 14. Verification Evidence
 
 What evidence is for:
 
@@ -191,7 +254,7 @@ How to use it:
 6. note that verification evidence is evaluated first, with test or operational runs used only as compatibility fallback when the evidence itself is neutral
 7. inspect the "Why this status?" panel to see the decision source and the main reasons behind the computed result
 
-## 12. Traceability
+## 14. Traceability
 
 What traceability does:
 
@@ -205,7 +268,7 @@ How to use it:
 3. open the matrix if you want a coverage-oriented view
 4. open the graph if you want a network-style exploration
 
-## 13. Graph View
+## 15. Graph View
 
 What it shows:
 
@@ -227,7 +290,24 @@ Tip:
 
 - collapse the left navigation when you want more horizontal space
 
-## 14. SysML Practice Views
+## 16. Relationship Registry
+
+What it shows:
+
+- requirements in one place with their authored status
+- generic traceability links, SysML relations, and artifact links
+- verification, simulation, and operational evidence records
+- filter buttons so you can switch between requirements, links, and evidence
+
+How to use it:
+
+1. open `Registry`
+2. switch between `All`, `Requirements`, `Links`, and `Evidence`
+3. when you are in `Links`, narrow to generic links, SysML relations, or artifact links
+4. when you are in `Evidence`, narrow to verification, simulation, or operational evidence
+5. click a requirement or evidence record to open its detail page
+
+## 17. SysML Practice Views
 
 The SysML section is educational rather than a full SysML editor.
 
@@ -237,14 +317,17 @@ Views:
 - `Satisfaction` shows which blocks satisfy which requirements
 - `Verification` shows which test cases verify which requirements
 - `Derivations` shows requirement-to-requirement derivation chains
+- `Mapping Contract` shows the current model as explicit SysML v2-inspired requirement, block, satisfy, verify, deriveReqt, and contain mappings
+- `STEP AP242` shows the placeholder contract for parts, part numbers, and `cad_part` external artifacts
 
 How to use them:
 
 1. open `SysML`
-2. switch between the four views
+2. switch between the five views
 3. use the labels to learn the meaning of each relation
+4. open `STEP AP242` when you want to inspect the part-oriented placeholder contract
 
-## 15. Matrix View
+## 17. Matrix View
 
 What it shows:
 
@@ -259,7 +342,7 @@ How to use it:
 3. filter by requirement status or category when needed
 4. click a cell to inspect the linked objects
 
-## 16. Baselines
+## 18. Baselines
 
 What baselines are for:
 
@@ -273,7 +356,7 @@ How to use them:
 3. open a baseline detail page to inspect included items
 4. compare the baseline with another baseline or configuration context when needed
 
-## 17. Change Requests
+## 19. Change Requests
 
 What change requests are for:
 
@@ -287,21 +370,25 @@ How to use them:
 2. create a change request
 3. add impacted objects
 4. review the impact summary before implementation
+5. use the impact map on the detail page to see affected objects grouped by impact level
 
-## 18. Non-Conformities
+## 20. Non-Conformities
 
 What non-conformities are for:
 
 - track engineering issues, defects, or observations that need analysis
+- record a deviation decision with an explicit `Accept`, `Rework`, or `Reject` disposition
+- link the issue back to the affected requirement so reviewers can see the original context
 
 How to use them:
 
 1. open `Non-Conformities`
 2. create a record for the issue
 3. attach evidence and impacted objects
-4. move the item through its lifecycle as analysis progresses
+4. choose a deviation disposition when the review team decides how to handle it
+5. move the item through its lifecycle as analysis progresses
 
-## 19. Authoritative Sources
+## 21. Authoritative Sources
 
 What this area is for:
 
@@ -315,7 +402,23 @@ How to use it:
 3. link internal objects to external versions
 4. use configuration contexts to combine internal and external references in one review gate
 
-## 20. Export
+## 22. Import
+
+What import is for:
+
+- ingest external artifacts and verification evidence from JSON or CSV text
+- keep import lightweight and reviewable instead of introducing a file upload workflow
+- seed or synchronize data from other tools without leaving the workspace
+
+How to use it:
+
+1. open `Import` in a project workspace
+2. paste JSON or CSV content into the form
+3. include a `record_type` of `external_artifact` or `verification_evidence` for each row or object
+4. include requirement or test case links on verification evidence rows
+5. submit the import and inspect the created records in the result panel
+
+## 24. Export
 
 What export does:
 
@@ -328,14 +431,16 @@ How to use it:
 2. click `Export JSON`
 3. send the bundle to another tool or environment for validation
 
-## 21. Common Workflows
+## 24. Common Workflows
 
 ### Explore the seeded demo
 
 1. open the dashboard
 2. seed the drone project
 3. open the project workspace
-4. inspect requirements, blocks, tests, matrix, graph, and SysML views
+4. follow the story in order: mission need -> architecture -> evidence -> change
+5. inspect requirements, blocks, tests, matrix, graph, and SysML views
+6. open a requirement or change request to inspect the impact map
 
 ### Author a new project
 
@@ -355,7 +460,7 @@ How to use it:
 3. approve or reject it
 4. create a new draft version if the approved item needs changes
 
-## 22. What ThreadLite Is Not
+## 25. What ThreadLite Is Not
 
 ThreadLite is not:
 

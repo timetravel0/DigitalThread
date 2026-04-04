@@ -143,6 +143,35 @@ class VerificationEvidenceType(str, Enum):
     other = "other"
 
 
+class SimulationEvidenceResult(str, Enum):
+    passed = "passed"
+    failed = "failed"
+    partial = "partial"
+
+
+class SimulationEvidenceLinkObjectType(str, Enum):
+    requirement = "requirement"
+    test_case = "test_case"
+    verification_evidence = "verification_evidence"
+
+
+class OperationalEvidenceSourceType(str, Enum):
+    sensor = "sensor"
+    system = "system"
+
+
+class OperationalEvidenceQualityStatus(str, Enum):
+    good = "good"
+    warning = "warning"
+    poor = "poor"
+    unknown = "unknown"
+
+
+class OperationalEvidenceLinkObjectType(str, Enum):
+    requirement = "requirement"
+    verification_evidence = "verification_evidence"
+
+
 class BaselineStatus(str, Enum):
     draft = "draft"
     released = "released"
@@ -219,6 +248,12 @@ class NonConformityStatus(str, Enum):
     corrected = "corrected"
     verified = "verified"
     closed = "closed"
+
+
+class NonConformityDisposition(str, Enum):
+    accept = "accept"
+    rework = "rework"
+    reject = "reject"
 
 
 class Severity(str, Enum):
@@ -310,6 +345,22 @@ class ConfigurationItemKind(str, Enum):
 class TimestampMixin(SQLModel):
     created_at: datetime = Field(default_factory=utcnow, nullable=False)
     updated_at: datetime = Field(default_factory=utcnow, nullable=False)
+
+
+class FMIContract(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "fmi_contracts"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    key: str = Field(sa_column=Column(String(64), index=True, nullable=False))
+    name: str = Field(sa_column=Column(String(255), nullable=False))
+    description: str = Field(default="", nullable=False)
+    model_identifier: str = Field(sa_column=Column(String(255), nullable=False))
+    model_version: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
+    model_uri: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    adapter_profile: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
+    contract_version: str = Field(default="fmi.placeholder.v1", sa_column=Column(String(64), nullable=False))
+    metadata_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
 
 
 class Project(TimestampMixin, SQLModel, table=True):
@@ -459,6 +510,62 @@ class VerificationEvidenceLink(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow, nullable=False)
 
 
+class SimulationEvidence(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "simulation_evidence"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    title: str = Field(sa_column=Column(String(255), nullable=False))
+    model_reference: str = Field(sa_column=Column(String(255), nullable=False))
+    scenario_name: str = Field(sa_column=Column(String(255), nullable=False))
+    input_summary: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    inputs_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    expected_behavior: str = Field(default="", sa_column=Column(String, nullable=False))
+    observed_behavior: str = Field(default="", sa_column=Column(String, nullable=False))
+    result: SimulationEvidenceResult = Field(sa_column=Column(SAEnum(SimulationEvidenceResult), nullable=False))
+    execution_timestamp: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    fmi_contract_id: UUID | None = Field(default=None, foreign_key="fmi_contracts.id", index=True)
+    metadata_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+
+
+class SimulationEvidenceLink(SQLModel, table=True):
+    __tablename__ = "simulation_evidence_links"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    simulation_evidence_id: UUID = Field(foreign_key="simulation_evidence.id", index=True)
+    internal_object_type: SimulationEvidenceLinkObjectType = Field(sa_column=Column(SAEnum(SimulationEvidenceLinkObjectType), nullable=False))
+    internal_object_id: UUID = Field(index=True)
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)
+
+
+class OperationalEvidence(TimestampMixin, SQLModel, table=True):
+    __tablename__ = "operational_evidence_batches"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    project_id: UUID = Field(foreign_key="projects.id", index=True)
+    title: str = Field(sa_column=Column(String(255), nullable=False))
+    source_name: str = Field(sa_column=Column(String(255), nullable=False))
+    source_type: OperationalEvidenceSourceType = Field(sa_column=Column(SAEnum(OperationalEvidenceSourceType), nullable=False))
+    captured_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    coverage_window_start: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    coverage_window_end: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    observations_summary: str = Field(default="", sa_column=Column(String, nullable=False))
+    aggregated_observations_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    quality_status: OperationalEvidenceQualityStatus = Field(sa_column=Column(SAEnum(OperationalEvidenceQualityStatus), nullable=False))
+    derived_metrics_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    metadata_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+
+
+class OperationalEvidenceLink(SQLModel, table=True):
+    __tablename__ = "operational_evidence_links"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    operational_evidence_id: UUID = Field(foreign_key="operational_evidence_batches.id", index=True)
+    internal_object_type: OperationalEvidenceLinkObjectType = Field(sa_column=Column(SAEnum(OperationalEvidenceLinkObjectType), nullable=False))
+    internal_object_id: UUID = Field(index=True)
+    created_at: datetime = Field(default_factory=utcnow, nullable=False)
+
+
 class Baseline(TimestampMixin, SQLModel, table=True):
     __tablename__ = "baselines"
 
@@ -515,6 +622,8 @@ class RevisionSnapshot(SQLModel, table=True):
     object_id: UUID = Field(index=True)
     version: int = Field(nullable=False)
     snapshot_json: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
+    snapshot_hash: str | None = Field(default=None, sa_column=Column(String(128), nullable=True))
+    previous_snapshot_hash: str | None = Field(default=None, sa_column=Column(String(128), nullable=True))
     changed_at: datetime = Field(default_factory=utcnow, nullable=False)
     changed_by: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
     change_summary: str | None = Field(default=None, sa_column=Column(String, nullable=True))
@@ -567,6 +676,8 @@ class NonConformity(TimestampMixin, SQLModel, table=True):
     title: str = Field(sa_column=Column(String(255), nullable=False))
     description: str = Field(default="", nullable=False)
     status: NonConformityStatus = Field(default=NonConformityStatus.detected, sa_column=Column(SAEnum(NonConformityStatus), nullable=False))
+    disposition: NonConformityDisposition | None = Field(default=None, sa_column=Column(SAEnum(NonConformityDisposition), nullable=True))
+    review_comment: str | None = Field(default=None, sa_column=Column(String, nullable=True))
     severity: Severity = Field(sa_column=Column(SAEnum(Severity), nullable=False))
 
 

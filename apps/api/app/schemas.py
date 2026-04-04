@@ -242,6 +242,124 @@ class VerificationEvidenceRead(VerificationEvidenceBase, ORMBase):
     linked_objects: list[ObjectSummary] = Field(default_factory=list)
 
 
+class FMIContractBase(BaseModel):
+    project_id: UUID
+    key: str
+    name: str
+    description: str = ""
+    model_identifier: str
+    model_version: str | None = None
+    model_uri: str | None = None
+    adapter_profile: str | None = None
+    contract_version: str = "fmi.placeholder.v1"
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class FMIContractCreate(FMIContractBase):
+    pass
+
+
+class FMIContractUpdate(BaseModel):
+    project_id: UUID | None = None
+    key: str | None = None
+    name: str | None = None
+    description: str | None = None
+    model_identifier: str | None = None
+    model_version: str | None = None
+    model_uri: str | None = None
+    adapter_profile: str | None = None
+    contract_version: str | None = None
+    metadata_json: dict[str, Any] | None = None
+
+
+class FMIContractRead(FMIContractBase, ORMBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    linked_simulation_evidence_count: int = 0
+
+
+class FMIContractDetail(BaseModel):
+    fmi_contract: FMIContractRead
+    simulation_evidence: list["SimulationEvidenceRead"] = Field(default_factory=list)
+
+
+class SimulationEvidenceBase(BaseModel):
+    project_id: UUID
+    title: str
+    model_reference: str
+    scenario_name: str
+    input_summary: str | None = None
+    inputs_json: dict[str, Any] = Field(default_factory=dict)
+    expected_behavior: str = ""
+    observed_behavior: str = ""
+    result: SimulationEvidenceResult
+    execution_timestamp: datetime
+    fmi_contract_id: UUID | None = None
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class SimulationEvidenceCreate(SimulationEvidenceBase):
+    linked_requirement_ids: list[UUID] = Field(default_factory=list)
+    linked_test_case_ids: list[UUID] = Field(default_factory=list)
+    linked_verification_evidence_ids: list[UUID] = Field(default_factory=list)
+
+
+class SimulationEvidenceRead(SimulationEvidenceBase, ORMBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    linked_objects: list[ObjectSummary] = Field(default_factory=list)
+    fmi_contract_key: str | None = None
+    fmi_contract_name: str | None = None
+    fmi_contract_model_identifier: str | None = None
+    fmi_contract_model_version: str | None = None
+    fmi_contract_contract_version: str | None = None
+
+
+class SimulationEvidenceLinkRead(ORMBase):
+    id: UUID
+    simulation_evidence_id: UUID
+    internal_object_type: SimulationEvidenceLinkObjectType
+    internal_object_id: UUID
+    created_at: datetime
+
+
+class OperationalEvidenceBase(BaseModel):
+    project_id: UUID
+    title: str
+    source_name: str
+    source_type: OperationalEvidenceSourceType
+    captured_at: datetime
+    coverage_window_start: datetime
+    coverage_window_end: datetime
+    observations_summary: str = ""
+    aggregated_observations_json: dict[str, Any] = Field(default_factory=dict)
+    quality_status: OperationalEvidenceQualityStatus
+    derived_metrics_json: dict[str, Any] = Field(default_factory=dict)
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class OperationalEvidenceCreate(OperationalEvidenceBase):
+    linked_requirement_ids: list[UUID] = Field(default_factory=list)
+    linked_verification_evidence_ids: list[UUID] = Field(default_factory=list)
+
+
+class OperationalEvidenceRead(OperationalEvidenceBase, ORMBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    linked_objects: list[ObjectSummary] = Field(default_factory=list)
+
+
+class OperationalEvidenceLinkRead(ORMBase):
+    id: UUID
+    operational_evidence_id: UUID
+    internal_object_type: OperationalEvidenceLinkObjectType
+    internal_object_id: UUID
+    created_at: datetime
+
+
 class ComponentDetail(BaseModel):
     component: ComponentRead
     links: list[LinkRead] = Field(default_factory=list)
@@ -319,6 +437,7 @@ class RequirementDetail(BaseModel):
     links: list[LinkRead] = Field(default_factory=list)
     artifact_links: list[ArtifactLinkRead] = Field(default_factory=list)
     verification_evidence: list[VerificationEvidenceRead] = Field(default_factory=list)
+    simulation_evidence: list[SimulationEvidenceRead] = Field(default_factory=list)
     verification_evaluation: RequirementVerificationEvaluation
     history: list[RevisionSnapshotRead] = Field(default_factory=list)
     impact: ImpactResponse
@@ -329,6 +448,7 @@ class TestCaseDetail(BaseModel):
     links: list[LinkRead] = Field(default_factory=list)
     artifact_links: list[ArtifactLinkRead] = Field(default_factory=list)
     verification_evidence: list[VerificationEvidenceRead] = Field(default_factory=list)
+    simulation_evidence: list[SimulationEvidenceRead] = Field(default_factory=list)
     runs: list[TestRunRead] = Field(default_factory=list)
     history: list[RevisionSnapshotRead] = Field(default_factory=list)
     impact: ImpactResponse
@@ -409,6 +529,8 @@ class RevisionSnapshotRead(ORMBase):
     object_id: UUID
     version: int
     snapshot_json: dict[str, Any]
+    snapshot_hash: str | None = None
+    previous_snapshot_hash: str | None = None
     changed_at: datetime
     changed_by: str | None = None
     change_summary: str | None = None
@@ -468,6 +590,7 @@ class ChangeRequestDetail(BaseModel):
 class NonConformityDetail(BaseModel):
     non_conformity: NonConformityRead
     links: list[LinkRead] = Field(default_factory=list)
+    related_requirements: list[ObjectSummary] = Field(default_factory=list)
     verification_evidence: list[VerificationEvidenceRead] = Field(default_factory=list)
     impact: ImpactResponse
     impact_summary: list[ObjectSummary] = Field(default_factory=list)
@@ -479,6 +602,8 @@ class NonConformityBase(BaseModel):
     title: str
     description: str = ""
     status: NonConformityStatus = NonConformityStatus.detected
+    disposition: NonConformityDisposition | None = None
+    review_comment: str | None = None
     severity: Severity
 
 
@@ -492,6 +617,8 @@ class NonConformityUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     status: NonConformityStatus | None = None
+    disposition: NonConformityDisposition | None = None
+    review_comment: str | None = None
     severity: Severity | None = None
 
 
@@ -594,6 +721,30 @@ class ExternalArtifactRead(ExternalArtifactBase, ORMBase):
     connector_name: str | None = None
     connector_type: ConnectorType | None = None
     versions: list[ExternalArtifactVersionRead] = Field(default_factory=list)
+
+
+class ImportFormat(str, Enum):
+    json = "json"
+    csv = "csv"
+
+
+class ProjectImportCreate(BaseModel):
+    format: ImportFormat
+    content: str
+
+
+class ProjectImportSummary(BaseModel):
+    parsed_records: int = 0
+    created_external_artifacts: int = 0
+    created_verification_evidence: int = 0
+
+
+class ProjectImportResponse(BaseModel):
+    project: ProjectRead
+    summary: ProjectImportSummary
+    external_artifacts: list[ExternalArtifactRead] = Field(default_factory=list)
+    verification_evidence: list[VerificationEvidenceRead] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ArtifactLinkCreate(BaseModel):
@@ -847,6 +998,94 @@ class SysMLVerificationResponse(BaseModel):
 class SysMLDerivationResponse(BaseModel):
     project: ProjectRead
     rows: list[DerivationRow]
+
+
+class SysMLMappingSummary(BaseModel):
+    requirement_count: int
+    block_count: int
+    logical_block_count: int
+    physical_block_count: int
+    satisfy_relation_count: int
+    verify_relation_count: int
+    derive_relation_count: int
+    contain_relation_count: int
+
+
+class SysMLRequirementMappingRow(BaseModel):
+    requirement: RequirementRead
+    sysml_concept: str = "requirement"
+    satisfy_blocks: list[ObjectSummary] = Field(default_factory=list)
+    verify_tests: list[ObjectSummary] = Field(default_factory=list)
+    derived_from: list[ObjectSummary] = Field(default_factory=list)
+    derived_requirements: list[ObjectSummary] = Field(default_factory=list)
+
+
+class SysMLBlockMappingRow(BaseModel):
+    block: BlockRead
+    sysml_concept: str = "block"
+    abstraction_level: AbstractionLevel
+    profile_label: str
+    contained_blocks: list[ObjectSummary] = Field(default_factory=list)
+    contained_in: list[ObjectSummary] = Field(default_factory=list)
+    satisfies_requirements: list[ObjectSummary] = Field(default_factory=list)
+
+
+class SysMLMappingRelationRow(BaseModel):
+    relation_type: str
+    source: ObjectSummary
+    target: ObjectSummary
+    semantics: str
+
+
+class SysMLMappingContractResponse(BaseModel):
+    contract_schema: str = "threadlite.sysml.mapping-contract.v1"
+    project: ProjectRead
+    generated_at: datetime
+    summary: SysMLMappingSummary
+    requirements: list[SysMLRequirementMappingRow]
+    blocks: list[SysMLBlockMappingRow]
+    relations: list[SysMLMappingRelationRow]
+
+
+class STEPAP242Summary(BaseModel):
+    physical_component_count: int
+    cad_artifact_count: int
+    linked_cad_artifact_count: int
+    identifier_count: int
+
+
+class STEPAP242IdentifierRow(BaseModel):
+    kind: str
+    value: str
+    source: str
+
+
+class STEPAP242PartRow(BaseModel):
+    component: ComponentRead
+    part_number: str | None = None
+    version: int
+    status: str
+    supplier: str | None = None
+    profile_label: str = "Physical part"
+    identifiers: list[STEPAP242IdentifierRow] = Field(default_factory=list)
+    linked_cad_artifacts: list[ExternalArtifactRead] = Field(default_factory=list)
+
+
+class STEPAP242RelationRow(BaseModel):
+    relation_type: str
+    component: ObjectSummary
+    cad_artifact: ExternalArtifactRead
+    semantics: str
+
+
+class STEPAP242ContractResponse(BaseModel):
+    contract_schema: str = "threadlite.step.ap242.contract.v1"
+    project: ProjectRead
+    generated_at: datetime
+    summary: STEPAP242Summary
+    parts: list[STEPAP242PartRow]
+    cad_artifacts: list[ExternalArtifactRead]
+    relations: list[STEPAP242RelationRow]
 
 
 class ReviewQueueItem(BaseModel):

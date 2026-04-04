@@ -3,6 +3,7 @@ import { api } from "@/lib/api-client";
 import { Badge, Button, Card, CardBody, CardHeader, SectionTitle } from "@/components/ui";
 import { SimulationEvidenceMetadata } from "@/components/simulation-evidence-metadata";
 import { VerificationEvidenceForm } from "@/components/verification-evidence-form";
+import { NonConformityDispositionForm } from "@/components/non-conformity-disposition-form";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,18 @@ export default async function NonConformityPage({ params }: { params: { id: stri
           </CardHeader>
           <CardBody className="space-y-3">
             <Row label="Status" value={<Badge>{data.non_conformity.status}</Badge>} />
+            <Row
+              label="Disposition"
+              value={
+                data.non_conformity.disposition ? (
+                  <Badge tone={dispositionTone(data.non_conformity.disposition)}>{data.non_conformity.disposition}</Badge>
+                ) : (
+                  <span className="text-muted">No disposition selected</span>
+                )
+              }
+            />
             <Row label="Severity" value={<Badge tone={severityTone(data.non_conformity.severity)}>{data.non_conformity.severity}</Badge>} />
+            {data.non_conformity.review_comment ? <div className="rounded-xl border border-line bg-panel2 p-3 text-sm text-muted">{data.non_conformity.review_comment}</div> : null}
           </CardBody>
         </Card>
         <Card>
@@ -45,10 +57,32 @@ export default async function NonConformityPage({ params }: { params: { id: stri
           </CardBody>
         </Card>
       </div>
+      <Card>
+        <CardHeader><div className="font-semibold">NCR decision</div></CardHeader>
+        <CardBody className="space-y-4">
+          <div className="text-sm text-muted">Choose the deviation handling decision. This stays separate from the NCR status and helps reviewers record whether the issue should be accepted, reworked, or rejected.</div>
+          <NonConformityDispositionForm
+            nonConformityId={data.non_conformity.id}
+            currentDisposition={data.non_conformity.disposition}
+            currentStatus={data.non_conformity.status}
+          />
+        </CardBody>
+      </Card>
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader><div className="font-semibold">Impacted objects</div></CardHeader>
           <CardBody className="space-y-3">
+            {data.related_requirements?.length ? (
+              <div className="space-y-2">
+                <div className="text-xs uppercase tracking-[0.2em] text-muted">Related requirements</div>
+                {data.related_requirements.map((item: any) => (
+                  <Link key={item.object_id} href={`/requirements/${item.object_id}`} className="block rounded-xl border border-line bg-panel2 p-3 hover:border-accent/50">
+                    <div className="font-medium">{item.label}</div>
+                    <div className="text-xs text-muted">{item.code || item.object_type}</div>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
             {(data.links || []).length ? (
               data.links.map((link: any) => (
                 <div key={link.id} className="rounded-xl border border-line bg-panel2 p-3">
@@ -123,4 +157,10 @@ function severityTone(severity: string) {
   if (severity === "critical") return "danger";
   if (severity === "high") return "warning";
   return "neutral";
+}
+
+function dispositionTone(disposition: string) {
+  if (disposition === "accept") return "success";
+  if (disposition === "rework") return "warning";
+  return "danger";
 }

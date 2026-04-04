@@ -15,7 +15,7 @@ It is designed for SMEs that need traceability without adopting a heavy PLM or M
 - link internal objects to external DOORS, MBSE, PLM, and simulation artifacts
 - define configuration contexts that combine internal and external versions
 - export a complete project bundle for external validation
-- inspect coverage, impact, matrix, and SysML practice views
+- inspect coverage, impact, matrix, SysML practice views, and the STEP AP242 placeholder contract
 
 ## Documentation Set
 
@@ -50,6 +50,7 @@ ThreadLite is intentionally narrow in scope:
 - one project-centric data model
 - explicit traceability links instead of a complex graph platform
 - simple version fields plus revision snapshots for authored objects
+- revision snapshots carry content hashes to make the audit trail harder to tamper with
 - approval workflow for requirements, blocks, and test cases
 - authoritative metadata federation rather than file duplication
 - one-hop plus two-hop impact analysis
@@ -97,18 +98,28 @@ threadlite/
 
 ## Key Product Areas
 
-- Dashboard with KPIs and recent activity
-- Project pages with tabs for requirements, blocks, tests, operational runs, traceability, SysML, review queue, matrix, baselines, and change requests
+- Dashboard with manager and engineering views, KPIs, and recent activity
+- Project pages with tabs for requirements, blocks, tests, simulation evidence, operational evidence, operational runs, traceability, SysML, STEP AP242, FMI, review queue, matrix, baselines, change requests, and import
 - Project pages with an Authoritative Sources registry for connectors, external artifacts, artifact links, and configuration contexts
+- Relationship Registry pages that list requirements, links, and evidence with simple filters
 - Requirement, block, and test detail pages with inbound/outbound traceability plus workflow controls
 - Requirement, block, and test detail pages with linked external sources for federated metadata visibility
+- Logical vs physical toggles that let you inspect the drone as architecture intent or physical realization
+- Simulation evidence detail and capture surfaces for model/scenario/input/output/result records
+- FMI placeholder contract surfaces for simulation model reference metadata
+- Operational evidence detail and capture surfaces for field/telemetry batch records linked to requirements and verification evidence
+- Project import surface for JSON and CSV external data ingestion into external artifacts and verification evidence
 - Traceability matrix with component or test columns
+- Relationship registry with filters for requirements, links, and evidence
 - Traceability graph with a compact relationship explorer by default and a focused graph when you click an object, showing Incoming / Focus / Outgoing columns with readable link explanations, visible edge ports on box boundaries, and extra spacing for multiple links between the same objects
 - Impact analysis with direct and two-hop traversal across requirements, blocks, and tests
+- Impact visualization cards on requirement and change request pages so affected objects are easy to scan
 - Baselines for freezing approved versions of core objects
 - Change requests with impact summaries
+- Non-conformities with explicit Accept / Rework / Reject dispositions
 - Project export bundles for external validation
 - Demo seed for a drone inspection project
+- Domain service modules split along impact and seed workflows, while the legacy service facade remains stable for compatibility
 
 ## Verification Status
 
@@ -122,6 +133,15 @@ Requirement verification state is computed from linked `VerificationEvidence` fi
 - compatible test runs and operational runs are used as fallback when evidence is neutral
 - approval and review status remain separate from verification status
 
+## Impact Visualization
+
+Requirement and change request pages now include a compact impact map instead of a plain list.
+
+- the root object appears first
+- impacted objects are grouped into readable sections
+- related baselines and open change requests are shown where relevant
+- the result is intentionally smaller and easier to scan than a full graph view
+
 ## How To Use The Platform
 
 If you are new to ThreadLite, start here:
@@ -129,8 +149,9 @@ If you are new to ThreadLite, start here:
 1. Open the [User Guide](docs/user-guide.md) for task-oriented instructions by module.
 2. Open a project and use the tabs to move between requirements, blocks, tests, traceability, SysML, matrix, baselines, and change requests.
 3. Use the detail pages to create, edit, review, and approve engineering objects.
-4. Use the matrix and graph views to understand coverage and connectivity.
-5. Use the export bundle when you need a deterministic package for external validation.
+4. Use the registry, matrix, and graph views to understand coverage and connectivity.
+5. Use the import tab when you need to ingest JSON or CSV data into external artifacts or verification evidence.
+6. Use the export bundle when you need a deterministic package for external validation.
 
 The [Platform Logic Guide](docs/platform-logic.md) explains the rules behind these screens so the UI and backend behavior stay understandable together.
 
@@ -141,9 +162,13 @@ ThreadLite does not implement the full SysML standard. It implements a focused s
 - Requirement: a statement of need or constraint.
 - Block: a SysML-inspired structural element for a logical or physical subsystem.
 - Containment: a block hierarchy using `contains` / `composed_of`.
+- Logical vs physical toggle: a UI filter that uses `Block.abstraction_level` to show architectural intent or physical realization.
 - Satisfy: a block fulfills a requirement.
 - Verify: a test case verifies a requirement.
 - DeriveReqt: one requirement is derived from another requirement.
+- SysML mapping contract: a contract-shaped projection that makes the current requirements, blocks, and relations exportable as SysML v2-inspired concepts.
+- STEP AP242 placeholder contract: a contract-shaped projection that makes physical part metadata and cad_part artifacts exportable as AP242-style concepts.
+- FMI placeholder contract: a contract-shaped projection that makes simulation model reference metadata exportable as FMI-style concepts.
 
 In the drone demo, the top-level `Drone System` block contains subsystems such as `Power Subsystem` and `Flight Controller`, while the battery and controller satisfy endurance, telemetry, and temperature requirements.
 
@@ -216,6 +241,8 @@ Each project can be exported as a single JSON bundle from the project workspace.
 - components
 - test cases
 - test runs
+- simulation evidence and simulation evidence links
+- operational evidence and operational evidence links
 - operational runs
 - links
 - SysML relations
@@ -374,11 +401,21 @@ The demo seed should create:
 - seven blocks with a simple containment hierarchy
 - four test cases
 - SysML satisfy, verify, and deriveReqt relations
+- a SysML mapping contract export for the seeded model
+- a STEP AP242 placeholder contract export for the seeded physical parts
+- an FMI placeholder contract export for the seeded simulation model reference
 - sample traceability links
 - failed and passing test runs
 - one operational run
 - one baseline
 - one change request and its impact records
+
+The seed is narrated as a simple aerospace review chain: mission need -> architecture -> evidence -> change
+
+- mission need: the drone must cover a 30 minute inspection route and keep reserve
+- architecture: logical blocks and physical parts show how the mission is realized
+- evidence: test runs, simulation evidence, operational evidence, and verification records show what happened
+- change: the endurance shortfall drives a change request and linked impacts
 
 The seed should make the dashboard immediately useful and populate matrix and impact views with realistic data.
 
