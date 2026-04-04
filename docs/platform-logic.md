@@ -82,10 +82,17 @@ Verification uses a layered model:
 - `OperationalRun` records field or mission evidence
 - `VerificationEvidence` stores reusable evidence objects that can point to requirements, tests, components, and later simulation or telemetry inputs
 
+Evaluation is evidence-led:
+
+- explicit verification evidence signals take precedence
+- compatible test runs and operational runs act as fallback when evidence is neutral
+- failures dominate risk, and risk dominates partial support
+- approval status stays separate from verification status
+
 Why this matters:
 
-- execution records answer “what happened”
-- evidence answers “what can we reuse and review”
+- execution records answer "what happened"
+- evidence answers "what can we reuse and review"
 
 The requirement verification status engine derives the current state from linked evidence and test results.
 

@@ -183,6 +183,8 @@ How to use it:
 2. create evidence from a test result, simulation output, inspection, or telemetry source
 3. link it to the relevant requirement and test case
 4. reuse the same evidence record when you need to reference it in review or export workflows
+5. use the computed verification badge on the requirement detail page to see whether the requirement is `verified`, `partially_verified`, `at_risk`, `failed`, or `not_covered`
+6. note that verification evidence is evaluated first, with test or operational runs used only as compatibility fallback when the evidence itself is neutral
 
 ## 12. Traceability
 

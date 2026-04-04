@@ -156,6 +156,129 @@ def test_seed_demo_populates_sysml_driven_kpis():
         assert req4_detail["verification_evaluation"].status == RequirementVerificationStatus.at_risk
 
 
+def test_verification_evidence_explicit_signals_override_test_run_compatibility():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-VER-SIGNAL", name="Verification Signals", description=""))
+
+        verified_requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-VERIFIED-SIGNAL",
+                title="Explicit verified signal requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+            ),
+        )
+        verified_test_case = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key="TST-VERIFIED-SIGNAL",
+                title="Explicit verified signal test",
+                method=TestMethod.bench,
+                status=TestCaseStatus.approved,
+            ),
+        )
+        create_verification_evidence(
+            session,
+            VerificationEvidenceCreate(
+                project_id=project.id,
+                title="Verified evidence record",
+                evidence_type=VerificationEvidenceType.analysis,
+                summary="Verification result passed.",
+                observed_at=datetime.now(timezone.utc),
+                linked_requirement_ids=[verified_requirement.id],
+                linked_test_case_ids=[verified_test_case.id],
+                metadata_json={"verification": {"result": "passed"}},
+            ),
+        )
+        create_link(
+            session,
+            LinkCreate(
+                project_id=project.id,
+                source_type=LinkObjectType.requirement,
+                source_id=verified_requirement.id,
+                target_type=LinkObjectType.test_case,
+                target_id=verified_test_case.id,
+                relation_type=RelationType.verifies,
+                rationale="Verification evidence supports the requirement.",
+            ),
+        )
+        create_test_run(
+            session,
+            TestRunCreate(
+                test_case_id=verified_test_case.id,
+                execution_date=datetime.now(timezone.utc).date(),
+                result=TestRunResult.failed,
+                summary="Legacy run failed.",
+                measured_values_json={},
+                notes="",
+            ),
+        )
+        assert get_requirement_detail(session, verified_requirement.id)["verification_evaluation"].status == RequirementVerificationStatus.verified
+
+        failed_requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-FAILED-SIGNAL",
+                title="Explicit failed signal requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+            ),
+        )
+        failed_test_case = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key="TST-FAILED-SIGNAL",
+                title="Explicit failed signal test",
+                method=TestMethod.bench,
+                status=TestCaseStatus.approved,
+            ),
+        )
+        create_verification_evidence(
+            session,
+            VerificationEvidenceCreate(
+                project_id=project.id,
+                title="Failed evidence record",
+                evidence_type=VerificationEvidenceType.analysis,
+                summary="Verification result failed.",
+                observed_at=datetime.now(timezone.utc),
+                linked_requirement_ids=[failed_requirement.id],
+                linked_test_case_ids=[failed_test_case.id],
+                metadata_json={"verification": {"result": "failed"}},
+            ),
+        )
+        create_link(
+            session,
+            LinkCreate(
+                project_id=project.id,
+                source_type=LinkObjectType.requirement,
+                source_id=failed_requirement.id,
+                target_type=LinkObjectType.test_case,
+                target_id=failed_test_case.id,
+                relation_type=RelationType.verifies,
+                rationale="Verification evidence supports the requirement.",
+            ),
+        )
+        create_test_run(
+            session,
+            TestRunCreate(
+                test_case_id=failed_test_case.id,
+                execution_date=datetime.now(timezone.utc).date(),
+                result=TestRunResult.passed,
+                summary="Legacy run passed.",
+                measured_values_json={},
+                notes="",
+            ),
+        )
+        assert get_requirement_detail(session, failed_requirement.id)["verification_evaluation"].status == RequirementVerificationStatus.failed
+
+
 def test_requirement_verification_status_engine_uses_evidence_and_test_runs():
     with make_session() as session:
         project = create_project(session, ProjectCreate(code="P-VER", name="Verification", description=""))

@@ -74,6 +74,51 @@ def _utc_datetime(value: datetime | None) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
+def _collect_text_tokens(value: Any) -> list[str]:
+    tokens: list[str] = []
+    if value is None:
+        return tokens
+    if isinstance(value, dict):
+        for key, item in value.items():
+            tokens.extend(_collect_text_tokens(key))
+            tokens.extend(_collect_text_tokens(item))
+        return tokens
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            tokens.extend(_collect_text_tokens(item))
+        return tokens
+    tokens.append(str(value).strip().lower())
+    return tokens
+
+
+def _verification_signal_from_text(text: str) -> RequirementVerificationStatus | None:
+    normalized = " ".join(text.split()).lower()
+    fail_terms = ("failed", "failure", "fail", "rejected", "reject", "error", "broken", "false")
+    risk_terms = ("at risk", "risk", "warning", "warn", "degraded", "anomaly", "threshold", "unstable", "marginal")
+    partial_terms = ("partial", "incomplete", "insufficient", "mixed", "pending")
+    verified_terms = ("verified", "pass", "passed", "successful", "success", "supported", "accepted", "true")
+    if any(term in normalized for term in fail_terms):
+        return RequirementVerificationStatus.failed
+    if any(term in normalized for term in risk_terms):
+        return RequirementVerificationStatus.at_risk
+    if any(term in normalized for term in partial_terms):
+        return RequirementVerificationStatus.partially_verified
+    if any(term in normalized for term in verified_terms):
+        return RequirementVerificationStatus.verified
+    return None
+
+
+def _verification_signal_from_evidence(evidence: VerificationEvidence) -> RequirementVerificationStatus | None:
+    tokens: list[str] = []
+    tokens.extend(_collect_text_tokens(evidence.title))
+    tokens.extend(_collect_text_tokens(evidence.summary))
+    tokens.extend(_collect_text_tokens(evidence.source_name))
+    tokens.extend(_collect_text_tokens(evidence.source_reference))
+    tokens.extend(_collect_text_tokens(evidence.metadata_json))
+    combined = " ".join(tokens)
+    return _verification_signal_from_text(combined) if combined else None
+
+
 def _impact_node_key(object_type: str, object_id: UUID) -> tuple[str, UUID]:
     return object_type, object_id
 
@@ -2154,7 +2199,13 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
 
     linked_evidence_count = len(evidence)
     linked_operational_run_count = len(operational_runs)
-    has_any_verification_input = bool(linked_evidence_count or linked_operational_run_count)
+    has_any_verification_input = bool(linked_evidence_count or linked_operational_run_count or linked_test_case_count)
+
+    evidence_signals = [_verification_signal_from_evidence(item) for item in evidence]
+    explicit_failed_evidence_count = sum(1 for signal in evidence_signals if signal == RequirementVerificationStatus.failed)
+    explicit_risk_evidence_count = sum(1 for signal in evidence_signals if signal == RequirementVerificationStatus.at_risk)
+    explicit_partial_evidence_count = sum(1 for signal in evidence_signals if signal == RequirementVerificationStatus.partially_verified)
+    explicit_verified_evidence_count = sum(1 for signal in evidence_signals if signal == RequirementVerificationStatus.verified)
 
     def _base_kwargs(reasons: list[str], status: RequirementVerificationStatus) -> RequirementVerificationEvaluation:
         return RequirementVerificationEvaluation(
@@ -2176,7 +2227,44 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
         )
 
     if not has_any_verification_input:
-        return _base_kwargs(["No verification evidence or operational evidence batches are linked."], RequirementVerificationStatus.not_covered)
+        return _base_kwargs(["No verification evidence, operational evidence, or linked test cases are present."], RequirementVerificationStatus.not_covered)
+
+    if explicit_failed_evidence_count > 0:
+        reasons = [f"{explicit_failed_evidence_count} linked verification evidence record(s) explicitly indicate failure."]
+        if failed_test_case_count > 0:
+            reasons.append(f"{failed_test_case_count} linked test case(s) have a failed latest run.")
+        if failed_operational_run_count > 0:
+            reasons.append(f"{failed_operational_run_count} operational evidence batch(es) recorded a failure.")
+        return _base_kwargs(reasons, RequirementVerificationStatus.failed)
+
+    if explicit_risk_evidence_count > 0:
+        reasons = [f"{explicit_risk_evidence_count} linked verification evidence record(s) explicitly indicate risk or degradation."]
+        if stale_evidence_count > 0:
+            reasons.append(f"{stale_evidence_count} evidence record(s) are stale or missing observed dates.")
+        if stale_operational_run_count > 0:
+            reasons.append(f"{stale_operational_run_count} operational evidence batch(es) are stale.")
+        if degraded_operational_run_count > 0:
+            reasons.append(f"{degraded_operational_run_count} operational evidence batch(es) reported degradation.")
+        return _base_kwargs(reasons, RequirementVerificationStatus.at_risk)
+
+    if explicit_partial_evidence_count > 0:
+        reasons = [f"{explicit_partial_evidence_count} linked verification evidence record(s) explicitly indicate incomplete coverage."]
+        if linked_test_case_count == 0 and linked_operational_run_count == 0:
+            return _base_kwargs(reasons, RequirementVerificationStatus.partially_verified)
+        if requirement.verification_method == VerificationMethod.test and failed_test_case_count == 0 and partial_test_case_count == 0 and missing_test_case_count == 0:
+            return _base_kwargs(reasons, RequirementVerificationStatus.partially_verified)
+        return _base_kwargs(reasons, RequirementVerificationStatus.partially_verified)
+
+    if explicit_verified_evidence_count > 0:
+        reasons = ["Linked verification evidence explicitly supports the requirement."]
+        if requirement.verification_method == VerificationMethod.test and linked_test_case_count == 0:
+            reasons.append("A verification test case is still expected for this requirement.")
+            if linked_operational_run_count > 0:
+                reasons.append("Operational evidence batches are also current.")
+            return _base_kwargs(reasons, RequirementVerificationStatus.partially_verified)
+        if linked_operational_run_count > 0:
+            reasons.append("Operational evidence batches are also current.")
+        return _base_kwargs(reasons, RequirementVerificationStatus.verified)
 
     if failed_test_case_count > 0 or failed_operational_run_count > 0:
         reasons = []
@@ -2198,17 +2286,34 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
 
     if requirement.verification_method == VerificationMethod.test:
         if linked_test_case_count == 0:
+            if linked_evidence_count > 0:
+                return _base_kwargs(["Verification evidence exists, but no linked test case has been attached."], RequirementVerificationStatus.partially_verified)
             if linked_operational_run_count > 0:
-                return _base_kwargs(["Operational evidence batches are linked and current."], RequirementVerificationStatus.verified)
-            return _base_kwargs(["Evidence exists, but no linked test case has been attached."], RequirementVerificationStatus.partially_verified)
-        if passed_test_case_count == linked_test_case_count:
+                return _base_kwargs(["Operational evidence batches are linked, but no verification test case is attached."], RequirementVerificationStatus.partially_verified)
+            return _base_kwargs(["No linked test case has been attached."], RequirementVerificationStatus.not_covered)
+        if failed_test_case_count > 0 or failed_operational_run_count > 0:
+            reasons = []
+            if failed_test_case_count > 0:
+                reasons.append(f"{failed_test_case_count} linked test case(s) have a failed latest run.")
+            if failed_operational_run_count > 0:
+                reasons.append(f"{failed_operational_run_count} operational evidence batch(es) recorded a failure.")
+            return _base_kwargs(reasons, RequirementVerificationStatus.failed)
+        if partial_test_case_count > 0 or missing_test_case_count > 0:
+            return _base_kwargs(["Some linked test cases are partial or have not been run yet."], RequirementVerificationStatus.at_risk)
+        if passed_test_case_count == linked_test_case_count and linked_test_case_count > 0:
             reasons = ["Fresh evidence and passing linked tests support verification."]
             if linked_operational_run_count > 0:
                 reasons.append("Operational evidence batches also support the requirement.")
             return _base_kwargs(reasons, RequirementVerificationStatus.verified)
-        if partial_test_case_count > 0 or missing_test_case_count > 0:
-            return _base_kwargs(["Some linked test cases are partial or have not been run yet."], RequirementVerificationStatus.at_risk)
-        return _base_kwargs(["Evidence exists, but the linked test set is incomplete."], RequirementVerificationStatus.partially_verified)
+        if linked_evidence_count > 0 or linked_operational_run_count > 0:
+            return _base_kwargs(["Verification evidence exists, but the test verification trail is incomplete."], RequirementVerificationStatus.partially_verified)
+        return _base_kwargs(["No verification evidence is linked."], RequirementVerificationStatus.not_covered)
+
+    if fresh_evidence_count > 0 and linked_evidence_count > 0:
+        reasons = ["Fresh verification evidence supports the requirement."]
+        if linked_operational_run_count > 0:
+            reasons.append("Operational evidence batches are also current.")
+        return _base_kwargs(reasons, RequirementVerificationStatus.verified)
 
     if passed_test_case_count == linked_test_case_count and linked_test_case_count > 0:
         reasons = ["Fresh evidence covers the requirement."]
@@ -2218,6 +2323,17 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
 
     if linked_operational_run_count > 0:
         return _base_kwargs(["Operational evidence batches are linked and current."], RequirementVerificationStatus.verified)
+
+    if linked_evidence_count > 0:
+        return _base_kwargs(["Verification evidence exists, but the verification trail is still incomplete."], RequirementVerificationStatus.partially_verified)
+
+    if linked_test_case_count > 0:
+        if passed_test_case_count == linked_test_case_count:
+            return _base_kwargs(["Linked test cases all pass."], RequirementVerificationStatus.verified)
+        if failed_test_case_count > 0:
+            return _base_kwargs(["Linked test cases include a failed latest run."], RequirementVerificationStatus.failed)
+        if partial_test_case_count > 0 or missing_test_case_count > 0:
+            return _base_kwargs(["Linked test cases are partial or missing runs."], RequirementVerificationStatus.at_risk)
 
     return _base_kwargs(["Fresh evidence exists, but the verification trail is still incomplete."], RequirementVerificationStatus.partially_verified)
 
@@ -2513,7 +2629,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
         {
             "title": "Obstacle verification evidence",
             "evidence_type": VerificationEvidenceType.test_result,
-            "summary": "Seeded partial obstacle verification evidence.",
+            "summary": "Seeded obstacle verification evidence.",
             "observed_at": datetime.now(timezone.utc),
             "source_name": "QA Lab",
             "source_reference": "DR-TST-004",

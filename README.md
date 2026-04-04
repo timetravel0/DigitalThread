@@ -109,6 +109,15 @@ threadlite/
 - Project export bundles for external validation
 - Demo seed for a drone inspection project
 
+## Verification Status
+
+Requirement verification state is computed from linked `VerificationEvidence` first.
+
+- the requirement detail page shows the computed state clearly
+- the dashboard rolls those computed states up into its risk metrics
+- compatible test runs and operational runs are used as fallback when evidence is neutral
+- approval and review status remain separate from verification status
+
 ## How To Use The Platform
 
 If you are new to ThreadLite, start here:
