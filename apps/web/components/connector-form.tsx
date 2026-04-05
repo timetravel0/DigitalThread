@@ -8,6 +8,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import type { ConnectorDefinition } from "@/lib/types";
+import type { DomainProfile } from "@/lib/labels";
+
+type ProjectOption = {
+  id: string;
+  code: string;
+  name: string;
+  domain_profile: DomainProfile;
+};
 
 const schema = z.object({
   project_id: z.string().min(1),
@@ -30,13 +38,13 @@ function toJsonText(value: unknown) {
   }
 }
 
-export function ConnectorForm({ initial }: { initial?: Partial<ConnectorDefinition> }) {
+export function ConnectorForm({ initial, projects = [], initialProjectId }: { initial?: Partial<ConnectorDefinition>; projects?: ProjectOption[]; initialProjectId?: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      project_id: initial?.project_id || "",
+      project_id: initial?.project_id || initialProjectId || projects[0]?.id || "",
       name: initial?.name || "",
       connector_type: initial?.connector_type || "custom",
       base_url: initial?.base_url || "",
@@ -69,7 +77,13 @@ export function ConnectorForm({ initial }: { initial?: Partial<ConnectorDefiniti
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Input placeholder="Project ID" {...form.register("project_id")} />
+        <Select {...form.register("project_id")} disabled={!projects.length}>
+          {(projects.length ? projects : projects[0] ? [projects[0]] : []).map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.code} - {project.name}
+            </option>
+          ))}
+        </Select>
         <Input placeholder="Connector name" {...form.register("name")} />
       </div>
       <div className="grid gap-4 md:grid-cols-2">

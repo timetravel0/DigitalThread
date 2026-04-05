@@ -1380,12 +1380,25 @@ def _seed_profile_demo(
     requirement_key: str,
     requirement_title: str,
     requirement_description: str,
+    requirement_category: RequirementCategory,
+    requirement_priority: Priority,
+    requirement_verification_method: VerificationMethod,
     block_key: str,
     block_name: str,
     block_description: str,
+    block_kind: BlockKind,
+    block_abstraction_level: AbstractionLevel,
+    component_key: str,
+    component_name: str,
+    component_description: str,
+    component_type: ComponentType,
+    component_part_number: str | None = None,
+    component_supplier: str | None = None,
+    component_metadata_json: dict[str, Any] | None = None,
     test_key: str,
     test_title: str,
     test_description: str,
+    test_method: TestMethod,
 ) -> dict[str, Any]:
     project = _first_item(session.exec(select(Project).where(Project.code == code)))
     if project is None:
@@ -1408,9 +1421,9 @@ def _seed_profile_demo(
                 key=requirement_key,
                 title=requirement_title,
                 description=requirement_description,
-                category=RequirementCategory.performance,
-                priority=Priority.high,
-                verification_method=VerificationMethod.test,
+                category=requirement_category,
+                priority=requirement_priority,
+                verification_method=requirement_verification_method,
                 status=RequirementStatus.approved,
                 version=1,
                 approved_at=datetime.now(timezone.utc),
@@ -1427,8 +1440,8 @@ def _seed_profile_demo(
                 key=block_key,
                 name=block_name,
                 description=block_description,
-                block_kind=BlockKind.component,
-                abstraction_level=AbstractionLevel.physical,
+                block_kind=block_kind,
+                abstraction_level=block_abstraction_level,
                 status=BlockStatus.approved,
                 version=1,
                 approved_at=datetime.now(timezone.utc),
@@ -1436,6 +1449,24 @@ def _seed_profile_demo(
             ),
         )
         block = _get(session, Block, block.id)
+    component = _first_item(session.exec(select(Component).where(Component.project_id == project.id, Component.key == component_key)))
+    if component is None:
+        component = create_component(
+            session,
+            ComponentCreate(
+                project_id=project.id,
+                key=component_key,
+                name=component_name,
+                description=component_description,
+                type=component_type,
+                part_number=component_part_number,
+                supplier=component_supplier,
+                status=ComponentStatus.validated,
+                version=1,
+                metadata_json=component_metadata_json or {"seeded": True},
+            ),
+        )
+        component = _get(session, Component, component.id)
     test_case = _first_item(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == test_key)))
     if test_case is None:
         test_case = create_test_case(
@@ -1445,7 +1476,7 @@ def _seed_profile_demo(
                 key=test_key,
                 title=test_title,
                 description=test_description,
-                method=TestMethod.inspection,
+                method=test_method,
                 status=TestCaseStatus.approved,
                 version=1,
                 approved_at=datetime.now(timezone.utc),
@@ -1453,13 +1484,13 @@ def _seed_profile_demo(
             ),
         )
         test_case = _get(session, TestCase, test_case.id)
-    if requirement is not None and block is not None and not session.exec(
+    if requirement is not None and component is not None and not session.exec(
         select(Link).where(
             Link.project_id == project.id,
             Link.source_type == LinkObjectType.requirement,
             Link.source_id == requirement.id,
             Link.target_type == LinkObjectType.component,
-            Link.target_id == block.id,
+            Link.target_id == component.id,
             Link.relation_type == RelationType.allocated_to,
         )
     ).first():
@@ -1470,9 +1501,9 @@ def _seed_profile_demo(
                 source_type=LinkObjectType.requirement,
                 source_id=requirement.id,
                 target_type=LinkObjectType.component,
-                target_id=block.id,
+                target_id=component.id,
                 relation_type=RelationType.allocated_to,
-                rationale=f"{requirement_key} allocates to {block_key}.",
+                rationale=f"{requirement_key} allocates to {component_key}.",
             ),
         )
     if requirement is not None and test_case is not None and not session.exec(
@@ -1497,7 +1528,632 @@ def _seed_profile_demo(
                 rationale=f"{requirement_key} is verified by {test_key}.",
             ),
         )
-    return {"project_id": str(project.id), "seeded": True}
+    if requirement is not None and block is not None and not session.exec(
+        select(SysMLRelation).where(
+            SysMLRelation.project_id == project.id,
+            SysMLRelation.source_type == SysMLObjectType.block,
+            SysMLRelation.source_id == block.id,
+            SysMLRelation.target_type == SysMLObjectType.requirement,
+            SysMLRelation.target_id == requirement.id,
+            SysMLRelation.relation_type == SysMLRelationType.satisfy,
+        )
+    ).first():
+        create_sysml_relation(
+            session,
+            SysMLRelationCreate(
+                project_id=project.id,
+                source_type=SysMLObjectType.block,
+                source_id=block.id,
+                target_type=SysMLObjectType.requirement,
+                target_id=requirement.id,
+                relation_type=SysMLRelationType.satisfy,
+                rationale=f"{block_key} satisfies {requirement_key}.",
+            ),
+        )
+    if requirement is not None and component is not None and not session.exec(
+        select(SysMLRelation).where(
+            SysMLRelation.project_id == project.id,
+            SysMLRelation.source_type == SysMLObjectType.component,
+            SysMLRelation.source_id == component.id,
+            SysMLRelation.target_type == SysMLObjectType.requirement,
+            SysMLRelation.target_id == requirement.id,
+            SysMLRelation.relation_type == SysMLRelationType.trace,
+        )
+    ).first():
+        create_sysml_relation(
+            session,
+            SysMLRelationCreate(
+                project_id=project.id,
+                source_type=SysMLObjectType.component,
+                source_id=component.id,
+                target_type=SysMLObjectType.requirement,
+                target_id=requirement.id,
+                relation_type=SysMLRelationType.trace,
+                rationale=f"{component_key} realizes {requirement_key}.",
+            ),
+        )
+    if requirement is not None and test_case is not None and not session.exec(
+        select(SysMLRelation).where(
+            SysMLRelation.project_id == project.id,
+            SysMLRelation.source_type == SysMLObjectType.test_case,
+            SysMLRelation.source_id == test_case.id,
+            SysMLRelation.target_type == SysMLObjectType.requirement,
+            SysMLRelation.target_id == requirement.id,
+            SysMLRelation.relation_type == SysMLRelationType.verify,
+        )
+    ).first():
+        create_sysml_relation(
+            session,
+            SysMLRelationCreate(
+                project_id=project.id,
+                source_type=SysMLObjectType.test_case,
+                source_id=test_case.id,
+                target_type=SysMLObjectType.requirement,
+                target_id=requirement.id,
+                relation_type=SysMLRelationType.verify,
+                rationale=f"{test_key} verifies {requirement_key}.",
+            ),
+        )
+    return {
+        "project_id": str(project.id),
+        "requirement_id": str(requirement.id) if requirement else None,
+        "block_id": str(block.id) if block else None,
+        "component_id": str(component.id) if component else None,
+        "test_case_id": str(test_case.id) if test_case else None,
+        "seeded": True,
+    }
+
+
+def _seed_manufacturing_demo_details(session: Session, project_id: UUID, base: dict[str, Any]) -> None:
+    project = _get(session, Project, project_id)
+    if project is None:
+        raise LookupError("Project not found")
+
+    req1 = _get(session, Requirement, UUID(base["requirement_id"]))
+    blk1 = _get(session, Block, UUID(base["block_id"]))
+    comp1 = _get(session, Component, UUID(base["component_id"]))
+    tst1 = _get(session, TestCase, UUID(base["test_case_id"]))
+    if req1 is None or blk1 is None or comp1 is None or tst1 is None:
+        raise LookupError("Manufacturing seed base objects not found")
+
+    req2 = _first_item(session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == "MFG-SPEC-002")))
+    if req2 is None:
+        req2 = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="MFG-SPEC-002",
+                title="Line shall reject underfilled units automatically",
+                description="Production quality requirement that prevents underfilled packages from leaving the line.",
+                category=RequirementCategory.compliance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+                status=RequirementStatus.approved,
+                version=1,
+                approved_at=datetime.now(timezone.utc),
+                approved_by="seed",
+            ),
+        )
+        req2 = _get(session, Requirement, req2.id)
+
+    blk2 = _first_item(session.exec(select(Block).where(Block.project_id == project.id, Block.key == "MFG-BLK-002")))
+    if blk2 is None:
+        blk2 = create_block(
+            session,
+            BlockCreate(
+                project_id=project.id,
+                key="MFG-BLK-002",
+                name="Inspection Station",
+                description="Inspection station used to catch underfilled units before release.",
+                block_kind=BlockKind.subsystem,
+                abstraction_level=AbstractionLevel.logical,
+                status=BlockStatus.approved,
+                version=1,
+                approved_at=datetime.now(timezone.utc),
+                approved_by="seed",
+            ),
+        )
+        blk2 = _get(session, Block, blk2.id)
+
+    comp2 = _first_item(session.exec(select(Component).where(Component.project_id == project.id, Component.key == "MFG-CMP-002")))
+    if comp2 is None:
+        comp2 = create_component(
+            session,
+            ComponentCreate(
+                project_id=project.id,
+                key="MFG-CMP-002",
+                name="Vision Sensor",
+                description="Sensor used to detect fill anomalies and route rejects.",
+                type=ComponentType.sensor,
+                part_number="MFG-VIS-01",
+                supplier="Inspecta",
+                status=ComponentStatus.validated,
+                version=1,
+                metadata_json={"resolution_px": 1920, "inspection_mode": "inline"},
+            ),
+        )
+        comp2 = _get(session, Component, comp2.id)
+
+    tst2 = _first_item(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == "MFG-QC-002")))
+    if tst2 is None:
+        tst2 = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key="MFG-QC-002",
+                title="Reject Routing Check",
+                description="Inspection check that underfilled units are routed to the reject lane.",
+                method=TestMethod.inspection,
+                status=TestCaseStatus.approved,
+                version=1,
+                approved_at=datetime.now(timezone.utc),
+                approved_by="seed",
+            ),
+        )
+        tst2 = _get(session, TestCase, tst2.id)
+
+    if not session.exec(
+        select(BlockContainment).where(
+            BlockContainment.project_id == project.id,
+            BlockContainment.parent_block_id == blk1.id,
+            BlockContainment.child_block_id == blk2.id,
+        )
+    ).first():
+        create_block_containment(
+            session,
+            BlockContainmentCreate(
+                project_id=project.id,
+                parent_block_id=blk1.id,
+                child_block_id=blk2.id,
+                relation_type=BlockContainmentRelationType.contains,
+            ),
+        )
+
+    for rel in [
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blk1.id, target_type=SysMLObjectType.requirement, target_id=req1.id, relation_type=SysMLRelationType.satisfy, rationale="Packaging line satisfies fill accuracy."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blk2.id, target_type=SysMLObjectType.requirement, target_id=req2.id, relation_type=SysMLRelationType.satisfy, rationale="Inspection station satisfies reject control."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.component, source_id=comp1.id, target_type=SysMLObjectType.requirement, target_id=req1.id, relation_type=SysMLRelationType.trace, rationale="Fill head realizes fill accuracy."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.component, source_id=comp2.id, target_type=SysMLObjectType.requirement, target_id=req2.id, relation_type=SysMLRelationType.trace, rationale="Vision sensor realizes reject control."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.test_case, source_id=tst1.id, target_type=SysMLObjectType.requirement, target_id=req1.id, relation_type=SysMLRelationType.verify, rationale="Fill accuracy check verifies the fill target."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.test_case, source_id=tst2.id, target_type=SysMLObjectType.requirement, target_id=req2.id, relation_type=SysMLRelationType.verify, rationale="Reject routing check verifies reject control."),
+    ]:
+        if not session.exec(
+            select(SysMLRelation).where(
+                SysMLRelation.project_id == project.id,
+                SysMLRelation.source_type == rel.source_type,
+                SysMLRelation.source_id == rel.source_id,
+                SysMLRelation.target_type == rel.target_type,
+                SysMLRelation.target_id == rel.target_id,
+                SysMLRelation.relation_type == rel.relation_type,
+            )
+        ).first():
+            create_sysml_relation(session, rel)
+
+    for p in [
+        LinkCreate(project_id=project.id, source_type=LinkObjectType.requirement, source_id=req2.id, target_type=LinkObjectType.component, target_id=comp2.id, relation_type=RelationType.allocated_to, rationale="Reject control allocates to the vision sensor."),
+        LinkCreate(project_id=project.id, source_type=LinkObjectType.requirement, source_id=req2.id, target_type=LinkObjectType.test_case, target_id=tst2.id, relation_type=RelationType.verifies, rationale="Reject routing check verifies the reject control requirement."),
+    ]:
+        if not session.exec(
+            select(Link).where(
+                Link.project_id == project.id,
+                Link.source_type == p.source_type,
+                Link.source_id == p.source_id,
+                Link.target_type == p.target_type,
+                Link.target_id == p.target_id,
+                Link.relation_type == p.relation_type,
+            )
+        ).first():
+            _add(session, Link.model_validate(p))
+
+    for p in [
+        {
+            "title": "Fill accuracy verification evidence",
+            "summary": "Inline quality evidence shows the line stays within the 99.5 percent target.",
+            "evidence_type": VerificationEvidenceType.inspection,
+            "source_name": "QA Line Audit",
+            "source_reference": "MFG-QC-001",
+            "linked_requirement_ids": [req1.id],
+            "linked_test_case_ids": [tst1.id],
+            "linked_component_ids": [comp1.id],
+        },
+        {
+            "title": "Reject routing verification evidence",
+            "summary": "Inspection evidence confirms underfilled units are routed to the reject lane.",
+            "evidence_type": VerificationEvidenceType.test_result,
+            "source_name": "QA Lab",
+            "source_reference": "MFG-QC-002",
+            "linked_requirement_ids": [req2.id],
+            "linked_test_case_ids": [tst2.id],
+            "linked_component_ids": [comp2.id],
+        },
+    ]:
+        if not session.exec(select(VerificationEvidence).where(VerificationEvidence.project_id == project.id, VerificationEvidence.title == p["title"])).first():
+            create_verification_evidence(
+                session,
+                VerificationEvidenceCreate(
+                    project_id=project.id,
+                    title=p["title"],
+                    evidence_type=p["evidence_type"],
+                    summary=p["summary"],
+                    source_name=p["source_name"],
+                    source_reference=p["source_reference"],
+                    observed_at=datetime.now(timezone.utc),
+                    metadata_json={"seeded": True, "profile": "manufacturing"},
+                    linked_requirement_ids=p["linked_requirement_ids"],
+                    linked_test_case_ids=p["linked_test_case_ids"],
+                    linked_component_ids=p["linked_component_ids"],
+                ),
+            )
+
+    first_evidence = _first_item(
+        session.exec(
+            select(VerificationEvidence).where(
+                VerificationEvidence.project_id == project.id,
+                VerificationEvidence.title == "Fill accuracy verification evidence",
+            )
+        )
+    )
+    if not session.exec(
+        select(SimulationEvidence).where(
+            SimulationEvidence.project_id == project.id,
+            SimulationEvidence.title == "Manufacturing throughput simulation",
+        )
+    ).first():
+        create_simulation_evidence(
+            session,
+            SimulationEvidenceCreate(
+                project_id=project.id,
+                title="Manufacturing throughput simulation",
+                model_reference="Production Line Model",
+                scenario_name="Peak demand and reject burst",
+                input_summary="Simulate a peak shift with short fill variance and intermittent rejects.",
+                inputs_json={"shift_units": 2400, "reject_spike_pct": 1.8, "fill_variance_pct": 0.4},
+                expected_behavior="Maintain fill accuracy while routing non-conforming units to reject.",
+                observed_behavior="Simulation held fill accuracy and routed rejects correctly.",
+                result=SimulationEvidenceResult.passed,
+                execution_timestamp=datetime.now(timezone.utc),
+                metadata_json={"seeded": True, "profile": "manufacturing"},
+                linked_requirement_ids=[req1.id, req2.id],
+                linked_test_case_ids=[tst1.id, tst2.id],
+                linked_verification_evidence_ids=[first_evidence.id] if first_evidence else [],
+            ),
+        )
+
+    if not session.exec(
+        select(OperationalEvidence).where(
+            OperationalEvidence.project_id == project.id,
+            OperationalEvidence.title == "Manufacturing shift telemetry batch",
+        )
+    ).first():
+        create_operational_evidence(
+            session,
+            OperationalEvidenceCreate(
+                project_id=project.id,
+                title="Manufacturing shift telemetry batch",
+                source_name="MES aggregator",
+                source_type=OperationalEvidenceSourceType.system,
+                captured_at=datetime.now(timezone.utc),
+                coverage_window_start=datetime.now(timezone.utc) - timedelta(hours=8),
+                coverage_window_end=datetime.now(timezone.utc),
+                observations_summary="Shift telemetry shows stable fill accuracy with a controlled reject lane.",
+                aggregated_observations_json={"fill_accuracy_pct": 99.6, "reject_rate_pct": 0.3},
+                quality_status=OperationalEvidenceQualityStatus.good,
+                derived_metrics_json={"fill_accuracy_margin_pct": 0.1, "reject_lane_clear": True},
+                metadata_json={"seeded": True, "profile": "manufacturing"},
+                linked_requirement_ids=[req1.id, req2.id],
+                linked_verification_evidence_ids=[first_evidence.id] if first_evidence else [],
+            ),
+        )
+
+    baseline = _first_item(session.exec(select(Baseline).where(Baseline.project_id == project.id, Baseline.name == "Manufacturing Release Baseline")))
+    if baseline is None:
+        baseline, _ = create_baseline(
+            session,
+            BaselineCreate(
+                project_id=project.id,
+                name="Manufacturing Release Baseline",
+                description="Released baseline for the packaged line demonstration.",
+            ),
+        )
+    if baseline.status != BaselineStatus.released:
+        release_baseline(session, baseline.id)
+
+    cr = _first_item(session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project.id, ChangeRequest.key == "MFG-CR-001")))
+    if cr is None:
+        cr = create_change_request(
+            session,
+            ChangeRequestCreate(
+                project_id=project.id,
+                key="MFG-CR-001",
+                title="Tune fill-head calibration after reject-lane review",
+                description="Shift evidence shows the fill head should be tuned to keep the reject lane calm and maintain quality release cadence.",
+                status=ChangeRequestStatus.open,
+                severity=Severity.high,
+            ),
+        )
+    if not session.exec(select(ChangeImpact).where(ChangeImpact.change_request_id == cr.id)).first():
+        for impact in [
+            {"object_type": "requirement", "object_id": req1.id, "impact_level": ImpactLevel.high, "notes": "Fill accuracy target may need calibration adjustments."},
+            {"object_type": "component", "object_id": comp1.id, "impact_level": ImpactLevel.high, "notes": "Fill head assembly is the primary tuning lever."},
+            {"object_type": "test_case", "object_id": tst1.id, "impact_level": ImpactLevel.medium, "notes": "Accuracy check may need tighter acceptance bands."},
+        ]:
+            _add(session, ChangeImpact(change_request_id=cr.id, **impact))
+
+
+def _seed_personal_demo_details(session: Session, project_id: UUID, base: dict[str, Any]) -> None:
+    project = _get(session, Project, project_id)
+    if project is None:
+        raise LookupError("Project not found")
+
+    req1 = _get(session, Requirement, UUID(base["requirement_id"]))
+    blk1 = _get(session, Block, UUID(base["block_id"]))
+    comp1 = _get(session, Component, UUID(base["component_id"]))
+    tst1 = _get(session, TestCase, UUID(base["test_case_id"]))
+    if req1 is None or blk1 is None or comp1 is None or tst1 is None:
+        raise LookupError("Personal seed base objects not found")
+
+    req2 = _first_item(session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == "HOME-GOAL-002")))
+    if req2 is None:
+        req2 = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="HOME-GOAL-002",
+                title="Backups shall restore within 15 minutes",
+                description="Personal goal for recovering files quickly after a home outage.",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+                status=RequirementStatus.approved,
+                version=1,
+                approved_at=datetime.now(timezone.utc),
+                approved_by="seed",
+            ),
+        )
+        req2 = _get(session, Requirement, req2.id)
+
+    blk2 = _first_item(session.exec(select(Block).where(Block.project_id == project.id, Block.key == "HOME-BLK-002")))
+    if blk2 is None:
+        blk2 = create_block(
+            session,
+            BlockCreate(
+                project_id=project.id,
+                key="HOME-BLK-002",
+                name="Backup Service",
+                description="Home backup workflow that manages snapshots and restore timing.",
+                block_kind=BlockKind.subsystem,
+                abstraction_level=AbstractionLevel.logical,
+                status=BlockStatus.approved,
+                version=1,
+                approved_at=datetime.now(timezone.utc),
+                approved_by="seed",
+            ),
+        )
+        blk2 = _get(session, Block, blk2.id)
+
+    comp2 = _first_item(session.exec(select(Component).where(Component.project_id == project.id, Component.key == "HOME-CMP-002")))
+    if comp2 is None:
+        comp2 = create_component(
+            session,
+            ComponentCreate(
+                project_id=project.id,
+                key="HOME-CMP-002",
+                name="NAS Appliance",
+                description="Home storage appliance used to keep backups available overnight.",
+                type=ComponentType.other,
+                part_number="HOME-NAS-01",
+                supplier="SyncedHome",
+                status=ComponentStatus.validated,
+                version=1,
+                metadata_json={"storage_tb": 4, "sync_window": "overnight"},
+            ),
+        )
+        comp2 = _get(session, Component, comp2.id)
+
+    tst2 = _first_item(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == "HOME-VER-002")))
+    if tst2 is None:
+        tst2 = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key="HOME-VER-002",
+                title="Restore Drill",
+                description="Verification drill showing files can be restored inside the 15 minute target.",
+                method=TestMethod.inspection,
+                status=TestCaseStatus.approved,
+                version=1,
+                approved_at=datetime.now(timezone.utc),
+                approved_by="seed",
+            ),
+        )
+        tst2 = _get(session, TestCase, tst2.id)
+
+    if not session.exec(
+        select(BlockContainment).where(
+            BlockContainment.project_id == project.id,
+            BlockContainment.parent_block_id == blk1.id,
+            BlockContainment.child_block_id == blk2.id,
+        )
+    ).first():
+        create_block_containment(
+            session,
+            BlockContainmentCreate(
+                project_id=project.id,
+                parent_block_id=blk1.id,
+                child_block_id=blk2.id,
+                relation_type=BlockContainmentRelationType.contains,
+            ),
+        )
+
+    for rel in [
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blk1.id, target_type=SysMLObjectType.requirement, target_id=req1.id, relation_type=SysMLRelationType.satisfy, rationale="Home system satisfies overnight backup."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.block, source_id=blk2.id, target_type=SysMLObjectType.requirement, target_id=req2.id, relation_type=SysMLRelationType.satisfy, rationale="Backup service satisfies restore timing."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.component, source_id=comp1.id, target_type=SysMLObjectType.requirement, target_id=req1.id, relation_type=SysMLRelationType.trace, rationale="Backup storage node realizes overnight backup."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.component, source_id=comp2.id, target_type=SysMLObjectType.requirement, target_id=req2.id, relation_type=SysMLRelationType.trace, rationale="NAS appliance realizes restore timing."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.test_case, source_id=tst1.id, target_type=SysMLObjectType.requirement, target_id=req1.id, relation_type=SysMLRelationType.verify, rationale="Overnight backup check verifies overnight availability."),
+        SysMLRelationCreate(project_id=project.id, source_type=SysMLObjectType.test_case, source_id=tst2.id, target_type=SysMLObjectType.requirement, target_id=req2.id, relation_type=SysMLRelationType.verify, rationale="Restore drill verifies restore timing."),
+    ]:
+        if not session.exec(
+            select(SysMLRelation).where(
+                SysMLRelation.project_id == project.id,
+                SysMLRelation.source_type == rel.source_type,
+                SysMLRelation.source_id == rel.source_id,
+                SysMLRelation.target_type == rel.target_type,
+                SysMLRelation.target_id == rel.target_id,
+                SysMLRelation.relation_type == rel.relation_type,
+            )
+        ).first():
+            create_sysml_relation(session, rel)
+
+    for p in [
+        LinkCreate(project_id=project.id, source_type=LinkObjectType.requirement, source_id=req2.id, target_type=LinkObjectType.component, target_id=comp2.id, relation_type=RelationType.allocated_to, rationale="Restore timing allocates to NAS backup storage."),
+        LinkCreate(project_id=project.id, source_type=LinkObjectType.requirement, source_id=req2.id, target_type=LinkObjectType.test_case, target_id=tst2.id, relation_type=RelationType.verifies, rationale="Restore drill verifies the restore goal."),
+    ]:
+        if not session.exec(
+            select(Link).where(
+                Link.project_id == project.id,
+                Link.source_type == p.source_type,
+                Link.source_id == p.source_id,
+                Link.target_type == p.target_type,
+                Link.target_id == p.target_id,
+                Link.relation_type == p.relation_type,
+            )
+        ).first():
+            _add(session, Link.model_validate(p))
+
+    for p in [
+        {
+            "title": "Overnight backup evidence",
+            "summary": "Backup evidence shows the home storage node stayed online overnight.",
+            "evidence_type": VerificationEvidenceType.test_result,
+            "source_name": "Home backup monitor",
+            "source_reference": "HOME-VER-001",
+            "linked_requirement_ids": [req1.id],
+            "linked_test_case_ids": [tst1.id],
+            "linked_component_ids": [comp1.id],
+        },
+        {
+            "title": "Restore drill evidence",
+            "summary": "Restore evidence confirms a typical file can be recovered inside the target window.",
+            "evidence_type": VerificationEvidenceType.analysis,
+            "source_name": "Home QA",
+            "source_reference": "HOME-VER-002",
+            "linked_requirement_ids": [req2.id],
+            "linked_test_case_ids": [tst2.id],
+            "linked_component_ids": [comp2.id],
+        },
+    ]:
+        if not session.exec(select(VerificationEvidence).where(VerificationEvidence.project_id == project.id, VerificationEvidence.title == p["title"])).first():
+            create_verification_evidence(
+                session,
+                VerificationEvidenceCreate(
+                    project_id=project.id,
+                    title=p["title"],
+                    evidence_type=p["evidence_type"],
+                    summary=p["summary"],
+                    source_name=p["source_name"],
+                    source_reference=p["source_reference"],
+                    observed_at=datetime.now(timezone.utc),
+                    metadata_json={"seeded": True, "profile": "personal"},
+                    linked_requirement_ids=p["linked_requirement_ids"],
+                    linked_test_case_ids=p["linked_test_case_ids"],
+                    linked_component_ids=p["linked_component_ids"],
+                ),
+            )
+
+    first_evidence = _first_item(
+        session.exec(
+            select(VerificationEvidence).where(
+                VerificationEvidence.project_id == project.id,
+                VerificationEvidence.title == "Overnight backup evidence",
+            )
+        )
+    )
+    if not session.exec(
+        select(SimulationEvidence).where(
+            SimulationEvidence.project_id == project.id,
+            SimulationEvidence.title == "Home backup resilience simulation",
+        )
+    ).first():
+        create_simulation_evidence(
+            session,
+            SimulationEvidenceCreate(
+                project_id=project.id,
+                title="Home backup resilience simulation",
+                model_reference="Home Backup Model",
+                scenario_name="Power outage overnight",
+                input_summary="Simulate a power interruption and nightly backup cadence.",
+                inputs_json={"outage_minutes": 35, "backup_window_hours": 8},
+                expected_behavior="Backup storage remains reachable and resume window stays within target.",
+                observed_behavior="Simulation maintained availability and restore timing stayed within target.",
+                result=SimulationEvidenceResult.passed,
+                execution_timestamp=datetime.now(timezone.utc),
+                metadata_json={"seeded": True, "profile": "personal"},
+                linked_requirement_ids=[req1.id, req2.id],
+                linked_test_case_ids=[tst1.id, tst2.id],
+                linked_verification_evidence_ids=[first_evidence.id] if first_evidence else [],
+            ),
+        )
+
+    if not session.exec(
+        select(OperationalEvidence).where(
+            OperationalEvidence.project_id == project.id,
+            OperationalEvidence.title == "Home backup telemetry batch",
+        )
+    ).first():
+        create_operational_evidence(
+            session,
+            OperationalEvidenceCreate(
+                project_id=project.id,
+                title="Home backup telemetry batch",
+                source_name="Home backup monitor",
+                source_type=OperationalEvidenceSourceType.system,
+                captured_at=datetime.now(timezone.utc),
+                coverage_window_start=datetime.now(timezone.utc) - timedelta(hours=8),
+                coverage_window_end=datetime.now(timezone.utc),
+                observations_summary="Nightly telemetry shows the backup window completed and the router stayed isolated from guest traffic.",
+                aggregated_observations_json={"backup_success": True, "restore_minutes": 12, "guest_isolated": True},
+                quality_status=OperationalEvidenceQualityStatus.good,
+                derived_metrics_json={"backup_window_hours": 8, "restore_margin_minutes": 3},
+                metadata_json={"seeded": True, "profile": "personal"},
+                linked_requirement_ids=[req1.id, req2.id],
+                linked_verification_evidence_ids=[first_evidence.id] if first_evidence else [],
+            ),
+        )
+
+    baseline = _first_item(session.exec(select(Baseline).where(Baseline.project_id == project.id, Baseline.name == "Home Infrastructure Baseline")))
+    if baseline is None:
+        baseline, _ = create_baseline(
+            session,
+            BaselineCreate(
+                project_id=project.id,
+                name="Home Infrastructure Baseline",
+                description="Released baseline for the home backup and network setup.",
+            ),
+        )
+    if baseline.status != BaselineStatus.released:
+        release_baseline(session, baseline.id)
+
+    cr = _first_item(session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project.id, ChangeRequest.key == "HOME-CR-001")))
+    if cr is None:
+        cr = create_change_request(
+            session,
+            ChangeRequestCreate(
+                project_id=project.id,
+                key="HOME-CR-001",
+                title="Add UPS-backed storage for overnight resilience",
+                description="The overnight evidence shows the home backup path should gain UPS-backed storage and a tighter restore rule.",
+                status=ChangeRequestStatus.open,
+                severity=Severity.medium,
+            ),
+        )
+    if not session.exec(select(ChangeImpact).where(ChangeImpact.change_request_id == cr.id)).first():
+        for impact in [
+            {"object_type": "requirement", "object_id": req1.id, "impact_level": ImpactLevel.high, "notes": "Backup availability may require tighter resilience controls."},
+            {"object_type": "component", "object_id": comp1.id, "impact_level": ImpactLevel.high, "notes": "Backup storage node is the primary resilience concern."},
+            {"object_type": "test_case", "object_id": tst1.id, "impact_level": ImpactLevel.medium, "notes": "Overnight backup check may need an additional outage step."},
+        ]:
+            _add(session, ChangeImpact(change_request_id=cr.id, **impact))
 
 
 def create_requirement(session: Session, payload: RequirementCreate) -> RequirementRead:
@@ -4537,38 +5193,66 @@ def seed_demo(session: Session) -> dict[str, Any]:
 
 
 def seed_manufacturing_demo(session: Session) -> dict[str, Any]:
-    return _seed_profile_demo(
+    base = _seed_profile_demo(
         session,
         code="MFG-001",
         name="Production Line Demo",
-        description="Manufacturing demo that traces specifications to components and quality checks.",
+        description="Manufacturing demo that traces specifications to components, quality checks, evidence, and change.",
         profile="manufacturing",
         requirement_key="MFG-SPEC-001",
         requirement_title="Line shall maintain 99.5 percent fill accuracy",
-        requirement_description="Quality specification for the production line's filled package accuracy.",
-        block_key="MFG-CMP-001",
-        block_name="Filling Cell",
-        block_description="Production cell used to realize the fill accuracy specification.",
+        requirement_description="Quality specification for the production line's filled package accuracy and reject control.",
+        requirement_category=RequirementCategory.performance,
+        requirement_priority=Priority.critical,
+        requirement_verification_method=VerificationMethod.test,
+        block_key="MFG-BLK-001",
+        block_name="Packaging Line",
+        block_description="Top-level production line architecture for fill, inspect, and reject flow.",
+        block_kind=BlockKind.system,
+        block_abstraction_level=AbstractionLevel.logical,
+        component_key="MFG-CMP-001",
+        component_name="Fill Head Assembly",
+        component_description="Physical fill head used to realize the accuracy target.",
+        component_type=ComponentType.other,
+        component_part_number="MFG-FILL-HEAD-01",
+        component_supplier="PackRight",
         test_key="MFG-QC-001",
         test_title="Fill Accuracy Check",
-        test_description="Inspection check that validates production fill accuracy against specification.",
+        test_description="Quality check that validates production fill accuracy against specification.",
+        test_method=TestMethod.inspection,
     )
+    _seed_manufacturing_demo_details(session, UUID(base["project_id"]), base)
+    return base
 
 
 def seed_personal_demo(session: Session) -> dict[str, Any]:
-    return _seed_profile_demo(
+    base = _seed_profile_demo(
         session,
         code="HOME-001",
         name="Home Infrastructure Demo",
-        description="Personal demo that traces a goal to an element and a lightweight verification check.",
+        description="Personal demo that traces a goal to elements, evidence, and change.",
         profile="personal",
         requirement_key="HOME-GOAL-001",
         requirement_title="Home network shall keep backups available overnight",
-        requirement_description="Personal goal for keeping backup copies online through the night.",
-        block_key="HOME-EL-001",
-        block_name="Backup Storage Node",
-        block_description="Home storage element used to realize the backup availability goal.",
+        requirement_description="Personal goal for keeping backup copies online through the night and ready to restore.",
+        requirement_category=RequirementCategory.performance,
+        requirement_priority=Priority.high,
+        requirement_verification_method=VerificationMethod.test,
+        block_key="HOME-BLK-001",
+        block_name="Home Network System",
+        block_description="Top-level home network architecture supporting backup and isolation behavior.",
+        block_kind=BlockKind.system,
+        block_abstraction_level=AbstractionLevel.logical,
+        component_key="HOME-CMP-001",
+        component_name="Backup Storage Node",
+        component_description="Home storage element used to realize the backup availability goal.",
+        component_type=ComponentType.other,
+        component_part_number="HOME-NAS-01",
+        component_supplier="SyncedHome",
         test_key="HOME-VER-001",
         test_title="Overnight Backup Check",
         test_description="Verification check that the storage node remains reachable overnight.",
+        test_method=TestMethod.inspection,
     )
+    _seed_personal_demo_details(session, UUID(base["project_id"]), base)
+    return base

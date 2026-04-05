@@ -5,9 +5,11 @@ import { EmptyState } from "@/components/ui";
 export const dynamic = "force-dynamic";
 
 export default async function NewExternalArtifactPage({ searchParams }: { searchParams: { project?: string } }) {
-  if (!searchParams.project) {
-    return <EmptyState title="Project missing" description="Open the page from a project workspace so the artifact can be registered in the correct scope." />;
+  const projects = await api.projects().catch(() => []);
+  if (!projects.length) {
+    return <EmptyState title="No projects available" description="Create a project first, then register external artifacts in its scope." />;
   }
-  const connectors = await api.connectors(searchParams.project).catch(() => []);
-  return <ExternalArtifactForm initial={{ project_id: searchParams.project }} connectors={connectors} />;
+  const initialProjectId = searchParams.project && projects.some((project) => project.id === searchParams.project) ? searchParams.project : projects[0].id;
+  const connectors = await api.connectors(initialProjectId).catch(() => []);
+  return <ExternalArtifactForm initial={{ project_id: initialProjectId }} connectors={connectors} projects={projects} initialProjectId={initialProjectId} />;
 }

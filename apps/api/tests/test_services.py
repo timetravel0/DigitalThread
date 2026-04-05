@@ -8,10 +8,12 @@ from app.models import (
     ArtifactLinkRelationType,
     ArtifactLink,
     AbstractionLevel,
+    Baseline,
     Block,
     BlockContainmentRelationType,
     BlockKind,
     BlockStatus,
+    ChangeRequest,
     ChangeRequestStatus,
     Component,
     ComponentStatus,
@@ -45,6 +47,7 @@ from app.models import (
     Severity,
     RevisionSnapshot,
     SimulationEvidenceResult,
+    SimulationEvidence,
     SysMLObjectType,
     SysMLRelation,
     SysMLRelationType,
@@ -52,6 +55,7 @@ from app.models import (
     TestCaseStatus,
     TestMethod,
     TestRunResult,
+    VerificationEvidence,
     VerificationEvidenceType,
     VerificationMethod,
 )
@@ -253,6 +257,42 @@ def test_personal_seed_requirement_detail_handles_profile_links():
         assert len(detail["links"]) == 2
         assert all(link.source_label for link in detail["links"])
         assert all(link.target_label for link in detail["links"])
+
+
+def test_manufacturing_seed_demonstrates_full_thread():
+    with make_session() as session:
+        seed_manufacturing_demo(session)
+        project = session.exec(select(Project).where(Project.code == "MFG-001")).one()
+        baseline = session.exec(select(Baseline).where(Baseline.project_id == project.id, Baseline.name == "Manufacturing Release Baseline")).one()
+        change_request = session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project.id, ChangeRequest.key == "MFG-CR-001")).one()
+
+        assert project.domain_profile == "manufacturing"
+        assert len(session.exec(select(Requirement).where(Requirement.project_id == project.id)).all()) >= 2
+        assert len(session.exec(select(Block).where(Block.project_id == project.id)).all()) >= 2
+        assert len(session.exec(select(TestCase).where(TestCase.project_id == project.id)).all()) >= 2
+        assert len(session.exec(select(VerificationEvidence).where(VerificationEvidence.project_id == project.id)).all()) >= 2
+        assert len(session.exec(select(SimulationEvidence).where(SimulationEvidence.project_id == project.id)).all()) >= 1
+        assert len(session.exec(select(OperationalEvidence).where(OperationalEvidence.project_id == project.id)).all()) >= 1
+        assert baseline.status == BaselineStatus.released
+        assert change_request.status == ChangeRequestStatus.open
+
+
+def test_personal_seed_demonstrates_full_thread():
+    with make_session() as session:
+        seed_personal_demo(session)
+        project = session.exec(select(Project).where(Project.code == "HOME-001")).one()
+        baseline = session.exec(select(Baseline).where(Baseline.project_id == project.id, Baseline.name == "Home Infrastructure Baseline")).one()
+        change_request = session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project.id, ChangeRequest.key == "HOME-CR-001")).one()
+
+        assert project.domain_profile == "personal"
+        assert len(session.exec(select(Requirement).where(Requirement.project_id == project.id)).all()) >= 2
+        assert len(session.exec(select(Block).where(Block.project_id == project.id)).all()) >= 2
+        assert len(session.exec(select(TestCase).where(TestCase.project_id == project.id)).all()) >= 2
+        assert len(session.exec(select(VerificationEvidence).where(VerificationEvidence.project_id == project.id)).all()) >= 2
+        assert len(session.exec(select(SimulationEvidence).where(SimulationEvidence.project_id == project.id)).all()) >= 1
+        assert len(session.exec(select(OperationalEvidence).where(OperationalEvidence.project_id == project.id)).all()) >= 1
+        assert baseline.status == BaselineStatus.released
+        assert change_request.status == ChangeRequestStatus.open
 
 
 def test_authoritative_registry_summary_reports_revision_snapshot_integrity():

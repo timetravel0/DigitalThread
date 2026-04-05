@@ -119,6 +119,8 @@ export const api = {
   blockHistory: (id: string) => request<RevisionSnapshot[]>(`/blocks/${id}/history`),
   components: (projectId: string) => request<Component[]>(`/components?project_id=${projectId}`),
   component: (id: string) => request<ComponentDetail>(`/components/${id}`),
+  createComponent: (payload: Record<string, unknown>) => request<Component>(`/components`, { method: "POST", body: JSON.stringify(payload) }),
+  updateComponent: (id: string, payload: Record<string, unknown>) => request<Component>(`/components/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   testCases: (projectId: string) => request<TestCase[]>(`/test-cases?project_id=${projectId}`),
   testCase: (id: string) => request<TestCaseDetail>(`/test-cases/${id}`),
   createTestCase: (payload: Record<string, unknown>) => request<TestCase>(`/test-cases`, { method: "POST", body: JSON.stringify(payload) }),

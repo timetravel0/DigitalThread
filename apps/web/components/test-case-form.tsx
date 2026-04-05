@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
@@ -13,6 +13,14 @@ import type { TestCase } from "@/lib/types";
 
 type TestMethodValue = "bench" | "simulation" | "field" | "inspection";
 type TestCaseStatusValue = "draft" | "in_review" | "approved" | "rejected" | "ready" | "executed" | "failed" | "passed" | "archived" | "obsolete";
+
+type ProjectOption = {
+  id: string;
+  code: string;
+  name: string;
+  domain_profile: DomainProfile;
+  test_count?: number;
+};
 
 export const TEST_METHOD_OPTIONS: Record<DomainProfile, { value: TestMethodValue; label: string }[]> = {
   engineering: [
@@ -107,22 +115,23 @@ export function TestCaseForm({
   initial,
   labels: providedLabels,
   profile,
+  projects = [],
+  initialProjectId,
 }: {
   initial?: Partial<TestCase>;
   labels?: LabelSet;
   profile?: DomainProfile;
+  projects?: ProjectOption[];
+  initialProjectId?: string;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const labels = providedLabels || getLabels("engineering");
-  const profileKey = profile ?? "engineering";
-  const testMethodOptions = TEST_METHOD_OPTIONS[profileKey];
-  const statusOptions = STATUS_OPTIONS[profileKey];
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      project_id: initial?.project_id || "",
+      project_id: initial?.project_id || initialProjectId || projects[0]?.id || "",
       key: initial?.key || "",
       title: initial?.title || "",
       description: initial?.description || "",
@@ -130,6 +139,20 @@ export function TestCaseForm({
       status: initial?.status || "draft",
     },
   });
+  const selectedProjectId = useWatch({ control: form.control, name: "project_id" });
+  const currentProject = projects.find((project) => project.id === selectedProjectId) || projects[0];
+  const resolvedProfile = profile ?? currentProject?.domain_profile ?? "engineering";
+  const testMethodOptions = TEST_METHOD_OPTIONS[resolvedProfile];
+  const statusOptions = STATUS_OPTIONS[resolvedProfile];
+
+  useEffect(() => {
+    if (initial?.id) return;
+    if (!currentProject) return;
+    if (form.getValues("key")) return;
+    const count = currentProject.test_count ?? 0;
+    const prefix = currentProject.code.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").toUpperCase() || "TST";
+    form.setValue("key", `${prefix}-TST-${String(count + 1).padStart(3, "0")}`, { shouldDirty: false, shouldTouch: false });
+  }, [currentProject, form, initial?.id]);
 
   const submit = form.handleSubmit(async (values) => {
     setError(null);
@@ -156,8 +179,14 @@ export function TestCaseForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Input placeholder="Project ID" {...form.register("project_id")} />
-        <Input placeholder={`${labels.testCase} key`} {...form.register("key")} />
+        <Select {...form.register("project_id")} disabled={!projects.length}>
+          {(projects.length ? projects : currentProject ? [currentProject] : []).map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.code} - {project.name}
+            </option>
+          ))}
+        </Select>
+        <Input placeholder={`${labels.testCase} key`} readOnly {...form.register("key")} />
       </div>
       <Input placeholder={`${labels.testCase} title`} {...form.register("title")} />
       <Textarea placeholder={labels.testCase_description} rows={4} {...form.register("description")} />

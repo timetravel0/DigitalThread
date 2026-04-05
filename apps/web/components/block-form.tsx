@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
@@ -13,6 +13,14 @@ import type { Block } from "@/lib/types";
 
 type BlockKindValue = "system" | "subsystem" | "assembly" | "component" | "software" | "interface" | "other";
 type BlockStatusValue = "draft" | "in_review" | "approved" | "rejected" | "obsolete";
+
+type ProjectOption = {
+  id: string;
+  code: string;
+  name: string;
+  domain_profile: DomainProfile;
+  block_count?: number;
+};
 
 export const BLOCK_KIND_OPTIONS: Record<DomainProfile, { value: BlockKindValue; label: string }[]> = {
   engineering: [
@@ -101,22 +109,23 @@ export function BlockForm({
   initial,
   labels: providedLabels,
   profile,
+  projects = [],
+  initialProjectId,
 }: {
   initial?: Partial<Block>;
   labels?: LabelSet;
   profile?: DomainProfile;
+  projects?: ProjectOption[];
+  initialProjectId?: string;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const labels = providedLabels || getLabels("engineering");
-  const profileKey = profile ?? "engineering";
-  const blockKindOptions = BLOCK_KIND_OPTIONS[profileKey];
-  const statusOptions = STATUS_OPTIONS[profileKey];
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      project_id: initial?.project_id || "",
+      project_id: initial?.project_id || initialProjectId || projects[0]?.id || "",
       key: initial?.key || "",
       name: initial?.name || "",
       description: initial?.description || "",
@@ -126,6 +135,20 @@ export function BlockForm({
       owner: initial?.owner || "",
     },
   });
+  const selectedProjectId = useWatch({ control: form.control, name: "project_id" });
+  const currentProject = projects.find((project) => project.id === selectedProjectId) || projects[0];
+  const resolvedProfile = profile ?? currentProject?.domain_profile ?? "engineering";
+  const blockKindOptions = BLOCK_KIND_OPTIONS[resolvedProfile];
+  const statusOptions = STATUS_OPTIONS[resolvedProfile];
+
+  useEffect(() => {
+    if (initial?.id) return;
+    if (!currentProject) return;
+    if (form.getValues("key")) return;
+    const count = currentProject.block_count ?? 0;
+    const prefix = currentProject.code.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").toUpperCase() || "BLK";
+    form.setValue("key", `${prefix}-BLK-${String(count + 1).padStart(3, "0")}`, { shouldDirty: false, shouldTouch: false });
+  }, [currentProject, form, initial?.id]);
 
   const submit = form.handleSubmit(async (values) => {
     setError(null);
@@ -152,8 +175,14 @@ export function BlockForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Input placeholder="Project ID" {...form.register("project_id")} />
-        <Input placeholder={`${labels.block} key`} {...form.register("key")} />
+        <Select {...form.register("project_id")} disabled={!projects.length}>
+          {(projects.length ? projects : currentProject ? [currentProject] : []).map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.code} - {project.name}
+            </option>
+          ))}
+        </Select>
+        <Input placeholder={`${labels.block} key`} readOnly {...form.register("key")} />
       </div>
       <Input placeholder={`${labels.block} name`} {...form.register("name")} />
       <Textarea placeholder={labels.block_description} rows={4} {...form.register("description")} />

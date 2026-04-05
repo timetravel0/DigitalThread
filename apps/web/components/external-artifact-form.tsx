@@ -1,13 +1,21 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
+import type { DomainProfile } from "@/lib/labels";
 import type { ConnectorDefinition, ExternalArtifact } from "@/lib/types";
+
+type ProjectOption = {
+  id: string;
+  code: string;
+  name: string;
+  domain_profile: DomainProfile;
+};
 
 const schema = z.object({
   project_id: z.string().min(1),
@@ -33,13 +41,14 @@ function toJsonText(value: unknown) {
   }
 }
 
-export function ExternalArtifactForm({ initial, connectors }: { initial?: Partial<ExternalArtifact>; connectors: ConnectorDefinition[] }) {
+export function ExternalArtifactForm({ initial, connectors, projects = [], initialProjectId }: { initial?: Partial<ExternalArtifact>; connectors: ConnectorDefinition[]; projects?: ProjectOption[]; initialProjectId?: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [connectorOptions, setConnectorOptions] = useState(connectors);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      project_id: initial?.project_id || "",
+      project_id: initial?.project_id || initialProjectId || projects[0]?.id || "",
       connector_definition_id: initial?.connector_definition_id || "",
       external_id: initial?.external_id || "",
       artifact_type: initial?.artifact_type || "requirement",
@@ -51,6 +60,24 @@ export function ExternalArtifactForm({ initial, connectors }: { initial?: Partia
       metadata_json: toJsonText(initial?.metadata_json),
     },
   });
+  const selectedProjectId = useWatch({ control: form.control, name: "project_id" });
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      if (!selectedProjectId) return;
+      try {
+        const next = await api.connectors(selectedProjectId);
+        if (active) setConnectorOptions(next);
+      } catch {
+        if (active) setConnectorOptions([]);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [selectedProjectId]);
 
   const submit = form.handleSubmit(async (values) => {
     setError(null);
@@ -78,13 +105,19 @@ export function ExternalArtifactForm({ initial, connectors }: { initial?: Partia
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Input placeholder="Project ID" {...form.register("project_id")} />
+        <Select {...form.register("project_id")} disabled={!projects.length}>
+          {(projects.length ? projects : projects[0] ? [projects[0]] : []).map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.code} - {project.name}
+            </option>
+          ))}
+        </Select>
         <Input placeholder="External ID" {...form.register("external_id")} />
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <Select {...form.register("connector_definition_id")}>
           <option value="">No connector</option>
-          {connectors.map((connector) => (
+          {connectorOptions.map((connector) => (
             <option key={connector.id} value={connector.id}>
               {connector.name} ({connector.connector_type})
             </option>

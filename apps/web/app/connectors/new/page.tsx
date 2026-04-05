@@ -1,9 +1,12 @@
+import { api } from "@/lib/api-client";
 import { ConnectorForm } from "@/components/connector-form";
 import { EmptyState } from "@/components/ui";
 
 export default async function NewConnectorPage({ searchParams }: { searchParams: { project?: string } }) {
-  if (!searchParams.project) {
-    return <EmptyState title="Project missing" description="Open the page from a project workspace so the connector can be registered in the correct scope." />;
+  const projects = await api.projects().catch(() => []);
+  if (!projects.length) {
+    return <EmptyState title="No projects available" description="Create a project first, then register connectors in its scope." />;
   }
-  return <ConnectorForm initial={{ project_id: searchParams.project }} />;
+  const initialProjectId = searchParams.project && projects.some((project) => project.id === searchParams.project) ? searchParams.project : projects[0].id;
+  return <ConnectorForm initial={{ project_id: initialProjectId }} projects={projects} initialProjectId={initialProjectId} />;
 }

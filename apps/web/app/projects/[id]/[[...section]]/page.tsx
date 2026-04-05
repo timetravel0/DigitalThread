@@ -16,6 +16,7 @@ import { SimulationEvidenceCard } from "@/components/simulation-evidence-card";
 import { SimulationEvidenceForm } from "@/components/simulation-evidence-form";
 import { ValidationWorkbench } from "@/components/validation-workbench";
 import { ProjectHealthCard } from "@/components/project-health-card";
+import { ProjectNavigationGuide, ProjectStartHereCard, SectionIntroCard } from "@/components/project-home-guide";
 import { VerificationStatusBreakdownCard } from "@/components/verification-status-breakdown";
 
 export const dynamic = "force-dynamic";
@@ -174,6 +175,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
           description="A lightweight AP242-style part contract derived from components, part numbers, and cad_part external artifacts."
         />
         <ProjectTabs section={section} />
+        <SectionIntroCard
+          title="How to use this view"
+          description="This page shows physical parts, identifiers, and CAD artifacts in one place. Use it when you want to connect the product structure back to the external design source."
+          nextStep="Next step: open a part card, then follow its linked CAD artifact if you need the originating model data."
+        />
         <StepAP242ContractView contract={contract} />
       </div>
     );
@@ -199,6 +205,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
           }
         />
         <ProjectTabs section={section} />
+        <SectionIntroCard
+          title="How to read the graph"
+          description="Start from the focus that matters most, then click any box to shrink the view to its connected neighborhood. The graph is meant to answer 'why is this connected?' rather than show every object equally."
+          nextStep="Next step: click a requirement or block to follow its linked realization and verification path."
+        />
         <div className="flex flex-wrap gap-2">
           {focusViews.map((item) => (
             <Button key={item.key} href={`/projects/${project.id}/graph?focus=${item.key}`} variant={focus === item.key ? "primary" : "secondary"}>
@@ -243,6 +254,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
           description="A SidSat-style validation cockpit for non-technical reviewers. Pick a target requirement, choose a focus, and run a lightweight validation check with immediate alerts."
         />
         <ProjectTabs section={section} />
+        <SectionIntroCard
+          title="What this page does"
+          description="Use the validation cockpit when you want a guided check against one requirement. It surfaces alerts and threshold checks without asking you to interpret the full model."
+          nextStep="Next step: select a target requirement, then start validation."
+        />
         <ValidationWorkbench
           projectCode={project.code}
           projectName={project.name}
@@ -260,6 +276,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
           section={section}
           title={labels.requirements}
           description="Editable requirements with approval workflow."
+          intro={{
+            title: `${labels.requirements} first`,
+            description: `Capture the need, goal, or specification that anchors this project. Then link it to ${labels.blocks.toLowerCase()} and ${labels.testCases.toLowerCase()} so the thread stays visible.`,
+            nextStep: `Next step: create your first ${labels.requirement.toLowerCase()} and connect it to the realization and verification work.`,
+          }}
           items={requirements.map((item: any) => ({ key: item.key, label: `${item.key} - ${item.title}`, status: item.status, href: `/requirements/${item.id}` }))}
           createHref={`/requirements/new?project=${project.id}`}
           createLabel={`Create ${labels.requirement}`}
@@ -282,6 +303,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
           action={<Button href={`/components/new?project=${project.id}`} variant="secondary">Create component</Button>}
         />
         <ProjectTabs section={section} />
+        <SectionIntroCard
+          title="What to look for"
+          description="This section makes software realization explicit so requirements and evidence do not disappear inside a generic component list."
+          nextStep="Next step: open a software module, then follow its requirement links and evidence records."
+        />
         <div className="grid gap-4 md:grid-cols-3">
           <Mini metric="Software modules" value={softwareComponents.length} />
           <Mini metric="Requirement links" value={linkedRequirementCount} />
@@ -372,6 +398,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
           action={<Button href={`/blocks/new?project=${project.id}`}>Create</Button>}
         />
         <ProjectTabs section={section} />
+        <SectionIntroCard
+          title={`${labels.blocks} in context`}
+          description={`Model the parts or elements that realize the thread. Keep logical and physical views separate so design intent stays readable.`}
+          nextStep={`Next step: create a ${labels.block.toLowerCase()} and link it back to a ${labels.requirement.toLowerCase()}.`}
+        />
         <div className="flex flex-wrap gap-2">
           {layerViews.map((item) => (
             <Button key={item.key} href={buildQueryHref(`/projects/${project.id}/blocks`, { layer: item.key })} variant={layer === item.key ? "primary" : "secondary"}>
@@ -421,6 +452,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
           section={section}
           title={labels.testCases}
           description="Verification artifacts with workflow and history."
+          intro={{
+            title: `${labels.testCases} first`,
+            description: `Create the checks that prove each ${labels.requirements.toLowerCase()} or goal is met. Keep them linked so coverage stays visible in the thread.`,
+            nextStep: `Next step: add the first ${labels.testCase.toLowerCase()} for a requirement you already care about.`,
+          }}
           items={tests.map((item: any) => ({ key: item.key, label: `${item.key} - ${item.title}`, status: item.status, href: `/test-cases/${item.id}` }))}
           createHref={`/test-cases/new?project=${project.id}`}
           createLabel={`Create ${labels.testCase}`}
@@ -436,6 +472,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
       <div className="space-y-6">
         <SectionTitle title={`${project.code} - ${labels.operationalEvidence}`} description="Batch-style operational feedback linked to requirements and verification evidence." />
         <ProjectTabs section={section} />
+        <SectionIntroCard
+          title="What to inspect here"
+          description="Operational evidence captures field feedback in batches. Open a card to see the source, the observation window, and how the batch relates back to the thread."
+          nextStep="Next step: add a batch when you need to capture operational observations that should influence verification."
+        />
         <Card>
           <CardHeader><div className="font-semibold">{labels.operationalEvidence} batches</div></CardHeader>
           <CardBody className="space-y-4">
@@ -472,6 +513,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
       <div className="space-y-6">
         <SectionTitle title={`${project.code} - ${labels.simulationEvidence}`} description="First-class simulation evidence records linked to requirements, tests, and verification evidence." />
         <ProjectTabs section={section} />
+        <SectionIntroCard
+          title="What to inspect here"
+          description="Simulation evidence records the model, scenario, inputs, observed behavior, and outcome. Use it when you want simulation feedback to stay separate from generic verification evidence."
+          nextStep="Next step: create a simulation record and connect it to the requirement and test it explains."
+        />
         <Card>
           <CardHeader><div className="font-semibold">{labels.simulationEvidence} records</div></CardHeader>
           <CardBody className="space-y-4">
@@ -506,6 +552,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
       <div className="space-y-6">
         <SectionTitle title={`${project.code} - FMI`} description="A lightweight placeholder contract for simulation interoperability, with explicit model reference fields." />
         <ProjectTabs section={section} />
+        <SectionIntroCard
+          title="Why this exists"
+          description="The FMI placeholder gives simulation a model-reference surface without adding a full interoperability runtime. Use it as the explicit anchor for simulation evidence."
+          nextStep="Next step: create a contract only when you need a named model reference for simulation evidence."
+        />
         <Card>
           <CardHeader><div className="font-semibold">FMI placeholder contracts</div></CardHeader>
           <CardBody className="space-y-4">
@@ -563,6 +614,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
           }
         />
         <ProjectTabs section={section} />
+        <SectionIntroCard
+          title="How to use the registry"
+          description="Use the registry when you want a flat, filterable list instead of a graph. It is useful for reviewing a specific relation type without navigating the full workspace."
+          nextStep="Next step: filter by links or evidence, then open the row that best matches the object you need."
+        />
         <RelationshipRegistry
           projectId={project.id}
           kind={kind as any}
@@ -588,6 +644,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
       <div className="space-y-6">
         <SectionTitle title={`${project.code} - Authoritative Sources`} description="Federated metadata pointers, connectors, configuration contexts, and the review-gate bridge to baselines." action={<Button href={`/projects/${project.id}/authoritative-sources`}>Open registry</Button>} />
         <ProjectTabs section={section} />
+        <SectionIntroCard
+          title="What this page is for"
+          description="This area keeps authoritative pointers and review-gate snapshots explicit. Use it when you need to inspect where the project data is owned and how it is frozen for review."
+          nextStep="Next step: open the registry if you need connectors, external artifacts, or configuration contexts."
+        />
         <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
           <Mini metric="Connectors" value={registrySummary?.connectors ?? 0} />
           <Mini metric="Artifacts" value={registrySummary?.external_artifacts ?? 0} />
@@ -627,6 +688,7 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
             </div>
           }
         />
+        <ProjectStartHereCard projectId={project.id} labels={labels} />
         <ProjectTabs section={section} />
         <div className="grid gap-6 xl:grid-cols-3">
           <Card className="xl:col-span-2">
@@ -649,40 +711,19 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
               </div>
             </CardBody>
           </Card>
-          <Card>
-            <CardHeader><div className="font-semibold">Quick links</div></CardHeader>
-            <CardBody className="space-y-3">
-              <Button href={`/projects/${project.id}/requirements`} className="w-full">{labels.requirements}</Button>
-              <Button href={`/projects/${project.id}/blocks`} className="w-full" variant="secondary">{labels.blocks}</Button>
-              <Button href={`/projects/${project.id}/components`} className="w-full" variant="secondary">Components</Button>
-              <Button href={`/projects/${project.id}/software`} className="w-full" variant="secondary">Software</Button>
-              <Button href={`/projects/${project.id}/tests`} className="w-full" variant="secondary">Tests</Button>
-              <Button href={`/projects/${project.id}/validation`} className="w-full" variant="secondary">Validation</Button>
-              <Button href={`/projects/${project.id}/simulation-evidence`} className="w-full" variant="secondary">{labels.simulationEvidence}</Button>
-              <Button href={`/projects/${project.id}/fmi`} className="w-full" variant="secondary">FMI</Button>
-              <Button href={`/projects/${project.id}/operational-evidence`} className="w-full" variant="secondary">{labels.operationalEvidence}</Button>
-              <Button href={`/projects/${project.id}/import`} className="w-full" variant="secondary">Import data</Button>
-              <Button href={`/projects/${project.id}/non-conformities`} className="w-full" variant="secondary">{labels.nonConformities}</Button>
-              <Button href={`/projects/${project.id}/links`} className="w-full" variant="secondary">{labels.links}</Button>
-              <Button href={`/projects/${project.id}/graph`} className="w-full" variant="secondary">Traceability graph</Button>
-              <Button href={`/projects/${project.id}/sysml`} className="w-full" variant="secondary">SysML</Button>
-              <Button href={`/projects/${project.id}/step-ap242`} className="w-full" variant="secondary">STEP AP242</Button>
-              <Button href={`/projects/${project.id}/authoritative-sources`} className="w-full" variant="secondary">Authoritative Sources</Button>
-              <Button href={`/projects/${project.id}/review-queue`} className="w-full" variant="secondary">Review Queue</Button>
-              <Button href={api.exportProjectUrl(project.id)} className="w-full" variant="secondary">Export project bundle</Button>
-            </CardBody>
-          </Card>
+          <ProjectNavigationGuide projectId={project.id} labels={labels} />
         </div>
       </div>
     </OnboardingWizard>
   );
 }
 
-function SimpleListPage({ project, section, title, description, items, createHref, createLabel, emptyTitle, emptyDescription, emptyActionLabel }: { project: any; section: string; title: string; description: string; items: { key: string; label: string; status?: string; href: string }[]; createHref?: string; createLabel?: string; emptyTitle?: string; emptyDescription?: string; emptyActionLabel?: string }) {
+function SimpleListPage({ project, section, title, description, items, createHref, createLabel, emptyTitle, emptyDescription, emptyActionLabel, intro }: { project: any; section: string; title: string; description: string; items: { key: string; label: string; status?: string; href: string }[]; createHref?: string; createLabel?: string; emptyTitle?: string; emptyDescription?: string; emptyActionLabel?: string; intro?: { title: string; description: string; nextStep?: string } }) {
   return (
     <div className="space-y-6">
       <SectionTitle title={`${project.code} - ${title}`} description={description} action={createHref ? <Button href={createHref}>{createLabel || "Create"}</Button> : undefined} />
       <ProjectTabs section={section} />
+      {intro ? <SectionIntroCard title={intro.title} description={intro.description} nextStep={intro.nextStep} /> : null}
       <Card>
         <CardHeader><div className="font-semibold">{title}</div></CardHeader>
         <CardBody>{items.length ? <div className="space-y-3">{items.map((item) => <Link key={item.key} href={item.href} className="block rounded-xl border border-line bg-panel2 p-4 hover:border-accent/50"><div className="flex items-center justify-between gap-4"><div><div className="font-semibold">{item.label}</div></div><Badge tone={itemTone(item.status)}>{item.status || "item"}</Badge></div></Link>)}</div> : <EmptyState title={emptyTitle || `No ${title.toLowerCase()} yet`} description={emptyDescription || description} action={createHref ? <Button href={createHref}>{emptyActionLabel || createLabel || "Create first item"}</Button> : undefined} />}</CardBody>

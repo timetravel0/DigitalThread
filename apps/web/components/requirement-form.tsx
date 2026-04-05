@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
@@ -14,6 +14,14 @@ import type { Requirement } from "@/lib/types";
 type RequirementCategoryValue = "performance" | "safety" | "environment" | "operations" | "compliance";
 type VerificationMethodValue = "analysis" | "inspection" | "test" | "demonstration";
 type RequirementStatusValue = "draft" | "in_review" | "approved" | "rejected" | "implemented" | "verified" | "failed" | "obsolete" | "retired";
+
+type ProjectOption = {
+  id: string;
+  code: string;
+  name: string;
+  domain_profile: DomainProfile;
+  requirement_count?: number;
+};
 
 export const CATEGORY_OPTIONS: Record<DomainProfile, { value: RequirementCategoryValue; label: string }[]> = {
   engineering: [
@@ -140,24 +148,24 @@ export function RequirementForm({
   onSaved,
   labels: providedLabels,
   profile,
+  projects = [],
+  initialProjectId,
 }: {
   initial?: Partial<Requirement>;
   onSaved?: () => void;
   labels?: LabelSet;
   profile?: DomainProfile;
+  projects?: ProjectOption[];
+  initialProjectId?: string;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const labels = providedLabels || getLabels("engineering");
-  const profileKey = profile ?? "engineering";
-  const categoryOptions = CATEGORY_OPTIONS[profileKey];
-  const verificationMethodOptions = VERIFICATION_METHOD_OPTIONS[profileKey];
-  const statusOptions = STATUS_OPTIONS[profileKey];
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      project_id: initial?.project_id || "",
+      project_id: initial?.project_id || initialProjectId || projects[0]?.id || "",
       key: initial?.key || "",
       title: initial?.title || "",
       description: initial?.description || "",
@@ -169,6 +177,21 @@ export function RequirementForm({
       verification_criteria_json: JSON.stringify(initial?.verification_criteria_json || {}, null, 2),
     },
   });
+  const selectedProjectId = useWatch({ control: form.control, name: "project_id" });
+  const currentProject = projects.find((project) => project.id === selectedProjectId) || projects[0];
+  const resolvedProfile = profile ?? currentProject?.domain_profile ?? "engineering";
+  const categoryOptions = CATEGORY_OPTIONS[resolvedProfile];
+  const verificationMethodOptions = VERIFICATION_METHOD_OPTIONS[resolvedProfile];
+  const statusOptions = STATUS_OPTIONS[resolvedProfile];
+
+  useEffect(() => {
+    if (initial?.id) return;
+    if (!currentProject) return;
+    if (form.getValues("key")) return;
+    const count = currentProject.requirement_count ?? 0;
+    const prefix = currentProject.code.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").toUpperCase() || "REQ";
+    form.setValue("key", `${prefix}-REQ-${String(count + 1).padStart(3, "0")}`, { shouldDirty: false, shouldTouch: false });
+  }, [currentProject, form, initial?.id]);
 
   const submit = form.handleSubmit(async (values) => {
     setError(null);
@@ -201,7 +224,13 @@ export function RequirementForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Input placeholder="Project ID" {...form.register("project_id")} />
+        <Select {...form.register("project_id")} disabled={!projects.length}>
+          {(projects.length ? projects : currentProject ? [currentProject] : []).map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.code} - {project.name}
+            </option>
+          ))}
+        </Select>
         <Input placeholder={`${labels.requirement} key`} {...form.register("key")} />
       </div>
       <Input placeholder={`${labels.requirement} title`} {...form.register("title")} />
