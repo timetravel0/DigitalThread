@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import { getLabels, type DomainProfile, type LabelSet } from "@/lib/labels";
+import { useToast } from "@/lib/toast-context";
 import type { TestCase } from "@/lib/types";
 
 type TestMethodValue = "bench" | "simulation" | "field" | "inspection";
@@ -112,6 +113,7 @@ export function TestCaseForm({
   profile?: DomainProfile;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const labels = providedLabels || getLabels("engineering");
   const profileKey = profile ?? "engineering";
@@ -137,6 +139,13 @@ export function TestCaseForm({
         router.push(`/test-cases/${initial.id}`);
       } else {
         const created = await api.createTestCase(values);
+        showToast({
+          message: `${labels.testCases} created`,
+          action: {
+            label: "View traceability",
+            href: `/projects/${values.project_id}/traceability`,
+          },
+        });
         router.push(`/test-cases/${created.id}`);
       }
     } catch (err) {

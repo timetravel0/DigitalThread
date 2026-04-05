@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import { getLabels, type DomainProfile, type LabelSet } from "@/lib/labels";
+import { useToast } from "@/lib/toast-context";
 import type { Requirement } from "@/lib/types";
 
 type RequirementCategoryValue = "performance" | "safety" | "environment" | "operations" | "compliance";
@@ -146,6 +147,7 @@ export function RequirementForm({
   profile?: DomainProfile;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const labels = providedLabels || getLabels("engineering");
   const profileKey = profile ?? "engineering";
@@ -181,6 +183,13 @@ export function RequirementForm({
         router.push(`/requirements/${initial.id}`);
       } else {
         const created = await api.createRequirement({ ...values, verification_criteria_json });
+        showToast({
+          message: `${labels.requirements} created`,
+          action: {
+            label: `Link to a ${labels.blocks}`,
+            href: `/projects/${values.project_id}/traceability`,
+          },
+        });
         onSaved?.();
         router.push(`/requirements/${created.id}`);
       }

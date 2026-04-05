@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { DomainProfile, LabelSet } from "@/lib/labels";
 import { getVisibleTabs } from "@/lib/tabConfig";
+import type { ProjectTabStats } from "@/lib/types";
 
 const tabLabels: Record<string, (labels: LabelSet) => string> = {
   requirements: (labels) => labels.requirements,
@@ -26,12 +27,25 @@ const tabLabels: Record<string, (labels: LabelSet) => string> = {
   software: () => "Software",
 };
 
+const STATS_TAB_MAP: Partial<Record<string, keyof ProjectTabStats>> = {
+  requirements: "requirements",
+  blocks: "blocks",
+  tests: "tests",
+  baselines: "baselines",
+  "change-requests": "change_requests",
+  "non-conformities": "non_conformities",
+  "simulation-evidence": "simulation_evidence",
+  "operational-evidence": "operational_evidence",
+  "operational-runs": "operational_runs",
+};
+
 export function ProjectTabNav({
   projectId,
   profile,
   labels,
   section,
   advancedMode,
+  tabStats,
   setAdvancedMode,
 }: {
   projectId: string;
@@ -39,6 +53,7 @@ export function ProjectTabNav({
   labels: LabelSet;
   section: string;
   advancedMode: boolean;
+  tabStats?: ProjectTabStats | null;
   setAdvancedMode: (value: boolean) => void;
 }) {
   const tabs = getVisibleTabs(profile, advancedMode);
@@ -56,6 +71,11 @@ export function ProjectTabNav({
             className={`rounded-full border px-3 py-1.5 text-sm ${active ? "border-accent bg-accent/10 text-accent" : "border-line text-text hover:bg-white/5"}`}
           >
             {label}
+            {tabStats && STATS_TAB_MAP[tab] !== undefined && (
+              <span
+                className={`ml-1.5 inline-block h-1.5 w-1.5 rounded-full ${(tabStats[STATS_TAB_MAP[tab]!] ?? 0) > 0 ? "bg-success" : "bg-danger/60"}`}
+              />
+            )}
           </Link>
         );
       })}

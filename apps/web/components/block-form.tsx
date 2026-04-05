@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import { getLabels, type DomainProfile, type LabelSet } from "@/lib/labels";
+import { useToast } from "@/lib/toast-context";
 import type { Block } from "@/lib/types";
 
 type BlockKindValue = "system" | "subsystem" | "assembly" | "component" | "software" | "interface" | "other";
@@ -106,6 +107,7 @@ export function BlockForm({
   profile?: DomainProfile;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const labels = providedLabels || getLabels("engineering");
   const profileKey = profile ?? "engineering";
@@ -133,6 +135,13 @@ export function BlockForm({
         router.push(`/blocks/${initial.id}`);
       } else {
         const created = await api.createBlock(values);
+        showToast({
+          message: `${labels.blocks} created`,
+          action: {
+            label: `Add a ${labels.testCases}`,
+            href: `/projects/${values.project_id}/tests`,
+          },
+        });
         router.push(`/blocks/${created.id}`);
       }
     } catch (err) {

@@ -2,6 +2,17 @@ export type ID = string;
 
 export type ProjectStatus = "draft" | "active" | "archived";
 export type DomainProfile = "engineering" | "manufacturing" | "personal" | "custom";
+export interface ProjectTabStats {
+  requirements: number;
+  blocks: number;
+  tests: number;
+  baselines: number;
+  change_requests: number;
+  non_conformities: number;
+  simulation_evidence: number;
+  operational_evidence: number;
+  operational_runs: number;
+}
 export type RequirementCategory = "performance" | "safety" | "environment" | "operations" | "compliance";
 export type Priority = "low" | "medium" | "high" | "critical";
 export type VerificationMethod = "analysis" | "inspection" | "test" | "demonstration";

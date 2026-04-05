@@ -3,12 +3,16 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { DomainProfile, LabelSet } from "./labels";
 import { getLabels } from "./labels";
+import { api } from "./api-client";
+import type { ProjectTabStats } from "./types";
 
 export interface ProjectContextValue {
   projectId: string;
   profile: DomainProfile;
   labels: LabelSet;
   advancedMode: boolean;
+  tabStats: ProjectTabStats | null;
+  setTabStats: (value: ProjectTabStats | null) => void;
   setAdvancedMode: (v: boolean) => void;
 }
 
@@ -26,6 +30,7 @@ export function ProjectProvider({
   const resolvedProfile = profile ?? "engineering";
   const storageKey = `threadlite-project-${projectId}-advanced-mode`;
   const [advancedMode, setAdvancedModeState] = useState(false);
+  const [tabStats, setTabStats] = useState<ProjectTabStats | null>(null);
 
   useEffect(() => {
     try {
@@ -35,6 +40,25 @@ export function ProjectProvider({
       setAdvancedModeState(false);
     }
   }, [storageKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTabStats(null);
+    api.projectTabStats(projectId)
+      .then((stats) => {
+        if (!cancelled) {
+          setTabStats(stats);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTabStats(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   const setAdvancedMode = (value: boolean) => {
     setAdvancedModeState(value);
@@ -48,7 +72,7 @@ export function ProjectProvider({
   const labels = useMemo(() => getLabels(resolvedProfile), [resolvedProfile]);
 
   return (
-    <ProjectContext.Provider value={{ projectId, profile: resolvedProfile, labels, advancedMode, setAdvancedMode }}>
+    <ProjectContext.Provider value={{ projectId, profile: resolvedProfile, labels, advancedMode, tabStats, setTabStats, setAdvancedMode }}>
       {children}
     </ProjectContext.Provider>
   );

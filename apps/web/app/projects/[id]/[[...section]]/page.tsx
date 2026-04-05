@@ -11,14 +11,48 @@ import { OperationalEvidenceForm } from "@/components/operational-evidence-form"
 import { FMIContractForm } from "@/components/fmi-contract-form";
 import { RelationshipRegistry } from "@/components/relationship-registry";
 import { ProjectImportForm } from "@/components/project-import-form";
+import { OnboardingWizard } from "@/components/onboarding-wizard";
 import { SimulationEvidenceCard } from "@/components/simulation-evidence-card";
 import { SimulationEvidenceForm } from "@/components/simulation-evidence-form";
 import { ValidationWorkbench } from "@/components/validation-workbench";
+import { ProjectHealthCard } from "@/components/project-health-card";
 import { VerificationStatusBreakdownCard } from "@/components/verification-status-breakdown";
 
 export const dynamic = "force-dynamic";
 
 type LayerFilter = "all" | "logical" | "physical";
+const requirementsEmptyDescription: Record<"engineering" | "manufacturing" | "personal" | "custom", string> = {
+  engineering:
+    "Requirements define what your system must do or satisfy. Start here - blocks and tests gain meaning only when linked to requirements.",
+  manufacturing:
+    "Specifications define the product's quality, process, and regulatory constraints. Add at least one before defining components.",
+  personal:
+    "Goals define what you want your project to achieve. Start by writing one clear objective - everything else connects to it.",
+  custom:
+    "Define the constraints and objectives your system must satisfy. All other items connect back to these.",
+};
+
+const blocksEmptyDescription: Record<"engineering" | "manufacturing" | "personal" | "custom", string> = {
+  engineering:
+    "Blocks represent physical or logical parts of your system. Add blocks and link them to requirements to track allocation coverage.",
+  manufacturing:
+    "Components represent the physical parts, assemblies, or production stages in your process. Link them to specifications to track compliance.",
+  personal:
+    "Elements are the devices, services, or modules in your setup. Add them and connect them to your goals.",
+  custom:
+    "Add the parts or subsystems that compose your system, then link them to requirements.",
+};
+
+const testsEmptyDescription: Record<"engineering" | "manufacturing" | "personal" | "custom", string> = {
+  engineering:
+    "Test cases define how each requirement will be verified. Without tests, requirements remain unverified in the Digital Thread.",
+  manufacturing:
+    "Quality checks define the inspection and testing procedures for each specification. Link them to ensure full coverage.",
+  personal:
+    "Checks are the verifications you run to confirm your setup works as intended. Connect each check to a goal.",
+  custom:
+    "Define how each requirement will be verified. Link test cases to requirements to track verification coverage.",
+};
 
 const sysmlViews = [
   { key: "block-structure", label: "Block Structure" },
@@ -218,7 +252,23 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
     );
   }
 
-  if (section === "requirements") return <SimpleListPage project={project} section={section} title={labels.requirements} description="Editable requirements with approval workflow." items={requirements.map((item: any) => ({ key: item.key, label: `${item.key} - ${item.title}`, status: item.status, href: `/requirements/${item.id}` }))} createHref={`/requirements/new?project=${project.id}`} createLabel={`Create ${labels.requirement}`} />;
+    if (section === "requirements") {
+      const profileKey = project.domain_profile as keyof typeof requirementsEmptyDescription;
+      return (
+        <SimpleListPage
+          project={project}
+          section={section}
+          title={labels.requirements}
+          description="Editable requirements with approval workflow."
+          items={requirements.map((item: any) => ({ key: item.key, label: `${item.key} - ${item.title}`, status: item.status, href: `/requirements/${item.id}` }))}
+          createHref={`/requirements/new?project=${project.id}`}
+          createLabel={`Create ${labels.requirement}`}
+          emptyTitle={`No ${labels.requirements} yet`}
+          emptyDescription={requirementsEmptyDescription[profileKey] ?? requirementsEmptyDescription.engineering}
+          emptyActionLabel={`+ Add ${labels.requirements}`}
+        />
+      );
+    }
   if (section === "software") {
     const softwareComponents = components.filter((item: any) => item.type === "software_module");
     const softwareDetails = await Promise.all(softwareComponents.map((item: any) => api.component(item.id).catch(() => null)));
@@ -350,16 +400,36 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
                   </Link>
                 ))}
               </div>
-            ) : (
-              <EmptyState title="No blocks in this layer" description="Switch layers or create additional blocks to populate the view." />
-            )}
-          </CardBody>
-        </Card>
-      </div>
-    );
-  }
+              ) : (
+                <EmptyState
+                  title={layer === "all" ? `No ${labels.blocks} yet` : `No ${labels.blocks} in this layer yet`}
+                  description={`${blocksEmptyDescription[project.domain_profile as keyof typeof blocksEmptyDescription] ?? blocksEmptyDescription.engineering}${layer === "all" ? "" : " Switch layers to see the other architectural view or create additional blocks to populate this one."}`}
+                  action={<Button href={`/blocks/new?project=${project.id}`}>+ Add {labels.blocks}</Button>}
+                />
+              )}
+            </CardBody>
+          </Card>
+        </div>
+      );
+    }
   if (section === "components") return <SimpleListPage project={project} section={section} title="Components" description="Realization objects, including software modules." items={components.map((item: any) => ({ key: item.key, label: `${item.key} - ${item.name}`, status: item.status, href: `/components/${item.id}` }))} />;
-  if (section === "tests") return <SimpleListPage project={project} section={section} title={labels.testCases} description="Verification artifacts with workflow and history." items={tests.map((item: any) => ({ key: item.key, label: `${item.key} - ${item.title}`, status: item.status, href: `/test-cases/${item.id}` }))} createHref={`/test-cases/new?project=${project.id}`} createLabel={`Create ${labels.testCase}`} />;
+    if (section === "tests") {
+      const profileKey = project.domain_profile as keyof typeof testsEmptyDescription;
+      return (
+        <SimpleListPage
+          project={project}
+          section={section}
+          title={labels.testCases}
+          description="Verification artifacts with workflow and history."
+          items={tests.map((item: any) => ({ key: item.key, label: `${item.key} - ${item.title}`, status: item.status, href: `/test-cases/${item.id}` }))}
+          createHref={`/test-cases/new?project=${project.id}`}
+          createLabel={`Create ${labels.testCase}`}
+          emptyTitle={`No ${labels.testCases} yet`}
+          emptyDescription={testsEmptyDescription[profileKey] ?? testsEmptyDescription.engineering}
+          emptyActionLabel={`+ Add ${labels.testCases}`}
+        />
+      );
+    }
   if (section === "runs") return <SimpleListPage project={project} section={section} title={`${labels.operationalRun}s`} description="Field evidence and telemetry." items={runs.map((run: any) => ({ key: run.key, label: `${run.key} - ${run.notes}`, status: run.outcome, href: `/operational-runs/${run.id}` }))} createHref={`/operational-runs/new?project=${project.id}`} />;
   if (section === "operational-evidence") {
     return (
@@ -542,77 +612,80 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
   }
 
   return (
-    <div className="space-y-6">
-      <SectionTitle
-        title={`${project.code} - ${project.name}`}
-        description={project.description}
-        action={
-          <div className="flex flex-wrap gap-2">
-            <Button href={`/projects/${project.id}/graph`} variant="secondary">Traceability graph</Button>
-            <Button href={`/projects/${project.id}/matrix`}>Open matrix</Button>
-            <Button href={`/projects/${project.id}/settings`} variant="secondary">Settings</Button>
-            <Button href={api.exportProjectUrl(project.id)} variant="secondary">Export JSON</Button>
-          </div>
-        }
-      />
-      <ProjectTabs section={section} />
-      <div className="grid gap-6 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader><div className="font-semibold">Project overview</div></CardHeader>
-          <CardBody>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Mini metric={labels.requirements} value={requirements.length} />
-              <Mini metric={labels.blocks} value={blocks.length} />
-              <Mini metric={labels.testCases} value={tests.length} />
-              <Mini metric={labels.operationalRun} value={runs.length} />
+    <OnboardingWizard projectId={project.id} profile={project.domain_profile} labels={labels}>
+      <div className="space-y-6">
+        <ProjectHealthCard dashboard={dashboard} labels={labels} projectId={project.id} />
+        <SectionTitle
+          title={`${project.code} - ${project.name}`}
+          description={project.description}
+          action={
+            <div className="flex flex-wrap gap-2">
+              <Button href={`/projects/${project.id}/graph`} variant="secondary">Traceability graph</Button>
+              <Button href={`/projects/${project.id}/matrix`}>Open matrix</Button>
+              <Button href={`/projects/${project.id}/settings`} variant="secondary">Settings</Button>
+              <Button href={api.exportProjectUrl(project.id)} variant="secondary">Export JSON</Button>
             </div>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <Mini metric={`${labels.requirements} with components`} value={dashboard?.kpis.requirements_with_allocated_components ?? 0} />
-              <Mini metric={`${labels.requirements} verified`} value={dashboard?.kpis.requirements_with_verifying_tests ?? 0} />
-              <Mini metric={`${labels.requirements} at risk`} value={dashboard?.kpis.requirements_at_risk ?? 0} />
-              <Mini metric={labels.kpi_open_changes} value={dashboard?.kpis.open_change_requests ?? 0} />
-            </div>
-            <div className="mt-5">
-              <VerificationStatusBreakdownCard breakdown={dashboard?.verification_status_breakdown ?? { verified: 0, partially_verified: 0, at_risk: 0, failed: 0, not_covered: 0 }} title="Verification status distribution" />
-            </div>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader><div className="font-semibold">Quick links</div></CardHeader>
-          <CardBody className="space-y-3">
-            <Button href={`/projects/${project.id}/requirements`} className="w-full">{labels.requirements}</Button>
-            <Button href={`/projects/${project.id}/blocks`} className="w-full" variant="secondary">{labels.blocks}</Button>
-            <Button href={`/projects/${project.id}/components`} className="w-full" variant="secondary">Components</Button>
-            <Button href={`/projects/${project.id}/software`} className="w-full" variant="secondary">Software</Button>
-            <Button href={`/projects/${project.id}/tests`} className="w-full" variant="secondary">Tests</Button>
-            <Button href={`/projects/${project.id}/validation`} className="w-full" variant="secondary">Validation</Button>
-            <Button href={`/projects/${project.id}/simulation-evidence`} className="w-full" variant="secondary">{labels.simulationEvidence}</Button>
-            <Button href={`/projects/${project.id}/fmi`} className="w-full" variant="secondary">FMI</Button>
-            <Button href={`/projects/${project.id}/operational-evidence`} className="w-full" variant="secondary">{labels.operationalEvidence}</Button>
-            <Button href={`/projects/${project.id}/import`} className="w-full" variant="secondary">Import data</Button>
-            <Button href={`/projects/${project.id}/non-conformities`} className="w-full" variant="secondary">{labels.nonConformities}</Button>
-            <Button href={`/projects/${project.id}/links`} className="w-full" variant="secondary">{labels.links}</Button>
-            <Button href={`/projects/${project.id}/graph`} className="w-full" variant="secondary">Traceability graph</Button>
-            <Button href={`/projects/${project.id}/sysml`} className="w-full" variant="secondary">SysML</Button>
-            <Button href={`/projects/${project.id}/step-ap242`} className="w-full" variant="secondary">STEP AP242</Button>
-            <Button href={`/projects/${project.id}/authoritative-sources`} className="w-full" variant="secondary">Authoritative Sources</Button>
-            <Button href={`/projects/${project.id}/review-queue`} className="w-full" variant="secondary">Review Queue</Button>
-            <Button href={api.exportProjectUrl(project.id)} className="w-full" variant="secondary">Export project bundle</Button>
-          </CardBody>
-        </Card>
+          }
+        />
+        <ProjectTabs section={section} />
+        <div className="grid gap-6 xl:grid-cols-3">
+          <Card className="xl:col-span-2">
+            <CardHeader><div className="font-semibold">Project overview</div></CardHeader>
+            <CardBody>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Mini metric={labels.requirements} value={requirements.length} />
+                <Mini metric={labels.blocks} value={blocks.length} />
+                <Mini metric={labels.testCases} value={tests.length} />
+                <Mini metric={labels.operationalRun} value={runs.length} />
+              </div>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <Mini metric={`${labels.requirements} with components`} value={dashboard?.kpis.requirements_with_allocated_components ?? 0} />
+                <Mini metric={`${labels.requirements} verified`} value={dashboard?.kpis.requirements_with_verifying_tests ?? 0} />
+                <Mini metric={`${labels.requirements} at risk`} value={dashboard?.kpis.requirements_at_risk ?? 0} />
+                <Mini metric={labels.kpi_open_changes} value={dashboard?.kpis.open_change_requests ?? 0} />
+              </div>
+              <div className="mt-5">
+                <VerificationStatusBreakdownCard breakdown={dashboard?.verification_status_breakdown ?? { verified: 0, partially_verified: 0, at_risk: 0, failed: 0, not_covered: 0 }} title="Verification status distribution" />
+              </div>
+            </CardBody>
+          </Card>
+          <Card>
+            <CardHeader><div className="font-semibold">Quick links</div></CardHeader>
+            <CardBody className="space-y-3">
+              <Button href={`/projects/${project.id}/requirements`} className="w-full">{labels.requirements}</Button>
+              <Button href={`/projects/${project.id}/blocks`} className="w-full" variant="secondary">{labels.blocks}</Button>
+              <Button href={`/projects/${project.id}/components`} className="w-full" variant="secondary">Components</Button>
+              <Button href={`/projects/${project.id}/software`} className="w-full" variant="secondary">Software</Button>
+              <Button href={`/projects/${project.id}/tests`} className="w-full" variant="secondary">Tests</Button>
+              <Button href={`/projects/${project.id}/validation`} className="w-full" variant="secondary">Validation</Button>
+              <Button href={`/projects/${project.id}/simulation-evidence`} className="w-full" variant="secondary">{labels.simulationEvidence}</Button>
+              <Button href={`/projects/${project.id}/fmi`} className="w-full" variant="secondary">FMI</Button>
+              <Button href={`/projects/${project.id}/operational-evidence`} className="w-full" variant="secondary">{labels.operationalEvidence}</Button>
+              <Button href={`/projects/${project.id}/import`} className="w-full" variant="secondary">Import data</Button>
+              <Button href={`/projects/${project.id}/non-conformities`} className="w-full" variant="secondary">{labels.nonConformities}</Button>
+              <Button href={`/projects/${project.id}/links`} className="w-full" variant="secondary">{labels.links}</Button>
+              <Button href={`/projects/${project.id}/graph`} className="w-full" variant="secondary">Traceability graph</Button>
+              <Button href={`/projects/${project.id}/sysml`} className="w-full" variant="secondary">SysML</Button>
+              <Button href={`/projects/${project.id}/step-ap242`} className="w-full" variant="secondary">STEP AP242</Button>
+              <Button href={`/projects/${project.id}/authoritative-sources`} className="w-full" variant="secondary">Authoritative Sources</Button>
+              <Button href={`/projects/${project.id}/review-queue`} className="w-full" variant="secondary">Review Queue</Button>
+              <Button href={api.exportProjectUrl(project.id)} className="w-full" variant="secondary">Export project bundle</Button>
+            </CardBody>
+          </Card>
+        </div>
       </div>
-    </div>
+    </OnboardingWizard>
   );
 }
 
-function SimpleListPage({ project, section, title, description, items, createHref, createLabel }: { project: any; section: string; title: string; description: string; items: { key: string; label: string; status?: string; href: string }[]; createHref?: string; createLabel?: string }) {
+function SimpleListPage({ project, section, title, description, items, createHref, createLabel, emptyTitle, emptyDescription, emptyActionLabel }: { project: any; section: string; title: string; description: string; items: { key: string; label: string; status?: string; href: string }[]; createHref?: string; createLabel?: string; emptyTitle?: string; emptyDescription?: string; emptyActionLabel?: string }) {
   return (
     <div className="space-y-6">
       <SectionTitle title={`${project.code} - ${title}`} description={description} action={createHref ? <Button href={createHref}>{createLabel || "Create"}</Button> : undefined} />
       <ProjectTabs section={section} />
       <Card>
         <CardHeader><div className="font-semibold">{title}</div></CardHeader>
-        <CardBody>{items.length ? <div className="space-y-3">{items.map((item) => <Link key={item.key} href={item.href} className="block rounded-xl border border-line bg-panel2 p-4 hover:border-accent/50"><div className="flex items-center justify-between gap-4"><div><div className="font-semibold">{item.label}</div></div><Badge tone={itemTone(item.status)}>{item.status || "item"}</Badge></div></Link>)}</div> : <EmptyState title={`No ${title.toLowerCase()} yet`} description={description} action={createHref ? <Button href={createHref}>{createLabel || "Create first item"}</Button> : undefined} />}</CardBody>
+        <CardBody>{items.length ? <div className="space-y-3">{items.map((item) => <Link key={item.key} href={item.href} className="block rounded-xl border border-line bg-panel2 p-4 hover:border-accent/50"><div className="flex items-center justify-between gap-4"><div><div className="font-semibold">{item.label}</div></div><Badge tone={itemTone(item.status)}>{item.status || "item"}</Badge></div></Link>)}</div> : <EmptyState title={emptyTitle || `No ${title.toLowerCase()} yet`} description={emptyDescription || description} action={createHref ? <Button href={createHref}>{emptyActionLabel || createLabel || "Create first item"}</Button> : undefined} />}</CardBody>
       </Card>
     </div>
   );
