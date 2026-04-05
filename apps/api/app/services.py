@@ -2824,10 +2824,16 @@ def list_links(session: Session, project_id: UUID, object_type: str | None = Non
         stmt = stmt.where(((Link.source_type == otype) & (Link.source_id == object_id)) | ((Link.target_type == otype) & (Link.target_id == object_id)))
     links = [LinkRead.model_validate(item) for item in _items(session.exec(stmt.order_by(Link.created_at)))]
     for link in links:
-        src = resolve_object(session, link.source_type.value, link.source_id)
-        tgt = resolve_object(session, link.target_type.value, link.target_id)
-        link.source_label = src["label"]
-        link.target_label = tgt["label"]
+        try:
+            src = resolve_object(session, link.source_type.value, link.source_id)
+            link.source_label = src["label"]
+        except LookupError:
+            link.source_label = f"{link.source_type.value}:{link.source_id}"
+        try:
+            tgt = resolve_object(session, link.target_type.value, link.target_id)
+            link.target_label = tgt["label"]
+        except LookupError:
+            link.target_label = f"{link.target_type.value}:{link.target_id}"
     return links
 
 
@@ -2941,7 +2947,19 @@ def build_impact(session: Session, project_id: UUID, object_type: str, object_id
     def resolve_or_cache(node_type: str, node_id: UUID) -> dict[str, Any]:
         key = _impact_node_key(node_type, node_id)
         if key not in resolved_nodes:
-            resolved_nodes[key] = resolve_object(session, node_type, node_id)
+            try:
+                resolved_nodes[key] = resolve_object(session, node_type, node_id)
+            except LookupError:
+                resolved_nodes[key] = {
+                    "project_id": project_id,
+                    "object_type": node_type,
+                    "object_id": node_id,
+                    "label": f"{node_type}:{node_id} (missing)",
+                    "code": None,
+                    "status": "missing",
+                    "version": None,
+                    "raw": None,
+                }
         return resolved_nodes[key]
 
     def add_edge(source_type: str, source_id: UUID, target_type: str, target_id: UUID) -> None:

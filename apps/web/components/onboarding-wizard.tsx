@@ -204,7 +204,6 @@ export function OnboardingWizard({
                     <Button onClick={finish}>{`Create my first ${labels.requirements}`}</Button>
                   </div>
                 </div>
-                <div className="text-xs text-muted">Profile: {profile}</div>
               </div>
             )}
           </div>

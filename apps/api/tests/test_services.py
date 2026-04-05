@@ -241,6 +241,20 @@ def test_project_domain_profile_persists_and_label_overrides_follow_custom_profi
         assert updated_custom.label_overrides is None
 
 
+def test_personal_seed_requirement_detail_handles_profile_links():
+    with make_session() as session:
+        seed_personal_demo(session)
+        project = session.exec(select(Project).where(Project.code == "HOME-001")).one()
+        requirement = session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == "HOME-GOAL-001")).one()
+
+        detail = get_requirement_detail(session, requirement.id)
+
+        assert detail["requirement"].key == "HOME-GOAL-001"
+        assert len(detail["links"]) == 2
+        assert all(link.source_label for link in detail["links"])
+        assert all(link.target_label for link in detail["links"])
+
+
 def test_authoritative_registry_summary_reports_revision_snapshot_integrity():
     with make_session() as session:
         seed_demo(session)

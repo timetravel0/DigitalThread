@@ -174,7 +174,7 @@ export function ProjectHealthCard({
             <MetricRow label={`${labels.requirements} with components`} value={kpis.requirements_with_allocated_components} />
             <MetricRow label={`${labels.requirements} with tests`} value={kpis.requirements_with_verifying_tests} />
             <MetricRow label={`${labels.requirements} at risk`} value={kpis.requirements_at_risk} />
-            <MetricRow label={labels.kpi_open_changes} value={kpis.open_change_requests} />
+            <MetricRow label={labels.changeRequests} value={kpis.open_change_requests} />
           </div>
         </div>
       </CardBody>
