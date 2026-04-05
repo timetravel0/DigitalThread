@@ -2512,6 +2512,7 @@ def test_non_conformity_entity_links_evidence_and_impacts():
         assert detail["verification_evidence"][0].id == evidence.id
         assert detail["verification_evidence"][0].linked_objects[0].object_id == non_conformity.id
         assert detail["related_requirements"][0].object_id == requirement.id
+        assert detail["history"]
         assert any(item.object_type == "requirement" for item in detail["impact_summary"])
         assert any(item.object_type == "requirement" for item in detail["impact"].likely_impacted)
         assert updated.status == NonConformityStatus.contained

@@ -379,6 +379,7 @@ What non-conformities are for:
 - track engineering issues, defects, or observations that need analysis
 - record a deviation decision with an explicit `Accept`, `Rework`, or `Reject` disposition
 - link the issue back to the affected requirement so reviewers can see the original context
+- review the audit trail to see when the NCR status and disposition changed
 
 How to use them:
 
@@ -387,6 +388,7 @@ How to use them:
 3. attach evidence and impacted objects
 4. choose a deviation disposition when the review team decides how to handle it
 5. move the item through its lifecycle as analysis progresses
+6. use the audit trail section to review the decision history
 
 ## 21. Authoritative Sources
 

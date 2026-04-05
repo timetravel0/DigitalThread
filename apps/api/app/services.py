@@ -2240,6 +2240,16 @@ def create_non_conformity(session: Session, payload: NonConformityCreate) -> Non
     if _get(session, Project, payload.project_id) is None:
         raise LookupError("Project not found")
     item = _add(session, NonConformity.model_validate(payload))
+    _log_action(
+        session,
+        object_type="non_conformity",
+        obj=item,
+        from_status=_status_value(item.status),
+        to_status=_status_value(item.status),
+        action="create",
+        actor=None,
+        comment=payload.review_comment or payload.description,
+    )
     _snapshot(session, "non_conformity", item, "Created non-conformity", None)
     return _read(NonConformityRead, item)
 
@@ -2293,6 +2303,7 @@ def get_non_conformity_detail(session: Session, obj_id: UUID) -> dict[str, Any]:
         "links": impacts,
         "related_requirements": related_requirements,
         "verification_evidence": list_verification_evidence(session, item.project_id, internal_object_type=FederatedInternalObjectType.non_conformity, internal_object_id=item.id),
+        "history": [ApprovalActionLogRead.model_validate(row) for row in _items(session.exec(select(ApprovalActionLog).where(ApprovalActionLog.project_id == item.project_id, ApprovalActionLog.object_type == "non_conformity", ApprovalActionLog.object_id == item.id).order_by(desc(ApprovalActionLog.created_at))))],
         "impact": build_impact(session, item.project_id, "non_conformity", item.id),
         "impact_summary": impact_summary,
     }

@@ -586,6 +586,7 @@ export interface NonConformityDetail {
   links: Link[];
   related_requirements: ObjectSummary[];
   verification_evidence: VerificationEvidence[];
+  history: ApprovalActionLog[];
   impact: ImpactResponse;
   impact_summary: ObjectSummary[];
 }

@@ -592,6 +592,7 @@ class NonConformityDetail(BaseModel):
     links: list[LinkRead] = Field(default_factory=list)
     related_requirements: list[ObjectSummary] = Field(default_factory=list)
     verification_evidence: list[VerificationEvidenceRead] = Field(default_factory=list)
+    history: list[ApprovalActionLogRead] = Field(default_factory=list)
     impact: ImpactResponse
     impact_summary: list[ObjectSummary] = Field(default_factory=list)
 

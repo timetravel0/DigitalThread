@@ -295,6 +295,7 @@ Rules:
 - each record must declare or imply a record type
 - imported verification evidence must link to at least one requirement, test case, component, or non-conformity
 - non-conformities can carry an explicit deviation disposition (`accept`, `rework`, or `reject`) without replacing their lifecycle status
+- NCR detail pages surface an audit trail built from approval action logs so reviewers can see how the decision evolved
 - imported rows stay inside the selected project
 - the import workflow does not create a separate job table yet
 

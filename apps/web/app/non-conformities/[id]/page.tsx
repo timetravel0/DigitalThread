@@ -144,6 +144,28 @@ export default async function NonConformityPage({ params }: { params: { id: stri
           ))}
         </CardBody>
       </Card>
+      <Card>
+        <CardHeader><div className="font-semibold">Audit trail</div></CardHeader>
+        <CardBody className="space-y-3">
+          {data.history?.length ? (
+            data.history.map((entry: any) => (
+              <div key={entry.id} className="rounded-xl border border-line bg-panel2 p-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="font-medium">{entry.action} · {entry.from_status} → {entry.to_status}</div>
+                  <Badge tone={auditTone(entry.action)}>{entry.action}</Badge>
+                </div>
+                <div className="mt-1 text-xs text-muted">
+                  {entry.actor ? <span>{entry.actor}</span> : <span>system</span>}
+                  {entry.created_at ? <span> · {entry.created_at}</span> : null}
+                </div>
+                {entry.comment ? <div className="mt-2 text-sm text-muted">{entry.comment}</div> : null}
+              </div>
+            ))
+          ) : (
+            <div className="text-sm text-muted">No NCR audit records yet.</div>
+          )}
+        </CardBody>
+      </Card>
       <Link href="/projects" className="text-sm text-accent">Back to projects</Link>
     </div>
   );
@@ -163,4 +185,11 @@ function dispositionTone(disposition: string) {
   if (disposition === "accept") return "success";
   if (disposition === "rework") return "warning";
   return "danger";
+}
+
+function auditTone(action: string) {
+  if (action === "update") return "accent";
+  if (action === "approve") return "success";
+  if (action === "reject") return "danger";
+  return "neutral";
 }
