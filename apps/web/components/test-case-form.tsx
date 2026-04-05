@@ -7,6 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
+import { getLabels, type LabelSet } from "@/lib/labels";
 import type { TestCase } from "@/lib/types";
 
 const schema = z.object({
@@ -20,9 +21,10 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export function TestCaseForm({ initial }: { initial?: Partial<TestCase> }) {
+export function TestCaseForm({ initial, labels: providedLabels }: { initial?: Partial<TestCase>; labels?: LabelSet }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const labels = providedLabels || getLabels("engineering");
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -54,10 +56,10 @@ export function TestCaseForm({ initial }: { initial?: Partial<TestCase> }) {
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <Input placeholder="Project ID" {...form.register("project_id")} />
-        <Input placeholder="Test key" {...form.register("key")} />
+        <Input placeholder={`${labels.testCase} key`} {...form.register("key")} />
       </div>
-      <Input placeholder="Test title" {...form.register("title")} />
-      <Textarea placeholder="Description" rows={4} {...form.register("description")} />
+      <Input placeholder={`${labels.testCase} title`} {...form.register("title")} />
+      <Textarea placeholder={labels.testCase_description} rows={4} {...form.register("description")} />
       <div className="grid gap-4 md:grid-cols-2">
         <Select {...form.register("method")}>
           <option value="bench">bench</option>

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
+import { getLabels, type LabelSet } from "@/lib/labels";
 import type { Block } from "@/lib/types";
 
 const schema = z.object({
@@ -22,9 +23,10 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export function BlockForm({ initial }: { initial?: Partial<Block> }) {
+export function BlockForm({ initial, labels: providedLabels }: { initial?: Partial<Block>; labels?: LabelSet }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const labels = providedLabels || getLabels("engineering");
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -58,10 +60,10 @@ export function BlockForm({ initial }: { initial?: Partial<Block> }) {
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <Input placeholder="Project ID" {...form.register("project_id")} />
-        <Input placeholder="Block key" {...form.register("key")} />
+        <Input placeholder={`${labels.block} key`} {...form.register("key")} />
       </div>
-      <Input placeholder="Block name" {...form.register("name")} />
-      <Textarea placeholder="Description" rows={4} {...form.register("description")} />
+      <Input placeholder={`${labels.block} name`} {...form.register("name")} />
+      <Textarea placeholder={labels.block_description} rows={4} {...form.register("description")} />
       <div className="grid gap-4 md:grid-cols-2">
         <Select {...form.register("block_kind")}>
           <option value="system">system</option>

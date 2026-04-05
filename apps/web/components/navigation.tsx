@@ -17,7 +17,7 @@ export function SidebarNav() {
       <div>
         <div className="text-xs uppercase tracking-[0.3em] text-accent">ThreadLite</div>
         <div className="mt-2 text-2xl font-semibold">Digital Thread MVP</div>
-        <p className="mt-2 text-sm text-muted">Traceability, baselines, impact, and evidence for SME engineering teams.</p>
+        <p className="mt-2 text-sm text-muted">Track every decision, link, and change across your project.</p>
       </div>
       <nav className="space-y-1">
         {items.map((item) => {
@@ -37,7 +37,7 @@ export function SidebarNav() {
         })}
       </nav>
       <div className="mt-auto rounded-2xl border border-line bg-panel2 p-4 text-sm text-muted">
-        Seed the demo project from the dashboard to populate the drone example.
+        Create a new project and choose a domain profile to get started, or seed a demo from the dashboard.
       </div>
     </div>
   );

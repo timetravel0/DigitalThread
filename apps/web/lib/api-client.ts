@@ -81,6 +81,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   request,
   seedDemo: () => request<{ project_id: string; seeded: boolean }>("/seed/demo", { method: "POST" }),
+  seedManufacturing: () => request<{ project_id: string; seeded: boolean }>("/seed/manufacturing-demo", { method: "POST" }),
+  seedPersonal: () => request<{ project_id: string; seeded: boolean }>("/seed/personal-demo", { method: "POST" }),
   seedManufacturingDemo: () => request<{ project_id: string; seeded: boolean }>("/seed/manufacturing-demo", { method: "POST" }),
   seedPersonalDemo: () => request<{ project_id: string; seeded: boolean }>("/seed/personal-demo", { method: "POST" }),
   dashboard: () => request<Dashboard>("/dashboard"),

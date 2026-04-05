@@ -7,7 +7,39 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
+import { getLabels, type DomainProfile, type LabelSet } from "@/lib/labels";
 import type { Requirement } from "@/lib/types";
+
+export const CATEGORY_OPTIONS: Record<DomainProfile, { value: "performance" | "safety" | "environment" | "operations" | "compliance"; label: string }[]> = {
+  engineering: [
+    { value: "performance", label: "performance" },
+    { value: "safety", label: "safety" },
+    { value: "environment", label: "environment" },
+    { value: "operations", label: "operations" },
+    { value: "compliance", label: "compliance" },
+  ],
+  manufacturing: [
+    { value: "performance", label: "quality" },
+    { value: "operations", label: "production" },
+    { value: "safety", label: "safety" },
+    { value: "compliance", label: "compliance" },
+    { value: "environment", label: "environment" },
+  ],
+  personal: [
+    { value: "performance", label: "goal" },
+    { value: "safety", label: "constraint" },
+    { value: "operations", label: "infrastructure" },
+    { value: "compliance", label: "maintenance" },
+    { value: "environment", label: "other" },
+  ],
+  custom: [
+    { value: "performance", label: "performance" },
+    { value: "safety", label: "safety" },
+    { value: "environment", label: "environment" },
+    { value: "operations", label: "operations" },
+    { value: "compliance", label: "compliance" },
+  ],
+};
 
 const schema = z.object({
   project_id: z.string().uuid(),
@@ -24,9 +56,17 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export function RequirementForm({ initial, onSaved }: { initial?: Partial<Requirement>; onSaved?: () => void }) {
+export function RequirementForm({ initial, onSaved, labels: providedLabels }: { initial?: Partial<Requirement>; onSaved?: () => void; labels?: LabelSet }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const labels = providedLabels || getLabels("engineering");
+  const profileKey: DomainProfile =
+    labels.requirement === "Specification"
+      ? "manufacturing"
+      : labels.requirement === "Goal"
+        ? "personal"
+        : "engineering";
+  const categoryOptions = CATEGORY_OPTIONS[profileKey];
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -68,17 +108,17 @@ export function RequirementForm({ initial, onSaved }: { initial?: Partial<Requir
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <Input placeholder="Project ID" {...form.register("project_id")} />
-        <Input placeholder="Requirement key" {...form.register("key")} />
+        <Input placeholder={`${labels.requirement} key`} {...form.register("key")} />
       </div>
-      <Input placeholder="Requirement title" {...form.register("title")} />
-      <Textarea placeholder="Description" rows={4} {...form.register("description")} />
+      <Input placeholder={`${labels.requirement} title`} {...form.register("title")} />
+      <Textarea placeholder={labels.requirement_description} rows={4} {...form.register("description")} />
       <div className="grid gap-4 md:grid-cols-2">
         <Select {...form.register("category")}>
-          <option value="performance">performance</option>
-          <option value="safety">safety</option>
-          <option value="environment">environment</option>
-          <option value="operations">operations</option>
-          <option value="compliance">compliance</option>
+          {categoryOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </Select>
         <Select {...form.register("priority")}>
           <option value="low">low</option>
@@ -104,7 +144,10 @@ export function RequirementForm({ initial, onSaved }: { initial?: Partial<Requir
           <option value="retired">retired</option>
         </Select>
       </div>
-      <Input placeholder="Parent requirement ID (optional)" {...form.register("parent_requirement_id")} />
+      <div className="space-y-1">
+        <Input placeholder={`Parent ${labels.requirement} ID (optional)`} {...form.register("parent_requirement_id")} />
+        <p className="text-xs text-muted">Related {labels.block} traceability is shown from the requirement detail page.</p>
+      </div>
       <Textarea placeholder='Verification criteria JSON, for example {"telemetry_thresholds": {"battery_consumption_pct": {"max": 85}}}' rows={6} {...form.register("verification_criteria_json")} />
       {error ? <div className="text-sm text-danger">{error}</div> : null}
       <Button type="submit">Save requirement</Button>

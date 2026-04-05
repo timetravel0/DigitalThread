@@ -24,19 +24,36 @@ export default async function DashboardPage() {
 
       <DashboardViews dashboard={dashboard} />
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <div className="font-semibold">Seed data</div>
-          </CardHeader>
-          <CardBody>
-            <div className="mt-2 text-lg font-semibold">Drone inspection demo</div>
-            <p className="mt-2 text-sm text-muted">If the API is empty, seed the inspection drone example to populate the UI.</p>
-            <div className="mt-4">
-              <SeedButton />
-            </div>
-          </CardBody>
-        </Card>
+      <div className="grid gap-6 xl:grid-cols-3">
+        {[
+          {
+            profile: "engineering" as const,
+            title: "Engineering demo",
+            description: "Seed the drone inspection scenario with the full engineering workspace.",
+          },
+          {
+            profile: "manufacturing" as const,
+            title: "Manufacturing demo",
+            description: "Seed a production-oriented demo with quality and conformance language.",
+          },
+          {
+            profile: "personal" as const,
+            title: "Personal demo",
+            description: "Seed a lightweight personal project with goal and verification labels.",
+          },
+        ].map((card) => (
+          <Card key={card.profile}>
+            <CardHeader>
+              <div className="font-semibold">{card.title}</div>
+            </CardHeader>
+            <CardBody>
+              <p className="mt-2 text-sm text-muted">{card.description}</p>
+              <div className="mt-4">
+                <SeedButton profile={card.profile} />
+              </div>
+            </CardBody>
+          </Card>
+        ))}
 
         <Card>
           <CardHeader>
