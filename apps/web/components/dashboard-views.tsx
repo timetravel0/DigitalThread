@@ -1,29 +1,30 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Badge, Card, CardBody, CardHeader, StatCard } from "@/components/ui";
 import { VerificationStatusBreakdownCard } from "@/components/verification-status-breakdown";
+import { getLabels, type LabelSet } from "@/lib/labels";
 import type { Dashboard } from "@/lib/types";
 
-export function DashboardViews({ dashboard }: { dashboard: Dashboard | null }) {
+export function DashboardViews({ dashboard, labels = getLabels("engineering") }: { dashboard: Dashboard | null; labels?: LabelSet }) {
   const [mode, setMode] = useState<"manager" | "engineering">("manager");
   const projects = dashboard && "projects" in dashboard ? dashboard.projects ?? [] : [];
   const managerCards = useMemo(
     () => [
-      { label: "Requirements at risk", value: dashboard?.kpis.requirements_at_risk ?? 0, sub: "Dashboard risk view" },
+      { label: `${labels.requirements} at risk`, value: dashboard?.kpis.requirements_at_risk ?? 0, sub: "Dashboard risk view" },
       { label: "Failed tests 30d", value: dashboard?.kpis.failed_tests_last_30_days ?? 0, sub: "Execution health" },
-      { label: "Open change requests", value: dashboard?.kpis.open_change_requests ?? 0, sub: "Change pipeline" },
+      { label: labels.kpi_open_changes, value: dashboard?.kpis.open_change_requests ?? 0, sub: "Change pipeline" },
     ],
-    [dashboard],
+    [dashboard, labels],
   );
   const engineeringCards = useMemo(
     () => [
-      { label: "Total requirements", value: dashboard?.kpis.total_requirements ?? 0, sub: "Authoring scope" },
-      { label: "Requirements with components", value: dashboard?.kpis.requirements_with_allocated_components ?? 0, sub: "Allocation coverage" },
-      { label: "Requirements with tests", value: dashboard?.kpis.requirements_with_verifying_tests ?? 0, sub: "Verification coverage" },
+      { label: labels.requirements, value: dashboard?.kpis.total_requirements ?? 0, sub: "Authoring scope" },
+      { label: `${labels.requirements} with components`, value: dashboard?.kpis.requirements_with_allocated_components ?? 0, sub: "Allocation coverage" },
+      { label: `${labels.requirements} with tests`, value: dashboard?.kpis.requirements_with_verifying_tests ?? 0, sub: "Verification coverage" },
     ],
-    [dashboard],
+    [dashboard, labels],
   );
 
   return (
@@ -78,3 +79,4 @@ export function DashboardViews({ dashboard }: { dashboard: Dashboard | null }) {
     </div>
   );
 }
+

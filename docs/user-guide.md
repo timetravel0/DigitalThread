@@ -367,13 +367,16 @@ What baselines are for:
 - capture approved content at a point in time
 - preserve object versions for later comparison or audit
 - mark a baseline as released when you want follow-up edits to generate a change-request trail automatically
+- review lifecycle history for release and obsolescence decisions
 
 How to use them:
 
 1. open `Baselines`
 2. create a baseline from approved objects
 3. open a baseline detail page to inspect included items
-4. compare the baseline with another baseline or configuration context when needed
+4. release or obsolete the baseline when the review gate changes
+5. inspect the lifecycle history to see how the decision was made
+6. compare the baseline with another baseline or configuration context when needed
 
 ## 19. Change Requests
 
@@ -381,7 +384,8 @@ What change requests are for:
 
 - capture a proposed change
 - track impacted objects and severity
-- support analysis and implementation workflow
+- support analysis, disposition, implementation, and closure workflow
+- move an open or rejected item directly back into analysis when it is ready for review again
 
 How to use them:
 
@@ -389,7 +393,8 @@ How to use them:
 2. create a change request
 3. add impacted objects
 4. review the impact summary before implementation
-5. use the impact map on the detail page to see affected objects grouped by impact level
+5. use the lifecycle summary on the detail page to follow analysis, disposition, implementation, and closure notes
+6. use the impact map on the detail page to see affected objects grouped by impact level
 
 ## 20. Non-Conformities
 
@@ -415,6 +420,7 @@ What this area is for:
 
 - register external tools and authoritative version pointers
 - connect ThreadLite objects to DOORS, MBSE, PLM, or simulation sources
+- review revision snapshot integrity for the internal AST history
 
 How to use it:
 
@@ -422,6 +428,7 @@ How to use it:
 2. define connectors and external artifacts
 3. link internal objects to external versions
 4. use configuration contexts to combine internal and external references in one review gate
+5. check the revision snapshot integrity card to confirm the internal history chain is intact
 
 ## 22. Import
 
@@ -460,6 +467,7 @@ How to use it:
 What export does:
 
 - creates a deterministic JSON bundle of the project
+- includes core objects, evidence, configuration history, and review history
 - supports external validation, review, or handoff
 
 How to use it:

@@ -1,6 +1,7 @@
 export type ID = string;
 
 export type ProjectStatus = "draft" | "active" | "archived";
+export type DomainProfile = "engineering" | "manufacturing" | "personal" | "custom";
 export type RequirementCategory = "performance" | "safety" | "environment" | "operations" | "compliance";
 export type Priority = "low" | "medium" | "high" | "critical";
 export type VerificationMethod = "analysis" | "inspection" | "test" | "demonstration";
@@ -46,6 +47,8 @@ export interface Project {
   code: string;
   name: string;
   description: string;
+  domain_profile: DomainProfile;
+  label_overrides?: Record<string, unknown> | null;
   status: ProjectStatus;
   created_at: string;
   updated_at: string;
@@ -315,6 +318,7 @@ export interface BaselineDetail {
   bridge_context: BaselineBridgeContext;
   items: BaselineItem[];
   related_configuration_contexts: ConfigurationContext[];
+  history: ApprovalActionLog[];
 }
 
 export interface BaselineBridgeContext {
@@ -545,6 +549,10 @@ export interface ChangeRequest {
   description: string;
   status: ChangeRequestStatus;
   severity: Severity;
+  analysis_summary?: string | null;
+  disposition_summary?: string | null;
+  implementation_summary?: string | null;
+  closure_summary?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -696,6 +704,11 @@ export interface AuthoritativeRegistrySummary {
   artifact_links: number;
   configuration_contexts: number;
   configuration_item_mappings: number;
+  revision_snapshots: number;
+  revision_snapshot_objects: number;
+  revision_snapshot_objects_broken: number;
+  revision_snapshot_integrity_status: string;
+  revision_snapshot_integrity_issues: string[];
 }
 
 export interface ConnectorDetail {
@@ -733,6 +746,7 @@ export interface ConfigurationContextDetail {
     external: ConfigurationContextResolvedExternalItem[];
   };
   related_baselines: Baseline[];
+  history: ApprovalActionLog[];
 }
 
 export interface ConfigurationContextResolvedInternalItem {

@@ -113,6 +113,9 @@ Implemented as a compact graph explorer with a focused walk-the-thread view that
 - Suggested test coverage: traversal tests, cycle-handling tests, regression tests.
 - Complexity: L
 
+Status:
+Implemented as graph-aware impact traversal across requirements, realization objects, tests, evidence, baselines, and change requests.
+
 ## Epic E: Non-Conformity & Change
 
 ### E1 - Non-conformity entity
@@ -133,6 +136,9 @@ Implemented as a compact graph explorer with a focused walk-the-thread view that
 - Suggested test coverage: transition tests, invalid-state tests, audit tests.
 - Complexity: M
 
+Status:
+Implemented with traceable analysis, disposition, implementation, and closure notes plus audit history on change requests.
+
 ### E3 - Audit reuse across decision objects
 
 - Description: Reuse the approval audit pattern for contexts, baselines, changes, and non-conformities.
@@ -141,6 +147,9 @@ Implemented as a compact graph explorer with a focused walk-the-thread view that
 - Acceptance criteria: each state transition writes a traceable decision record.
 - Suggested test coverage: audit row tests, actor/comment tests.
 - Complexity: S
+
+Status:
+Implemented with traceable lifecycle history on baselines and configuration contexts, plus persisted audit rows for change requests and non-conformities.
 
 ## Epic F: Connector Framework & Standards Contracts
 

@@ -1,5 +1,6 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { api } from "@/lib/api-client";
+import { getLabels } from "@/lib/labels";
 import { ArtifactLinkForm } from "@/components/artifact-link-form";
 import { Badge, Button, Card, CardBody, CardHeader, SectionTitle } from "@/components/ui";
 import { SimulationEvidenceCard } from "@/components/simulation-evidence-card";
@@ -13,6 +14,8 @@ export const dynamic = "force-dynamic";
 export default async function TestCasePage({ params }: { params: { id: string } }) {
   const data = await api.testCase(params.id).catch(() => null);
   if (!data) return <div className="text-sm text-muted">Test case not found.</div>;
+  const project = await api.project(data.test_case.project_id).catch(() => null);
+  const labels = getLabels(project?.domain_profile);
   const [artifacts, fmiContracts] = await Promise.all([
     api.externalArtifacts(data.test_case.project_id).catch(() => []),
     api.fmiContracts(data.test_case.project_id).catch(() => []),
@@ -24,7 +27,7 @@ export default async function TestCasePage({ params }: { params: { id: string } 
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-4">
-            <div className="font-semibold">Test case record</div>
+            <div className="font-semibold">{labels.testCase} record</div>
             <div className="flex flex-wrap gap-2">
               {data.test_case.status === "approved" || data.test_case.status === "in_review" ? null : (
                 <Button href={`/test-cases/${data.test_case.id}/edit`} variant="secondary">Edit</Button>
@@ -43,8 +46,8 @@ export default async function TestCasePage({ params }: { params: { id: string } 
         <Card>
           <CardHeader><div className="font-semibold">Approved item editing</div></CardHeader>
           <CardBody className="space-y-3 text-sm text-muted">
-            <p>This test case is approved and cannot be edited in place.</p>
-            <p>Create a new draft version before changing the test content.</p>
+            <p>This {labels.testCase.toLowerCase()} is approved and cannot be edited in place.</p>
+            <p>Create a new draft version before changing the {labels.testCase.toLowerCase()} content.</p>
             <WorkflowActions kind="test_case" id={data.test_case.id} status={data.test_case.status} />
           </CardBody>
         </Card>
@@ -65,7 +68,7 @@ export default async function TestCasePage({ params }: { params: { id: string } 
           </CardBody>
         </Card>
         <Card>
-          <CardHeader><div className="font-semibold">Verification evidence</div></CardHeader>
+          <CardHeader><div className="font-semibold">{labels.verificationEvidence}</div></CardHeader>
           <CardBody className="space-y-4">
             {data.verification_evidence?.length ? (
               <div className="space-y-3">
@@ -74,24 +77,24 @@ export default async function TestCasePage({ params }: { params: { id: string } 
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <div className="font-medium">{evidence.title}</div>
-                        <div className="mt-1 text-xs text-muted">{evidence.evidence_type} · {evidence.observed_at || "no observed date"}</div>
+                        <div className="mt-1 text-xs text-muted">{evidence.evidence_type} Â· {evidence.observed_at || "no observed date"}</div>
                       </div>
                       <Badge tone="accent">{evidence.evidence_type}</Badge>
                     </div>
                     <div className="mt-2 text-sm text-muted">{evidence.summary || "No summary provided."}</div>
                     <div className="mt-2 text-xs text-muted">
                       {evidence.source_name ? <span>{evidence.source_name}</span> : <span>No source name</span>}
-                      {evidence.source_reference ? <span> · {evidence.source_reference}</span> : null}
+                      {evidence.source_reference ? <span> Â· {evidence.source_reference}</span> : null}
                     </div>
                     <SimulationEvidenceMetadata metadataJson={evidence.metadata_json} />
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-muted">No verification evidence linked yet.</div>
+              <div className="text-sm text-muted">No {labels.verificationEvidence.toLowerCase()} linked yet.</div>
             )}
             <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
-              <div className="mb-3 text-sm font-medium">Add verification evidence</div>
+              <div className="mb-3 text-sm font-medium">Add {labels.verificationEvidence}</div>
               <VerificationEvidenceForm
                 projectId={data.test_case.project_id}
                 subjectType="test_case"
@@ -102,7 +105,7 @@ export default async function TestCasePage({ params }: { params: { id: string } 
           </CardBody>
         </Card>
         <Card>
-          <CardHeader><div className="font-semibold">Simulation evidence</div></CardHeader>
+          <CardHeader><div className="font-semibold">{labels.simulationEvidence}</div></CardHeader>
           <CardBody className="space-y-4">
             {data.simulation_evidence?.length ? (
               <div className="space-y-4">
@@ -112,11 +115,11 @@ export default async function TestCasePage({ params }: { params: { id: string } 
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-line bg-panel2 p-4 text-sm text-muted">
-                No simulation evidence linked yet.
+                No {labels.simulationEvidence.toLowerCase()} linked yet.
               </div>
             )}
             <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
-              <div className="mb-3 text-sm font-medium">Add simulation evidence</div>
+              <div className="mb-3 text-sm font-medium">Add {labels.simulationEvidence}</div>
               <SimulationEvidenceForm
               projectId={data.test_case.project_id}
               linkedTestCaseIds={[data.test_case.id]}
@@ -133,8 +136,8 @@ export default async function TestCasePage({ params }: { params: { id: string } 
             {(data.artifact_links || []).length ? (
               data.artifact_links.map((link: any) => (
                 <div key={link.id} className="rounded-xl border border-line bg-panel2 p-3">
-                  <div className="font-medium">{link.internal_object_label || "Test case"} <span className="text-muted">→</span> {link.external_artifact_name}</div>
-                  <div className="text-xs text-muted">{link.relation_type} · {link.external_artifact_version_label || "unpinned"} · {link.connector_name || "no connector"}</div>
+                  <div className="font-medium">{link.internal_object_label || "Test case"} <span className="text-muted">â†’</span> {link.external_artifact_name}</div>
+                  <div className="text-xs text-muted">{link.relation_type} Â· {link.external_artifact_version_label || "unpinned"} Â· {link.connector_name || "no connector"}</div>
                 </div>
               ))
             ) : (
@@ -182,3 +185,7 @@ function objectHref(objectType: string, objectId: string) {
   if (objectType === "fmi_contract") return `/fmi-contracts/${objectId}`;
   return null;
 }
+
+
+
+

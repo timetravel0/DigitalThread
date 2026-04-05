@@ -50,10 +50,10 @@ ThreadLite is intentionally narrow in scope:
 - one project-centric data model
 - explicit traceability links instead of a complex graph platform
 - simple version fields plus revision snapshots for authored objects
-- revision snapshots carry content hashes to make the audit trail harder to tamper with
+- revision snapshots carry content hashes and an integrity summary to make the audit trail harder to tamper with
 - approval workflow for requirements, blocks, and test cases
 - authoritative metadata federation rather than file duplication
-- one-hop plus two-hop impact analysis
+- graph-aware impact analysis with direct, secondary, and evidence-linked traversal
 - practical seed data so the product feels alive on first run
 
 The goal is not to replace enterprise PLM/ALM platforms. The goal is to provide a clear foundation that a small engineering team can actually adopt and extend.
@@ -115,11 +115,12 @@ threadlite/
 - Traceability matrix with component or test columns
 - Relationship registry with filters for requirements, links, and evidence
 - Traceability graph with a compact relationship explorer by default and a focused graph when you click an object, showing Incoming / Focus / Outgoing columns, walk-the-thread expansion across requirements, blocks, software realization nodes, CAD parts, tests, and evidence, readable link explanations, visible edge ports on box boundaries, and extra spacing for multiple links between the same objects
-- Impact analysis with direct and two-hop traversal across requirements, blocks, and tests
+- Impact analysis with graph-aware traversal across requirements, blocks, software realization nodes, CAD parts, tests, evidence, baselines, and change requests
 - Impact visualization cards on requirement and change request pages so affected objects are easy to scan
 - Baselines for freezing approved versions of core objects
 - Released baselines create a change-request trail when linked components or requirements are changed
-- Change requests with impact summaries
+- Change requests with impact summaries and lifecycle notes for analysis, disposition, implementation, and closure, plus direct resubmission to analysis from open or rejected states
+- Baselines and configuration contexts with traceable lifecycle history so review decisions are visible across configuration objects
 - Non-conformities with explicit Accept / Rework / Reject dispositions
 - Project export bundles for external validation
 - Demo seed for a drone inspection project

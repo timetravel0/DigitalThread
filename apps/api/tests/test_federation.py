@@ -117,6 +117,8 @@ from app.main import (
     update_configuration_context_endpoint,
     mapping_contract_endpoint,
     step_ap242_contract_endpoint,
+    seed_manufacturing_demo_endpoint,
+    seed_personal_demo_endpoint,
 )
 
 
@@ -170,6 +172,8 @@ def test_external_artifact_registry_versioning_and_filters():
         assert summary.connectors == 1
         assert summary.external_artifacts == 1
         assert summary.external_artifact_versions == 1
+        assert summary.revision_snapshots == 0
+        assert summary.revision_snapshot_integrity_status == "warning"
 
 
 def test_artifact_link_requires_project_scope():
@@ -1473,6 +1477,20 @@ def test_export_bundle_includes_federation_objects():
         assert bundle["configuration_contexts"]
         assert bundle["configuration_item_mappings"]
         assert bundle["authoritative_registry_summary"]["connectors"] >= 4
+
+
+def test_profile_seed_endpoints_create_profile_specific_projects():
+    with make_session() as session:
+        manufacturing = seed_manufacturing_demo_endpoint(session=session)
+        personal = seed_personal_demo_endpoint(session=session)
+
+        manufacturing_project = session.exec(select(Project).where(Project.code == "MFG-001")).one()
+        personal_project = session.exec(select(Project).where(Project.code == "HOME-001")).one()
+
+        assert manufacturing["seeded"] is True
+        assert personal["seeded"] is True
+        assert manufacturing_project.domain_profile == "manufacturing"
+        assert personal_project.domain_profile == "personal"
 
 
 def test_csv_import_endpoint_creates_external_artifacts_and_verification_evidence():

@@ -179,6 +179,26 @@ export default async function ConfigurationContextPage({ params, searchParams }:
         </Card>
       </div>
 
+      <Card>
+        <CardHeader><div className="font-semibold">Lifecycle history</div></CardHeader>
+        <CardBody className="space-y-3">
+          {data.history?.length ? (
+            data.history.map((event: any) => (
+              <div key={event.id} className="rounded-xl border border-line bg-panel2 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="font-medium">{event.from_status} â†’ {event.to_status}</div>
+                  <Badge tone={historyTone(event.to_status)}>{event.action}</Badge>
+                </div>
+                <div className="mt-1 text-xs text-muted">{event.actor || "system"} Â· {event.created_at}</div>
+                {event.comment ? <div className="mt-2 text-sm text-muted">{event.comment}</div> : null}
+              </div>
+            ))
+          ) : (
+            <div className="text-sm text-muted">No lifecycle events recorded yet.</div>
+          )}
+        </CardBody>
+      </Card>
+
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader><div className="font-semibold">Add internal item</div></CardHeader>
@@ -240,6 +260,12 @@ function Summary({ label, value }: { label: string; value: number }) {
       <div className="mt-2 text-2xl font-semibold">{value}</div>
     </div>
   );
+}
+
+function historyTone(status: string) {
+  if (status === "released" || status === "active") return "success";
+  if (status === "obsolete" || status === "frozen") return "danger";
+  return "neutral";
 }
 
 function CompareColumn({ title, items }: { title: string; items: any[] }) {

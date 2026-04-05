@@ -1,5 +1,6 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { api } from "@/lib/api-client";
+import { getLabels } from "@/lib/labels";
 import { ArtifactLinkForm } from "@/components/artifact-link-form";
 import { Badge, Button, Card, CardBody, CardHeader, SectionTitle } from "@/components/ui";
 import { WorkflowActions } from "@/components/workflow-actions";
@@ -10,6 +11,8 @@ export const dynamic = "force-dynamic";
 export default async function BlockPage({ params }: { params: { id: string } }) {
   const data = await api.block(params.id).catch(() => null);
   if (!data) return <div className="text-sm text-muted">Block not found.</div>;
+  const project = await api.project(data.block.project_id).catch(() => null);
+  const labels = getLabels(project?.domain_profile);
   const artifacts = await api.externalArtifacts(data.block.project_id).catch(() => []);
 
   return (
@@ -19,7 +22,7 @@ export default async function BlockPage({ params }: { params: { id: string } }) 
         <Card className="xl:col-span-2">
           <CardHeader>
             <div className="flex items-center justify-between gap-4">
-              <div className="font-semibold">Block (SysML-inspired structural element)</div>
+              <div className="font-semibold">{labels.block} (SysML-inspired structural element)</div>
               <div className="flex flex-wrap gap-2">
                 {data.block.status === "approved" || data.block.status === "in_review" ? null : (
                   <Button href={`/blocks/${data.block.id}/edit`} variant="secondary">Edit</Button>
@@ -55,8 +58,8 @@ export default async function BlockPage({ params }: { params: { id: string } }) 
         <Card>
           <CardHeader><div className="font-semibold">Approved item editing</div></CardHeader>
           <CardBody className="space-y-3 text-sm text-muted">
-            <p>This block is approved and cannot be edited in place.</p>
-            <p>Create a draft version to continue modeling the block without losing history.</p>
+            <p>This {labels.block.toLowerCase()} is approved and cannot be edited in place.</p>
+            <p>Create a draft version to continue modeling the {labels.block.toLowerCase()} without losing history.</p>
             <WorkflowActions kind="block" id={data.block.id} status={data.block.status} />
           </CardBody>
         </Card>
@@ -80,8 +83,8 @@ export default async function BlockPage({ params }: { params: { id: string } }) 
             {(data.artifact_links || []).length ? (
               data.artifact_links.map((link: any) => (
                 <div key={link.id} className="rounded-xl border border-line bg-panel2 p-3">
-                  <div className="font-medium">{link.internal_object_label || "Block"} <span className="text-muted">→</span> {link.external_artifact_name}</div>
-                  <div className="text-xs text-muted">{link.relation_type} · {link.external_artifact_version_label || "unpinned"} · {link.connector_name || "no connector"}</div>
+                  <div className="font-medium">{link.internal_object_label || "Block"} <span className="text-muted">â†’</span> {link.external_artifact_name}</div>
+                  <div className="text-xs text-muted">{link.relation_type} Â· {link.external_artifact_version_label || "unpinned"} Â· {link.connector_name || "no connector"}</div>
                 </div>
               ))
             ) : (
@@ -116,3 +119,7 @@ export default async function BlockPage({ params }: { params: { id: string } }) 
 function Row({ label, value }: { label: string; value: any }) {
   return <div className="flex items-center justify-between gap-4 rounded-xl border border-line bg-panel2 p-3"><div className="text-sm text-muted">{label}</div><div className="text-sm font-medium">{value}</div></div>;
 }
+
+
+
+

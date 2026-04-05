@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, SectionTitle, Select } from "@/components/ui";
+import { BaselineActions } from "@/components/baseline-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,10 @@ export default async function BaselinePage({ params, searchParams }: { params: {
             />
             <Stat label="Baseline status" value={<Badge tone={data.baseline.status === "released" ? "success" : "neutral"}>{data.baseline.status}</Badge>} />
           </div>
+          <div className="rounded-xl border border-dashed border-line bg-panel p-3">
+            <div className="mb-3 text-sm font-medium">Baseline lifecycle actions</div>
+            <BaselineActions id={data.baseline.id} status={data.baseline.status} />
+          </div>
           <div className="rounded-xl border border-dashed border-line bg-panel p-3 text-sm text-muted">
             Bridge source: <span className="text-text">{data.bridge_context.baseline_name}</span>
           </div>
@@ -67,6 +72,25 @@ export default async function BaselinePage({ params, searchParams }: { params: {
               </div>
             </div>
           ) : null}
+        </CardBody>
+      </Card>
+      <Card>
+        <CardHeader><div className="font-semibold">Lifecycle history</div></CardHeader>
+        <CardBody className="space-y-3">
+          {data.history.length ? (
+            data.history.map((event) => (
+              <div key={event.id} className="rounded-xl border border-line bg-panel2 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="font-medium">{event.from_status} â†’ {event.to_status}</div>
+                  <Badge tone={historyTone(event.to_status)}>{event.action}</Badge>
+                </div>
+                <div className="mt-1 text-xs text-muted">{event.actor || "system"} Â· {event.created_at}</div>
+                {event.comment ? <div className="mt-2 text-sm text-muted">{event.comment}</div> : null}
+              </div>
+            ))
+          ) : (
+            <div className="text-sm text-muted">No lifecycle events recorded yet.</div>
+          )}
         </CardBody>
       </Card>
       <Card>
@@ -270,6 +294,12 @@ function Summary({ label, value }: { label: string; value: number }) {
       <div className="mt-2 text-2xl font-semibold">{value}</div>
     </div>
   );
+}
+
+function historyTone(status: string) {
+  if (status === "released") return "success";
+  if (status === "obsolete") return "danger";
+  return "neutral";
 }
 
 function ComparisonColumn({ title, items }: { title: string; items: any[] }) {

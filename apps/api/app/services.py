@@ -21,6 +21,7 @@ OBJECT_MODELS = {
     "requirement": Requirement,
     "block": Block,
     "component": Component,
+    "external_artifact": ExternalArtifact,
     "test_case": TestCase,
     "test_run": TestRun,
     "operational_run": OperationalRun,
@@ -336,6 +337,30 @@ def _impact_context_internal_ids(session: Session, project_id: UUID) -> set[UUID
     return {mapping.internal_object_id for mapping in mappings if mapping.internal_object_id is not None}
 
 
+def _compute_snapshot_hash(
+    *,
+    project_id: UUID,
+    object_type: str,
+    object_id: UUID,
+    version: int,
+    snapshot_json: dict[str, Any],
+    previous_snapshot_hash: str | None,
+) -> str:
+    content_seed = json.dumps(
+        {
+            "project_id": str(project_id),
+            "object_type": object_type,
+            "object_id": str(object_id),
+            "version": version,
+            "snapshot_json": snapshot_json,
+            "previous_snapshot_hash": previous_snapshot_hash,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(content_seed.encode("utf-8")).hexdigest()
+
+
 def _snapshot(session: Session, object_type: str, obj: Any, summary: str | None = None, actor: str | None = None) -> None:
     previous_snapshot = _first_item(
         session.exec(
@@ -349,19 +374,15 @@ def _snapshot(session: Session, object_type: str, obj: Any, summary: str | None 
         )
     )
     snapshot_json = obj.model_dump(mode="json")
-    content_seed = json.dumps(
-        {
-            "project_id": str(obj.project_id),
-            "object_type": object_type,
-            "object_id": str(obj.id),
-            "version": getattr(obj, "version", 1),
-            "snapshot_json": snapshot_json,
-            "previous_snapshot_hash": previous_snapshot.snapshot_hash if previous_snapshot else None,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
+    previous_snapshot_hash = previous_snapshot.snapshot_hash if previous_snapshot else None
+    snapshot_hash = _compute_snapshot_hash(
+        project_id=obj.project_id,
+        object_type=object_type,
+        object_id=obj.id,
+        version=getattr(obj, "version", 1),
+        snapshot_json=snapshot_json,
+        previous_snapshot_hash=previous_snapshot_hash,
     )
-    snapshot_hash = hashlib.sha256(content_seed.encode("utf-8")).hexdigest()
     session.add(
         RevisionSnapshot(
             project_id=obj.project_id,
@@ -370,7 +391,7 @@ def _snapshot(session: Session, object_type: str, obj: Any, summary: str | None 
             version=getattr(obj, "version", 1),
             snapshot_json=snapshot_json,
             snapshot_hash=snapshot_hash,
-            previous_snapshot_hash=previous_snapshot.snapshot_hash if previous_snapshot else None,
+            previous_snapshot_hash=previous_snapshot_hash,
             changed_by=actor,
             change_summary=summary,
         )
@@ -389,7 +410,8 @@ def _log_action(
     actor: str | None = None,
     comment: str | None = None,
 ) -> None:
-    session.add(
+    _add(
+        session,
         ApprovalActionLog(
             project_id=obj.project_id,
             object_type=object_type,
@@ -399,7 +421,7 @@ def _log_action(
             action=action,
             actor=actor,
             comment=comment,
-        )
+        ),
     )
 
 
@@ -452,6 +474,12 @@ def resolve_object(session: Session, object_type: str, object_id: UUID) -> dict[
         code = obj.model_identifier
         status = obj.contract_version
         version = obj.model_version
+    elif object_type == "external_artifact":
+        project_id = obj.project_id
+        label = obj.name
+        code = obj.external_id
+        status = obj.status
+        version = None
     elif object_type == "operational_evidence":
         project_id = obj.project_id
         label = obj.title
@@ -761,7 +789,18 @@ def list_configuration_contexts(session: Session, project_id: UUID) -> list[Conf
 def create_configuration_context(session: Session, payload: ConfigurationContextCreate) -> ConfigurationContextRead:
     if _get(session, Project, payload.project_id) is None:
         raise LookupError("Project not found")
-    return _read(ConfigurationContextRead, _add(session, ConfigurationContext.model_validate(payload)))
+    item = _add(session, ConfigurationContext.model_validate(payload))
+    _log_action(
+        session,
+        object_type="configuration_context",
+        obj=item,
+        from_status=_status_value(item.status),
+        to_status=_status_value(item.status),
+        action="create",
+        actor=None,
+        comment=item.description,
+    )
+    return _read(ConfigurationContextRead, item)
 
 
 def update_configuration_context(session: Session, obj_id: UUID, payload: ConfigurationContextUpdate) -> ConfigurationContextRead:
@@ -769,10 +808,24 @@ def update_configuration_context(session: Session, obj_id: UUID, payload: Config
     if item is None:
         raise LookupError("Configuration context not found")
     _ensure_configuration_context_mutable(item)
+    before_status = _status_value(item.status)
+    before_data = item.model_dump()
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(item, k, v)
     _touch(item)
-    return _read(ConfigurationContextRead, _add(session, item))
+    _commit(session, item)
+    if payload.model_dump(exclude_unset=True):
+        _log_action(
+            session,
+            object_type="configuration_context",
+            obj=item,
+            from_status=before_status,
+            to_status=_status_value(item.status),
+            action="update",
+            actor=None,
+            comment=payload.description or payload.name or before_data.get("description"),
+        )
+    return _read(ConfigurationContextRead, item)
 
 
 def list_configuration_item_mappings(session: Session, context_id: UUID) -> list[ConfigurationItemMappingRead]:
@@ -806,7 +859,18 @@ def create_configuration_item_mapping(session: Session, context_id: UUID, payloa
     _ensure_configuration_context_mutable(context)
     _validate_configuration_mapping(session, context, payload)
     item = ConfigurationItemMapping(configuration_context_id=context_id, **payload.model_dump())
-    return _read(ConfigurationItemMappingRead, _add(session, item))
+    created = _add(session, item)
+    _log_action(
+        session,
+        object_type="configuration_context",
+        obj=context,
+        from_status=_status_value(context.status),
+        to_status=_status_value(context.status),
+        action="add_mapping",
+        actor=None,
+        comment=payload.role_label or payload.notes,
+    )
+    return _read(ConfigurationItemMappingRead, created)
 
 
 def delete_configuration_item_mapping(session: Session, mapping_id: UUID) -> None:
@@ -817,6 +881,16 @@ def delete_configuration_item_mapping(session: Session, mapping_id: UUID) -> Non
     if context is None:
         raise LookupError("Configuration context not found")
     _ensure_configuration_context_mutable(context)
+    _log_action(
+        session,
+        object_type="configuration_context",
+        obj=context,
+        from_status=_status_value(context.status),
+        to_status=_status_value(context.status),
+        action="remove_mapping",
+        actor=None,
+        comment=item.role_label or item.notes,
+    )
     session.delete(item)
     session.commit()
 
@@ -883,7 +957,19 @@ def get_configuration_context_service(session: Session, obj_id: UUID) -> dict[st
             "external": resolved_external,
         },
         "related_baselines": related_baselines,
+        "history": list_configuration_context_history(session, obj_id),
     }
+
+
+def list_configuration_context_history(session: Session, obj_id: UUID) -> list[ApprovalActionLogRead]:
+    rows = _items(
+        session.exec(
+            select(ApprovalActionLog)
+            .where(ApprovalActionLog.object_type == "configuration_context", ApprovalActionLog.object_id == obj_id)
+            .order_by(desc(ApprovalActionLog.created_at), desc(ApprovalActionLog.id))
+        )
+    )
+    return [ApprovalActionLogRead.model_validate(item) for item in rows]
 
 
 def _configuration_context_comparison_entry(
@@ -1111,6 +1197,44 @@ def compare_baselines(session: Session, left_baseline_id: UUID, right_baseline_i
 
 
 def get_authoritative_registry_summary(session: Session, project_id: UUID) -> AuthoritativeRegistrySummary:
+    snapshots = _items(session.exec(select(RevisionSnapshot).where(RevisionSnapshot.project_id == project_id)))
+    snapshot_groups: dict[tuple[str, UUID], list[RevisionSnapshot]] = defaultdict(list)
+    for snapshot in snapshots:
+        snapshot_groups[(snapshot.object_type, snapshot.object_id)].append(snapshot)
+
+    broken_objects = 0
+    issues: list[str] = []
+    for (object_type, object_id), rows in snapshot_groups.items():
+        rows = sorted(
+            rows,
+            key=lambda snapshot: (
+                snapshot.version,
+                snapshot.changed_at or datetime.min.replace(tzinfo=timezone.utc),
+                str(snapshot.id),
+            ),
+        )
+        previous_hash: str | None = None
+        object_broken = False
+        for row in rows:
+            expected_hash = _compute_snapshot_hash(
+                project_id=row.project_id,
+                object_type=row.object_type,
+                object_id=row.object_id,
+                version=row.version,
+                snapshot_json=row.snapshot_json,
+                previous_snapshot_hash=previous_hash,
+            )
+            if row.previous_snapshot_hash != previous_hash:
+                object_broken = True
+                issues.append(f"{object_type} {object_id}: previous hash mismatch at version {row.version}.")
+            if row.snapshot_hash != expected_hash:
+                object_broken = True
+                issues.append(f"{object_type} {object_id}: snapshot hash mismatch at version {row.version}.")
+            previous_hash = row.snapshot_hash
+        if object_broken:
+            broken_objects += 1
+
+    integrity_status = "warning" if not snapshots else "broken" if broken_objects else "ok"
     return AuthoritativeRegistrySummary(
         connectors=len(_items(session.exec(select(ConnectorDefinition).where(ConnectorDefinition.project_id == project_id)))),
         external_artifacts=len(_items(session.exec(select(ExternalArtifact).where(ExternalArtifact.project_id == project_id)))),
@@ -1118,6 +1242,11 @@ def get_authoritative_registry_summary(session: Session, project_id: UUID) -> Au
         artifact_links=len(_items(session.exec(select(ArtifactLink).where(ArtifactLink.project_id == project_id)))),
         configuration_contexts=len(_items(session.exec(select(ConfigurationContext).where(ConfigurationContext.project_id == project_id)))),
         configuration_item_mappings=len(_items(session.exec(select(ConfigurationItemMapping).join(ConfigurationContext).where(ConfigurationContext.project_id == project_id)))),
+        revision_snapshots=len(snapshots),
+        revision_snapshot_objects=len(snapshot_groups),
+        revision_snapshot_objects_broken=broken_objects,
+        revision_snapshot_integrity_status=integrity_status,
+        revision_snapshot_integrity_issues=issues[:10],
     )
 
 
@@ -1209,6 +1338,7 @@ def export_project_bundle(session: Session, project_id: UUID) -> dict[str, Any]:
         "step_ap242_contract": step_ap242_contract.model_dump(mode="json"),
         "change_requests": [ChangeRequestRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project_id)))],
         "change_impacts": [ChangeImpactRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(ChangeImpact).join(ChangeRequest).where(ChangeRequest.project_id == project_id)))],
+        "approval_action_logs": [ApprovalActionLogRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(ApprovalActionLog).where(ApprovalActionLog.project_id == project_id)))],
         "revision_snapshots": [RevisionSnapshotRead.model_validate(item).model_dump(mode="json") for item in _items(session.exec(select(RevisionSnapshot).where(RevisionSnapshot.project_id == project_id)))],
         "connectors": [connector.model_dump(mode="json") for connector in connectors],
         "external_artifacts": [artifact.model_dump(mode="json") for artifact in external_artifacts],
@@ -1222,7 +1352,10 @@ def export_project_bundle(session: Session, project_id: UUID) -> dict[str, Any]:
 
 
 def create_project(session: Session, payload: ProjectCreate) -> ProjectRead:
-    return _read(ProjectRead, _add(session, Project.model_validate(payload)))
+    item = Project.model_validate(payload)
+    if getattr(item, "domain_profile", "engineering") != "custom":
+        item.label_overrides = None
+    return _read(ProjectRead, _add(session, item))
 
 
 def update_project(session: Session, project_id: UUID, payload: ProjectUpdate) -> ProjectRead:
@@ -1231,8 +1364,140 @@ def update_project(session: Session, project_id: UUID, payload: ProjectUpdate) -
         raise LookupError("Project not found")
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(item, k, v)
+    if getattr(item, "domain_profile", "engineering") != "custom":
+        item.label_overrides = None
     _touch(item)
     return _read(ProjectRead, _add(session, item))
+
+
+def _seed_profile_demo(
+    session: Session,
+    *,
+    code: str,
+    name: str,
+    description: str,
+    profile: str,
+    requirement_key: str,
+    requirement_title: str,
+    requirement_description: str,
+    block_key: str,
+    block_name: str,
+    block_description: str,
+    test_key: str,
+    test_title: str,
+    test_description: str,
+) -> dict[str, Any]:
+    project = _first_item(session.exec(select(Project).where(Project.code == code)))
+    if project is None:
+        project = _add(
+            session,
+            Project(
+                code=code,
+                name=name,
+                description=description,
+                domain_profile=profile,
+                status=ProjectStatus.active,
+            ),
+        )
+    requirement = _first_item(session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == requirement_key)))
+    if requirement is None:
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key=requirement_key,
+                title=requirement_title,
+                description=requirement_description,
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+                status=RequirementStatus.approved,
+                version=1,
+                approved_at=datetime.now(timezone.utc),
+                approved_by="seed",
+            ),
+        )
+        requirement = _get(session, Requirement, requirement.id)
+    block = _first_item(session.exec(select(Block).where(Block.project_id == project.id, Block.key == block_key)))
+    if block is None:
+        block = create_block(
+            session,
+            BlockCreate(
+                project_id=project.id,
+                key=block_key,
+                name=block_name,
+                description=block_description,
+                block_kind=BlockKind.component,
+                abstraction_level=AbstractionLevel.physical,
+                status=BlockStatus.approved,
+                version=1,
+                approved_at=datetime.now(timezone.utc),
+                approved_by="seed",
+            ),
+        )
+        block = _get(session, Block, block.id)
+    test_case = _first_item(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == test_key)))
+    if test_case is None:
+        test_case = create_test_case(
+            session,
+            TestCaseCreate(
+                project_id=project.id,
+                key=test_key,
+                title=test_title,
+                description=test_description,
+                method=TestMethod.inspection,
+                status=TestCaseStatus.approved,
+                version=1,
+                approved_at=datetime.now(timezone.utc),
+                approved_by="seed",
+            ),
+        )
+        test_case = _get(session, TestCase, test_case.id)
+    if requirement is not None and block is not None and not session.exec(
+        select(Link).where(
+            Link.project_id == project.id,
+            Link.source_type == LinkObjectType.requirement,
+            Link.source_id == requirement.id,
+            Link.target_type == LinkObjectType.component,
+            Link.target_id == block.id,
+            Link.relation_type == RelationType.allocated_to,
+        )
+    ).first():
+        _add(
+            session,
+            Link(
+                project_id=project.id,
+                source_type=LinkObjectType.requirement,
+                source_id=requirement.id,
+                target_type=LinkObjectType.component,
+                target_id=block.id,
+                relation_type=RelationType.allocated_to,
+                rationale=f"{requirement_key} allocates to {block_key}.",
+            ),
+        )
+    if requirement is not None and test_case is not None and not session.exec(
+        select(Link).where(
+            Link.project_id == project.id,
+            Link.source_type == LinkObjectType.requirement,
+            Link.source_id == requirement.id,
+            Link.target_type == LinkObjectType.test_case,
+            Link.target_id == test_case.id,
+            Link.relation_type == RelationType.verifies,
+        )
+    ).first():
+        _add(
+            session,
+            Link(
+                project_id=project.id,
+                source_type=LinkObjectType.requirement,
+                source_id=requirement.id,
+                target_type=LinkObjectType.test_case,
+                target_id=test_case.id,
+                relation_type=RelationType.verifies,
+                rationale=f"{requirement_key} is verified by {test_key}.",
+            ),
+        )
+    return {"project_id": str(project.id), "seeded": True}
 
 
 def create_requirement(session: Session, payload: RequirementCreate) -> RequirementRead:
@@ -2100,6 +2365,16 @@ def create_baseline(session: Session, payload: BaselineCreate) -> tuple[Baseline
     if _get(session, Project, payload.project_id) is None:
         raise LookupError("Project not found")
     baseline = _add(session, Baseline.model_validate(payload))
+    _log_action(
+        session,
+        object_type="baseline",
+        obj=baseline,
+        from_status=_status_value(baseline.status),
+        to_status=_status_value(baseline.status),
+        action="create",
+        actor=None,
+        comment=baseline.description,
+    )
     items: list[BaselineItemRead] = []
     for object_type, model, selected_ids in (
         (BaselineObjectType.requirement, Requirement, set(payload.requirement_ids) or None),
@@ -2116,6 +2391,56 @@ def create_baseline(session: Session, payload: BaselineCreate) -> tuple[Baseline
             bi = _add(session, BaselineItem(baseline_id=baseline.id, object_type=object_type, object_id=obj.id, object_version=getattr(obj, "version", 1)))
             items.append(BaselineItemRead.model_validate(bi))
     return BaselineRead.model_validate(baseline), items
+
+
+def release_baseline(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> BaselineRead:
+    baseline = _get(session, Baseline, obj_id)
+    if baseline is None:
+        raise LookupError("Baseline not found")
+    if baseline.status == BaselineStatus.released:
+        return _read(BaselineRead, baseline)
+    if baseline.status != BaselineStatus.draft:
+        raise ValueError("Only draft baselines can be released.")
+    old = _status_value(baseline.status)
+    baseline.status = BaselineStatus.released
+    _touch(baseline)
+    _commit(session, baseline)
+    _log_action(
+        session,
+        object_type="baseline",
+        obj=baseline,
+        from_status=old,
+        to_status="released",
+        action="release",
+        actor=payload.actor if payload else None,
+        comment=payload.comment if payload else None,
+    )
+    return _read(BaselineRead, baseline)
+
+
+def obsolete_baseline(session: Session, obj_id: UUID, payload: WorkflowActionPayload | None = None) -> BaselineRead:
+    baseline = _get(session, Baseline, obj_id)
+    if baseline is None:
+        raise LookupError("Baseline not found")
+    if baseline.status == BaselineStatus.obsolete:
+        return _read(BaselineRead, baseline)
+    if baseline.status not in {BaselineStatus.draft, BaselineStatus.released}:
+        raise ValueError("Only draft or released baselines can be marked obsolete.")
+    old = _status_value(baseline.status)
+    baseline.status = BaselineStatus.obsolete
+    _touch(baseline)
+    _commit(session, baseline)
+    _log_action(
+        session,
+        object_type="baseline",
+        obj=baseline,
+        from_status=old,
+        to_status="obsolete",
+        action="obsolete",
+        actor=payload.actor if payload else None,
+        comment=payload.comment if payload else None,
+    )
+    return _read(BaselineRead, baseline)
 
 
 def list_baselines(session: Session, project_id: UUID) -> list[BaselineRead]:
@@ -2157,7 +2482,19 @@ def get_baseline_detail(session: Session, baseline_id: UUID) -> dict[str, Any]:
         "bridge_context": bridge_context,
         "items": items,
         "related_configuration_contexts": related_contexts,
+        "history": list_baseline_history(session, baseline_id),
     }
+
+
+def list_baseline_history(session: Session, baseline_id: UUID) -> list[ApprovalActionLogRead]:
+    rows = _items(
+        session.exec(
+            select(ApprovalActionLog)
+            .where(ApprovalActionLog.object_type == "baseline", ApprovalActionLog.object_id == baseline_id)
+            .order_by(desc(ApprovalActionLog.created_at), desc(ApprovalActionLog.id))
+        )
+    )
+    return [ApprovalActionLogRead.model_validate(item) for item in rows]
 
 
 def get_baseline_bridge_context(session: Session, baseline_id: UUID) -> BaselineBridgeContextRead:
@@ -2281,11 +2618,16 @@ def list_change_requests(session: Session, project_id: UUID) -> list[ChangeReque
 
 
 def list_change_request_history(session: Session, obj_id: UUID) -> list[ApprovalActionLogRead]:
+    return _decision_history(session, "change_request", obj_id, newest_first=False)
+
+
+def _decision_history(session: Session, object_type: str, obj_id: UUID, *, newest_first: bool = True) -> list[ApprovalActionLogRead]:
+    order = (desc(ApprovalActionLog.created_at), desc(ApprovalActionLog.id)) if newest_first else (ApprovalActionLog.created_at, ApprovalActionLog.id)
     rows = _items(
         session.exec(
             select(ApprovalActionLog)
-            .where(ApprovalActionLog.object_type == "change_request", ApprovalActionLog.object_id == obj_id)
-            .order_by(ApprovalActionLog.created_at, ApprovalActionLog.id)
+            .where(ApprovalActionLog.object_type == object_type, ApprovalActionLog.object_id == obj_id)
+            .order_by(*order)
         )
     )
     return [ApprovalActionLogRead.model_validate(item) for item in rows]
@@ -2299,6 +2641,7 @@ def submit_change_request_for_analysis(session: Session, obj_id: UUID, payload: 
         raise ValueError("Only open or rejected change requests can move to analysis.")
     old = _status_value(item.status)
     item.status = ChangeRequestStatus.analysis
+    item.analysis_summary = payload.comment or payload.reason or item.analysis_summary
     _touch(item)
     _commit(session, item)
     _log_action(session, object_type="change_request", obj=item, from_status=old, to_status="analysis", action="submit_analysis", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
@@ -2313,6 +2656,7 @@ def approve_change_request(session: Session, obj_id: UUID, payload: WorkflowActi
         raise ValueError("Only change requests in analysis can be approved.")
     old = _status_value(item.status)
     item.status = ChangeRequestStatus.approved
+    item.disposition_summary = payload.comment or payload.reason or item.disposition_summary
     _touch(item)
     _commit(session, item)
     _log_action(session, object_type="change_request", obj=item, from_status=old, to_status="approved", action="approve", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
@@ -2327,6 +2671,7 @@ def reject_change_request(session: Session, obj_id: UUID, payload: WorkflowActio
         raise ValueError("Only change requests in analysis can be rejected.")
     old = _status_value(item.status)
     item.status = ChangeRequestStatus.rejected
+    item.disposition_summary = payload.comment or payload.reason or item.disposition_summary
     _touch(item)
     _commit(session, item)
     _log_action(session, object_type="change_request", obj=item, from_status=old, to_status="rejected", action="reject", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
@@ -2355,6 +2700,7 @@ def mark_change_request_implemented(session: Session, obj_id: UUID, payload: Wor
         raise ValueError("Only approved change requests can be marked implemented.")
     old = _status_value(item.status)
     item.status = ChangeRequestStatus.implemented
+    item.implementation_summary = payload.comment or payload.reason or item.implementation_summary
     _touch(item)
     _commit(session, item)
     _log_action(session, object_type="change_request", obj=item, from_status=old, to_status="implemented", action="implement", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
@@ -2369,6 +2715,7 @@ def close_change_request(session: Session, obj_id: UUID, payload: WorkflowAction
         raise ValueError("Only implemented change requests can be closed.")
     old = _status_value(item.status)
     item.status = ChangeRequestStatus.closed
+    item.closure_summary = payload.comment or payload.reason or item.closure_summary
     _touch(item)
     _commit(session, item)
     _log_action(session, object_type="change_request", obj=item, from_status=old, to_status="closed", action="close", actor=payload.actor if payload else None, comment=payload.comment if payload else None)
@@ -2583,6 +2930,7 @@ def build_impact(session: Session, project_id: UUID, object_type: str, object_id
     root = resolve_object(session, object_type, object_id)
     root_key = _impact_node_key(object_type, object_id)
     legacy_links = list_links(session, project_id)
+    artifact_links = list_artifact_links(session, project_id)
     sysml_relations = list_sysml_relations(session, project_id)
     containments = list_block_containments(session, project_id)
     active_context_internal_ids = _impact_context_internal_ids(session, project_id)
@@ -2604,6 +2952,12 @@ def build_impact(session: Session, project_id: UUID, object_type: str, object_id
 
     for link in legacy_links:
         add_edge(link.source_type.value, link.source_id, link.target_type.value, link.target_id)
+
+    for link in artifact_links:
+        try:
+            add_edge(link.internal_object_type.value, link.internal_object_id, "external_artifact", link.external_artifact_id)
+        except (LookupError, ValueError):
+            continue
 
     for rel in sysml_relations:
         add_edge(rel.source_type.value, rel.source_id, rel.target_type.value, rel.target_id)
@@ -4162,3 +4516,41 @@ def seed_demo(session: Session) -> dict[str, Any]:
             )
 
     return {"project_id": str(project.id), "seeded": True}
+
+
+def seed_manufacturing_demo(session: Session) -> dict[str, Any]:
+    return _seed_profile_demo(
+        session,
+        code="MFG-001",
+        name="Production Line Demo",
+        description="Manufacturing demo that traces specifications to components and quality checks.",
+        profile="manufacturing",
+        requirement_key="MFG-SPEC-001",
+        requirement_title="Line shall maintain 99.5 percent fill accuracy",
+        requirement_description="Quality specification for the production line's filled package accuracy.",
+        block_key="MFG-CMP-001",
+        block_name="Filling Cell",
+        block_description="Production cell used to realize the fill accuracy specification.",
+        test_key="MFG-QC-001",
+        test_title="Fill Accuracy Check",
+        test_description="Inspection check that validates production fill accuracy against specification.",
+    )
+
+
+def seed_personal_demo(session: Session) -> dict[str, Any]:
+    return _seed_profile_demo(
+        session,
+        code="HOME-001",
+        name="Home Infrastructure Demo",
+        description="Personal demo that traces a goal to an element and a lightweight verification check.",
+        profile="personal",
+        requirement_key="HOME-GOAL-001",
+        requirement_title="Home network shall keep backups available overnight",
+        requirement_description="Personal goal for keeping backup copies online through the night.",
+        block_key="HOME-EL-001",
+        block_name="Backup Storage Node",
+        block_description="Home storage element used to realize the backup availability goal.",
+        test_key="HOME-VER-001",
+        test_title="Overnight Backup Check",
+        test_description="Verification check that the storage node remains reachable overnight.",
+    )

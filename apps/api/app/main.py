@@ -22,7 +22,7 @@ from app.impact_service import (
     get_requirement_detail,
     get_test_case_detail,
 )
-from app.seed_service import seed_demo
+from app.seed_service import seed_demo, seed_manufacturing_demo, seed_personal_demo
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
@@ -745,6 +745,22 @@ def create_baseline_endpoint(payload: BaselineCreate, session: Session = Depends
         raise api_error(exc)
 
 
+@app.post("/api/baselines/{obj_id}/release", response_model=BaselineRead)
+def release_baseline_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return release_baseline(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/baselines/{obj_id}/obsolete", response_model=BaselineRead)
+def obsolete_baseline_endpoint(obj_id: UUID, payload: WorkflowActionPayload | None = None, session: Session = Depends(db)):
+    try:
+        return obsolete_baseline(session, obj_id, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
 @app.get("/api/baselines/{obj_id}", response_model=BaselineDetailRead)
 def baseline_detail_endpoint(obj_id: UUID, session: Session = Depends(db)):
     try:
@@ -1000,5 +1016,21 @@ def impact_endpoint(project_id: UUID, object_type: str, object_id: UUID, session
 def seed_demo_endpoint(session: Session = Depends(db)):
     try:
         return seed_demo(session)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/seed/manufacturing-demo")
+def seed_manufacturing_demo_endpoint(session: Session = Depends(db)):
+    try:
+        return seed_manufacturing_demo(session)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.post("/api/seed/personal-demo")
+def seed_personal_demo_endpoint(session: Session = Depends(db)):
+    try:
+        return seed_personal_demo(session)
     except Exception as exc:
         raise api_error(exc)

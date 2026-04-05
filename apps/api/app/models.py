@@ -370,6 +370,8 @@ class Project(TimestampMixin, SQLModel, table=True):
     code: str = Field(sa_column=Column(String(64), unique=True, index=True, nullable=False))
     name: str = Field(sa_column=Column(String(255), nullable=False))
     description: str = Field(default="", nullable=False)
+    domain_profile: str = Field(default="engineering", sa_column=Column(String(32), nullable=False))
+    label_overrides: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     status: ProjectStatus = Field(default=ProjectStatus.draft, sa_column=Column(SAEnum(ProjectStatus), nullable=False))
 
 
@@ -655,6 +657,10 @@ class ChangeRequest(TimestampMixin, SQLModel, table=True):
     description: str = Field(default="", nullable=False)
     status: ChangeRequestStatus = Field(default=ChangeRequestStatus.open, sa_column=Column(SAEnum(ChangeRequestStatus), nullable=False))
     severity: Severity = Field(sa_column=Column(SAEnum(Severity), nullable=False))
+    analysis_summary: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    disposition_summary: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    implementation_summary: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    closure_summary: str | None = Field(default=None, sa_column=Column(String, nullable=True))
 
 
 class ChangeImpact(SQLModel, table=True):

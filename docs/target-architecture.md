@@ -4,7 +4,7 @@
 
 ThreadLite v2 should be positioned as a connective metadata and traceability layer, not a replacement for PLM, MBSE, CAD, simulation, test, or telemetry tools.
 
-The current federation foundation already proves the intended direction: ThreadLite registers authoritative external artifacts, stores version pointers, links internal authored objects to those sources, and groups selected versions into configuration contexts. The next architecture layers should build on that foundation instead of redefining it.
+The current federation foundation already proves the intended direction: ThreadLite registers authoritative external artifacts, stores version pointers, links internal authored objects to those sources, groups selected versions into configuration contexts, and now exposes a revision snapshot integrity summary for the internal AST history. The next architecture layers should build on that foundation instead of redefining it.
 
 ## Architecture Principles
 
@@ -17,6 +17,7 @@ The current federation foundation already proves the intended direction: ThreadL
 7. Connectors should stay modular and lightweight before becoming real integrations.
 8. API-first design should remain the primary integration path.
 9. Standards-aware modeling should be practical and contract-driven.
+10. The AST history should be tamper-evident without becoming heavy event sourcing.
 
 ## Existing Foundation
 

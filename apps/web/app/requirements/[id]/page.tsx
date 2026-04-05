@@ -1,5 +1,6 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { api } from "@/lib/api-client";
+import { getLabels } from "@/lib/labels";
 import { ArtifactLinkForm } from "@/components/artifact-link-form";
 import { ImpactVisualization, type ImpactVisualizationNode, type ImpactVisualizationSection } from "@/components/impact-visualization";
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, SectionTitle } from "@/components/ui";
@@ -16,6 +17,8 @@ export const dynamic = "force-dynamic";
 export default async function RequirementPage({ params }: { params: { id: string } }) {
   const data = await api.requirement(params.id).catch(() => null);
   if (!data) return <div className="text-sm text-muted">Requirement not found.</div>;
+  const project = await api.project(data.requirement.project_id).catch(() => null);
+  const labels = getLabels(project?.domain_profile);
   const [artifacts, fmiContracts] = await Promise.all([
     api.externalArtifacts(data.requirement.project_id).catch(() => []),
     api.fmiContracts(data.requirement.project_id).catch(() => []),
@@ -55,7 +58,7 @@ export default async function RequirementPage({ params }: { params: { id: string
         label: `${item.key} - ${item.title}`,
         objectType: "change_request",
         href: `/change-requests/${item.id}`,
-        meta: `${item.status} · ${item.severity}`,
+        meta: `${item.status} Â· ${item.severity}`,
       })),
       emptyText: "No open change requests found.",
     },
@@ -68,7 +71,7 @@ export default async function RequirementPage({ params }: { params: { id: string
         <Card className="xl:col-span-2">
           <CardHeader>
             <div className="flex items-center justify-between gap-4">
-              <div className="font-semibold">Requirement record</div>
+              <div className="font-semibold">{labels.requirement} record</div>
               <div className="flex flex-wrap gap-2">
                 {data.requirement.status === "approved" || data.requirement.status === "in_review" ? null : (
                   <Button href={`/requirements/${data.requirement.id}/edit`} variant="secondary">Edit</Button>
@@ -153,8 +156,8 @@ export default async function RequirementPage({ params }: { params: { id: string
             {(data.artifact_links || []).length ? (
               data.artifact_links.map((link: any) => (
                 <div key={link.id} className="rounded-xl border border-line bg-panel2 p-3">
-                  <div className="font-medium">{link.internal_object_label || "Requirement"} <span className="text-muted">→</span> {link.external_artifact_name}</div>
-                  <div className="text-xs text-muted">{link.relation_type} · {link.external_artifact_version_label || "unpinned"} · {link.connector_name || "no connector"}</div>
+                  <div className="font-medium">{link.internal_object_label || "Requirement"} <span className="text-muted">â†’</span> {link.external_artifact_name}</div>
+                  <div className="text-xs text-muted">{link.relation_type} Â· {link.external_artifact_version_label || "unpinned"} Â· {link.connector_name || "no connector"}</div>
                 </div>
               ))
             ) : (
@@ -173,7 +176,7 @@ export default async function RequirementPage({ params }: { params: { id: string
           </CardBody>
         </Card>
         <Card>
-          <CardHeader><div className="font-semibold">Verification evidence</div></CardHeader>
+          <CardHeader><div className="font-semibold">{labels.verificationEvidence}</div></CardHeader>
           <CardBody className="space-y-4">
             <Row label="Verification status" value={<Badge tone={verificationTone(data.verification_evaluation.status)}>{humanizeStatus(data.verification_evaluation.status)}</Badge>} />
             <div className="rounded-2xl border border-line bg-panel2 p-4 space-y-3">
@@ -221,7 +224,7 @@ export default async function RequirementPage({ params }: { params: { id: string
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <div className="font-medium">{evidence.title}</div>
-                        <div className="mt-1 text-xs text-muted">Captured {evidence.observed_at || "no observed date"} · {evidence.evidence_type}</div>
+                        <div className="mt-1 text-xs text-muted">Captured {evidence.observed_at || "no observed date"} Â· {evidence.evidence_type}</div>
                       </div>
                       <Badge tone="accent">{evidence.evidence_type}</Badge>
                     </div>
@@ -250,13 +253,13 @@ export default async function RequirementPage({ params }: { params: { id: string
               </div>
             ) : (
               <EmptyState
-                title="No verification evidence linked yet"
+                title={`No ${labels.verificationEvidence.toLowerCase()} linked yet`}
                 description="Add evidence manually, or link this requirement to existing test or operational sources first. The computed verification status will remain not covered until evidence is linked."
                 action={<Button href="#add-verification-evidence" variant="secondary">Open evidence form</Button>}
               />
             )}
             <div id="add-verification-evidence" className="rounded-xl border border-dashed border-line bg-panel2 p-4">
-              <div className="mb-3 text-sm font-medium">Add verification evidence</div>
+              <div className="mb-3 text-sm font-medium">Add {labels.verificationEvidence}</div>
               <VerificationEvidenceForm
                 projectId={data.requirement.project_id}
                 subjectType="requirement"
@@ -269,7 +272,7 @@ export default async function RequirementPage({ params }: { params: { id: string
       </div>
 
       <Card>
-        <CardHeader><div className="font-semibold">Simulation evidence</div></CardHeader>
+        <CardHeader><div className="font-semibold">{labels.simulationEvidence}</div></CardHeader>
         <CardBody className="space-y-4">
           {data.simulation_evidence?.length ? (
             <div className="space-y-4">
@@ -279,13 +282,13 @@ export default async function RequirementPage({ params }: { params: { id: string
             </div>
           ) : (
             <EmptyState
-              title="No simulation evidence linked yet"
+              title={`No ${labels.simulationEvidence.toLowerCase()} linked yet`}
               description="Capture simulation evidence when the requirement is assessed with a model or scenario. Link it to the requirement, related tests, or supporting verification evidence."
               action={<Button href="#add-simulation-evidence" variant="secondary">Open simulation evidence form</Button>}
             />
           )}
           <div id="add-simulation-evidence" className="rounded-xl border border-dashed border-line bg-panel2 p-4">
-            <div className="mb-3 text-sm font-medium">Add simulation evidence</div>
+            <div className="mb-3 text-sm font-medium">Add {labels.simulationEvidence}</div>
             <SimulationEvidenceForm
               projectId={data.requirement.project_id}
               linkedRequirementIds={[data.requirement.id]}
@@ -298,7 +301,7 @@ export default async function RequirementPage({ params }: { params: { id: string
       </Card>
 
       <Card>
-        <CardHeader><div className="font-semibold">Operational evidence</div></CardHeader>
+        <CardHeader><div className="font-semibold">{labels.operationalEvidence}</div></CardHeader>
         <CardBody className="space-y-4">
           {data.operational_evidence?.length ? (
             <div className="space-y-4">
@@ -308,13 +311,13 @@ export default async function RequirementPage({ params }: { params: { id: string
             </div>
           ) : (
             <EmptyState
-              title="No operational evidence linked yet"
+              title={`No ${labels.operationalEvidence.toLowerCase()} linked yet`}
               description="Capture a field or telemetry batch when operational feedback is available. Link it to this requirement or to a supporting verification record."
               action={<Button href="#add-operational-evidence" variant="secondary">Open evidence form</Button>}
             />
           )}
           <div id="add-operational-evidence" className="rounded-xl border border-dashed border-line bg-panel2 p-4">
-            <div className="mb-3 text-sm font-medium">Add operational evidence</div>
+            <div className="mb-3 text-sm font-medium">Add {labels.operationalEvidence}</div>
             <OperationalEvidenceForm
               projectId={data.requirement.project_id}
               linkedRequirementIds={[data.requirement.id]}
@@ -393,6 +396,7 @@ function objectHref(objectType: string, objectId: string) {
   if (objectType === "verification_evidence") return `/verification-evidence/${objectId}`;
   if (objectType === "operational_evidence") return `/operational-evidence/${objectId}`;
   if (objectType === "fmi_contract") return `/fmi-contracts/${objectId}`;
+  if (objectType === "external_artifact") return `/external-artifacts/${objectId}`;
   return null;
 }
 
@@ -402,7 +406,10 @@ function impactNode(item: any, hrefResolver: (objectType: string, objectId: stri
     label: item.label,
     objectType: item.object_type,
     href,
-    meta: [item.code, item.status, item.version != null ? `v${item.version}` : null].filter(Boolean).join(" · ") || null,
+    meta: [item.code, item.status, item.version != null ? `v${item.version}` : null].filter(Boolean).join(" Â· ") || null,
     tone: item.object_type === "change_request" ? "danger" : item.object_type === "baseline" ? "accent" : "neutral",
   };
 }
+
+
+

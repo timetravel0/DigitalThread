@@ -48,7 +48,7 @@ export default async function AuthoritativeSourcesPage({
     <div className="space-y-6">
       <SectionTitle
         title={`${project.code} - Authoritative Sources`}
-        description="Federated metadata pointers, configuration contexts, and the bridge back to baselines. External artifacts are references, not copied source files."
+        description="Federated metadata pointers, configuration contexts, revision snapshot integrity, and the bridge back to baselines. External artifacts are references, not copied source files."
         action={<Button href={`/projects/${project.id}`}>Back to project</Button>}
       />
 
@@ -60,6 +60,49 @@ export default async function AuthoritativeSourcesPage({
         <StatCard label="Config contexts" value={summary?.configuration_contexts ?? contexts.length} />
         <StatCard label="Mappings" value={summary?.configuration_item_mappings ?? 0} />
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="font-semibold">Revision snapshot integrity</div>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-4">
+            <StatCard label="Snapshots" value={summary?.revision_snapshots ?? 0} />
+            <StatCard label="Objects checked" value={summary?.revision_snapshot_objects ?? 0} />
+            <StatCard label="Broken objects" value={summary?.revision_snapshot_objects_broken ?? 0} />
+            <StatCard
+              label="Integrity status"
+              value={
+                <Badge
+                  tone={
+                    summary?.revision_snapshot_integrity_status === "broken"
+                      ? "danger"
+                      : summary?.revision_snapshot_integrity_status === "warning"
+                        ? "warning"
+                        : "success"
+                  }
+                >
+                  {summary?.revision_snapshot_integrity_status || "unknown"}
+                </Badge>
+              }
+            />
+          </div>
+          {summary?.revision_snapshot_integrity_issues?.length ? (
+            <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-text">
+              <div className="font-semibold text-warning">Integrity issues detected</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
+                {summary.revision_snapshot_integrity_issues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-line bg-panel2 p-4 text-sm text-muted">
+              Revision snapshots are chained with content hashes and previous-hash pointers. No integrity issues are currently detected for this project.
+            </div>
+          )}
+        </CardBody>
+      </Card>
 
       <div className="flex flex-wrap gap-2">
         {[

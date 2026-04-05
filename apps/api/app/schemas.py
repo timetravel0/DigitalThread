@@ -17,6 +17,8 @@ class ProjectCreate(BaseModel):
     code: str
     name: str
     description: str = ""
+    domain_profile: str = "engineering"
+    label_overrides: dict[str, Any] | None = None
     status: ProjectStatus = ProjectStatus.draft
 
 
@@ -24,6 +26,8 @@ class ProjectUpdate(BaseModel):
     code: str | None = None
     name: str | None = None
     description: str | None = None
+    domain_profile: str | None = None
+    label_overrides: dict[str, Any] | None = None
     status: ProjectStatus | None = None
 
 
@@ -438,6 +442,7 @@ class BaselineDetailRead(BaseModel):
     bridge_context: BaselineBridgeContextRead
     items: list[BaselineItemRead] = Field(default_factory=list)
     related_configuration_contexts: list[ConfigurationContextRead] = Field(default_factory=list)
+    history: list[ApprovalActionLogRead] = Field(default_factory=list)
 
 
 class RequirementDetail(BaseModel):
@@ -571,6 +576,10 @@ class ChangeRequestCreate(BaseModel):
     description: str = ""
     status: ChangeRequestStatus = ChangeRequestStatus.open
     severity: Severity
+    analysis_summary: str | None = None
+    disposition_summary: str | None = None
+    implementation_summary: str | None = None
+    closure_summary: str | None = None
 
 
 class ChangeRequestUpdate(BaseModel):
@@ -580,6 +589,10 @@ class ChangeRequestUpdate(BaseModel):
     description: str | None = None
     status: ChangeRequestStatus | None = None
     severity: Severity | None = None
+    analysis_summary: str | None = None
+    disposition_summary: str | None = None
+    implementation_summary: str | None = None
+    closure_summary: str | None = None
 
 
 class ChangeRequestRead(ChangeRequestCreate, ORMBase):
@@ -888,6 +901,11 @@ class AuthoritativeRegistrySummary(BaseModel):
     artifact_links: int = 0
     configuration_contexts: int = 0
     configuration_item_mappings: int = 0
+    revision_snapshots: int = 0
+    revision_snapshot_objects: int = 0
+    revision_snapshot_objects_broken: int = 0
+    revision_snapshot_integrity_status: str = "ok"
+    revision_snapshot_integrity_issues: list[str] = Field(default_factory=list)
 
 
 class ObjectSummary(BaseModel):

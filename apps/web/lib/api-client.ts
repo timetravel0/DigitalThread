@@ -81,6 +81,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   request,
   seedDemo: () => request<{ project_id: string; seeded: boolean }>("/seed/demo", { method: "POST" }),
+  seedManufacturingDemo: () => request<{ project_id: string; seeded: boolean }>("/seed/manufacturing-demo", { method: "POST" }),
+  seedPersonalDemo: () => request<{ project_id: string; seeded: boolean }>("/seed/personal-demo", { method: "POST" }),
   dashboard: () => request<Dashboard>("/dashboard"),
   projectDashboard: (id: string) => request<Dashboard>(`/projects/${id}/dashboard`),
   projects: () => request<Project[]>("/projects"),
@@ -195,6 +197,8 @@ export const api = {
   baselines: (projectId: string) => request<Baseline[]>(`/baselines?project_id=${projectId}`),
   baseline: (id: string) => request<BaselineDetail>(`/baselines/${id}`),
   baselineBridgeContext: (id: string) => request<BaselineBridgeContext>(`/baselines/${id}/bridge-context`),
+  releaseBaseline: (id: string, payload?: WorkflowActionPayload) => request<Baseline>(`/baselines/${id}/release`, { method: "POST", body: JSON.stringify(payload || {}) }),
+  obsoleteBaseline: (id: string, payload?: WorkflowActionPayload) => request<Baseline>(`/baselines/${id}/obsolete`, { method: "POST", body: JSON.stringify(payload || {}) }),
   compareBaselines: (baselineId: string, otherBaselineId: string) =>
     request<BaselineComparisonResponse>(`/baselines/${baselineId}/compare-baseline/${otherBaselineId}`),
   compareBaselineToConfigurationContext: (baselineId: string, contextId: string) =>

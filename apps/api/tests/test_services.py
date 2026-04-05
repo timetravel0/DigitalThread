@@ -78,6 +78,7 @@ from app.schemas import (
     OperationalRunCreate,
     OperationalRunUpdate,
     ProjectCreate,
+    ProjectUpdate,
     RequirementCreate,
     RequirementUpdate,
     TestRunCreate,
@@ -126,6 +127,7 @@ from app.services import (
     create_verification_evidence,
     build_step_ap242_contract,
     create_fmi_contract,
+    obsolete_baseline,
     export_project_bundle,
     get_baseline_detail,
     get_baseline_bridge_context,
@@ -149,10 +151,14 @@ from app.services import (
     reject_change_request,
     close_change_request,
     mark_change_request_implemented,
+    release_baseline,
     reopen_change_request,
     submit_change_request_for_analysis,
     seed_demo,
+    seed_manufacturing_demo,
+    seed_personal_demo,
     submit_requirement_for_review,
+    update_project,
     update_requirement,
     update_component,
     update_configuration_context,
@@ -200,6 +206,61 @@ def test_seed_demo_populates_sysml_driven_kpis():
         assert req5_detail["verification_evaluation"].status == RequirementVerificationStatus.failed
         assert any(artifact.artifact_type == ExternalArtifactType.cad_part for artifact in external_artifacts)
         assert any(link.relation_type == ArtifactLinkRelationType.maps_to for link in artifact_links)
+
+
+def test_project_domain_profile_persists_and_label_overrides_follow_custom_profile():
+    with make_session() as session:
+        engineering_project = create_project(
+            session,
+            ProjectCreate(
+                code="P-PROFILE-ENG",
+                name="Engineering profile",
+                description="",
+                domain_profile="engineering",
+                label_overrides={"requirements": "Specs"},
+            ),
+        )
+        custom_project = create_project(
+            session,
+            ProjectCreate(
+                code="P-PROFILE-CUSTOM",
+                name="Custom profile",
+                description="",
+                domain_profile="custom",
+                label_overrides={"requirements": "Specs"},
+            ),
+        )
+
+        updated_custom = update_project(session, custom_project.id, ProjectUpdate(domain_profile="personal"))
+
+        assert engineering_project.domain_profile == "engineering"
+        assert engineering_project.label_overrides is None
+        assert custom_project.domain_profile == "custom"
+        assert custom_project.label_overrides == {"requirements": "Specs"}
+        assert updated_custom.domain_profile == "personal"
+        assert updated_custom.label_overrides is None
+
+
+def test_authoritative_registry_summary_reports_revision_snapshot_integrity():
+    with make_session() as session:
+        seed_demo(session)
+        project = session.exec(select(Project).where(Project.code == "DRONE-001")).one()
+
+        summary = get_authoritative_registry_summary(session, project.id)
+        assert summary.revision_snapshots > 0
+        assert summary.revision_snapshot_integrity_status == "ok"
+        assert summary.revision_snapshot_integrity_issues == []
+
+        snapshot = session.exec(select(RevisionSnapshot).where(RevisionSnapshot.project_id == project.id)).first()
+        assert snapshot is not None
+        snapshot.snapshot_hash = "tampered"
+        session.add(snapshot)
+        session.commit()
+
+        broken = get_authoritative_registry_summary(session, project.id)
+        assert broken.revision_snapshot_integrity_status == "broken"
+        assert broken.revision_snapshot_objects_broken >= 1
+        assert broken.revision_snapshot_integrity_issues
 
 
 def test_verification_evidence_explicit_signals_override_test_run_compatibility():
@@ -1275,6 +1336,26 @@ def test_graph_aware_impact_traversal_walks_cycles_and_respects_active_context_f
                 linked_component_ids=[component.id],
             ),
         )
+        cad_artifact = create_external_artifact(
+            session,
+            ExternalArtifactCreate(
+                project_id=project.id,
+                external_id="CAD-GRAPH-1",
+                artifact_type=ExternalArtifactType.cad_part,
+                name="Graph CAD part",
+                status=ExternalArtifactStatus.active,
+            ),
+        )
+        create_artifact_link(
+            session,
+            ArtifactLinkCreate(
+                project_id=project.id,
+                internal_object_type=FederatedInternalObjectType.component,
+                internal_object_id=component.id,
+                external_artifact_id=cad_artifact.id,
+                relation_type=ArtifactLinkRelationType.maps_to,
+            ),
+        )
         create_verification_evidence(
             session,
             VerificationEvidenceCreate(
@@ -1294,6 +1375,7 @@ def test_graph_aware_impact_traversal_walks_cycles_and_respects_active_context_f
         assert any(item.object_type == "block" for item in impact.direct)
         assert any(item.object_type == "test_case" for item in impact.direct)
         assert any(item.object_type == "component" for item in impact.secondary)
+        assert any(item.object_type == "external_artifact" for item in impact.likely_impacted)
         assert any(item.object_type == "baseline" for item in impact.likely_impacted)
         assert any(item.object_type == "change_request" for item in impact.likely_impacted)
         assert any(item.object_type == "verification_evidence" for item in impact.likely_impacted)
@@ -1605,6 +1687,35 @@ def test_change_request_lifecycle_tracks_history_and_rejects_direct_status_edits
         ]
         assert detail["history"][0].from_status == "open"
         assert detail["history"][-1].to_status == "rejected"
+        assert detail["change_request"].analysis_summary == "Re-analysis"
+        assert detail["change_request"].disposition_summary == "Reject after review"
+        assert detail["change_request"].implementation_summary == "Delivered"
+        assert detail["change_request"].closure_summary == "Done"
+
+
+def test_change_request_can_enter_analysis_from_open_and_rejected_states():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-CR-2", name="P-CR-2", description=""))
+        change_request = create_change_request(
+            session,
+            ChangeRequestCreate(
+                project_id=project.id,
+                key="CR-OPEN",
+                title="Open to analysis",
+                description="Should move straight into analysis from open",
+                severity=Severity.medium,
+            ),
+        )
+
+        analyzed_from_open = submit_change_request_for_analysis(session, change_request.id, WorkflowActionPayload(actor="analyst", comment="Start analysis"))
+        rejected = reject_change_request(session, analyzed_from_open.id, WorkflowActionPayload(actor="approver", comment="Needs revision"))
+        analyzed_from_rejected = submit_change_request_for_analysis(session, rejected.id, WorkflowActionPayload(actor="analyst-2", comment="Resubmit for analysis"))
+
+        detail = get_change_request_detail(session, analyzed_from_rejected.id)
+
+        assert analyzed_from_open.status == ChangeRequestStatus.analysis
+        assert analyzed_from_rejected.status == ChangeRequestStatus.analysis
+        assert [event.action for event in detail["history"]] == ["submit_analysis", "reject", "submit_analysis"]
 
 
 def test_configuration_context_compare_handles_empty_and_cross_project_inputs():
@@ -2142,6 +2253,90 @@ def test_baseline_and_configuration_context_bridge_the_same_approved_item_set():
         assert baseline_detail["related_configuration_contexts"][0].id == context.id
         assert context_detail["related_baselines"]
         assert context_detail["related_baselines"][0].id == baseline.id
+
+
+def test_decision_objects_capture_lifecycle_audit_history():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-AUDIT", name="P-AUDIT", description=""))
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-AUDIT",
+                title="Audit requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.test,
+                status=RequirementStatus.approved,
+                version=1,
+            ),
+        )
+        baseline = create_baseline(
+            session,
+            BaselineCreate(
+                project_id=project.id,
+                name="Audit baseline",
+                description="Audit baseline",
+                requirement_ids=[requirement.id],
+            ),
+        )[0]
+        context = create_configuration_context(
+            session,
+            ConfigurationContextCreate(
+                project_id=project.id,
+                key="CTX-AUDIT",
+                name="Audit context",
+                context_type=ConfigurationContextType.review_gate,
+                status=ConfigurationContextStatus.active,
+            ),
+        )
+
+        create_configuration_item_mapping(
+            session,
+            context.id,
+            ConfigurationItemMappingCreate(
+                item_kind=ConfigurationItemKind.internal_requirement,
+                internal_object_type=FederatedInternalObjectType.requirement,
+                internal_object_id=requirement.id,
+                internal_object_version=requirement.version,
+                role_label="Audit requirement",
+            ),
+        )
+        delete_configuration_item_mapping(
+            session,
+            create_configuration_item_mapping(
+                session,
+                context.id,
+                ConfigurationItemMappingCreate(
+                    item_kind=ConfigurationItemKind.internal_requirement,
+                    internal_object_type=FederatedInternalObjectType.requirement,
+                    internal_object_id=requirement.id,
+                    internal_object_version=requirement.version,
+                    role_label="Temporary mapping",
+                ),
+            ).id,
+        )
+        update_configuration_context(
+            session,
+            context.id,
+            ConfigurationContextUpdate(name="Audit context updated", status=ConfigurationContextStatus.frozen),
+        )
+        release_baseline(session, baseline.id, WorkflowActionPayload(actor="reviewer", comment="Release for gate"))
+        obsolete_baseline(session, baseline.id, WorkflowActionPayload(actor="reviewer", comment="Superseded"))
+
+        context_detail = get_configuration_context_service(session, context.id)
+        baseline_detail = get_baseline_detail(session, baseline.id)
+        bundle = export_project_bundle(session, project.id)
+
+        context_actions = [event.action for event in context_detail["history"]]
+        baseline_actions = [event.action for event in baseline_detail["history"]]
+
+        assert context_actions[0] == "update"
+        assert "add_mapping" in context_actions
+        assert "remove_mapping" in context_actions
+        assert context_actions[-1] == "create"
+        assert baseline_actions == ["obsolete", "release", "create"]
+        assert bundle["approval_action_logs"]
 
 
 def test_verification_evidence_links_requirements_and_test_cases_and_exports():
@@ -2747,6 +2942,8 @@ def test_backend_coverage_spans_configuration_connectors_evidence_and_export():
         assert registry.connectors == 1
         assert registry.external_artifacts == 1
         assert registry.external_artifact_versions == 1
+        assert registry.revision_snapshot_integrity_status == "ok"
+        assert registry.revision_snapshot_integrity_issues == []
         assert context_detail["resolved_view"]["internal"]
         assert context_detail["resolved_view"]["external"]
         assert non_conformity_detail["verification_evidence"][0].id == evidence.id
@@ -2755,6 +2952,7 @@ def test_backend_coverage_spans_configuration_connectors_evidence_and_export():
         assert bundle["configuration_item_mappings"]
         assert bundle["verification_evidence"]
         assert bundle["non_conformities"]
+        assert bundle["authoritative_registry_summary"]["revision_snapshot_integrity_status"] == "ok"
 
 def test_json_import_creates_external_artifacts_and_verification_evidence():
     with make_session() as session:

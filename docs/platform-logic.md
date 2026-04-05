@@ -56,6 +56,7 @@ ThreadLite uses pragmatic versioning:
 - the live object carries a `version` field
 - revision snapshots preserve previous versions and summaries
 - each revision snapshot stores a content hash and previous-hash pointer so the history is harder to tamper with
+- the authoritative sources page surfaces a revision snapshot integrity summary so reviewers can spot chain breaks quickly
 - an approved object stays as the historical record for that version
 - a new draft version is created when a changed approved item needs review
 
@@ -166,6 +167,7 @@ When a baseline is marked as released:
 - the baseline becomes a release flag for change control
 - follow-up edits to linked components or requirements should route through a change request
 - the baseline detail page surfaces the release flag so reviewers can see which snapshots are authoritative
+- the authoritative registry also shows revision snapshot integrity, so the AST trust model stays visible
 
 This means a baseline answers:
 
@@ -201,11 +203,15 @@ The traversal uses:
 - direct relations
 - one extra hop
 - readable summaries grouped by object type
+- graph-aware edges across requirements, blocks, software realization nodes, CAD parts, tests, verification evidence, simulation evidence, operational evidence, baselines, and change requests
 
 The UI renders impact as a compact impact map:
 
 - requirements show direct impacts, secondary impacts, related baselines, and open change requests
-- change requests show impacted objects grouped by impact level
+- change requests show impacted objects grouped by impact level and expose lifecycle notes for analysis, disposition, implementation, and closure
+- open or rejected change requests can re-enter analysis directly when the reviewer is ready to continue the lifecycle
+- baselines and configuration contexts also write traceable lifecycle history so review decisions are consistent across decision objects
+- graph-aware traversal makes it possible to walk from a mission requirement through realization, evidence, and review artifacts without needing a separate graph database
 - the map is intentionally smaller than the traceability graph so reviewers can understand it quickly
 
 When a requirement changes, the impact view looks at:

@@ -23,6 +23,15 @@ export default async function ChangeRequestPage({ params }: { params: { id: stri
           </div>
         </CardBody>
       </Card>
+      <Card>
+        <CardHeader><div className="font-semibold">Lifecycle summary</div></CardHeader>
+        <CardBody className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <LifecycleStage title="Analysis" value={data.change_request.analysis_summary} emptyText="No analysis summary yet." />
+          <LifecycleStage title="Disposition" value={data.change_request.disposition_summary} emptyText="No disposition summary yet." />
+          <LifecycleStage title="Implementation" value={data.change_request.implementation_summary} emptyText="No implementation summary yet." />
+          <LifecycleStage title="Closure" value={data.change_request.closure_summary} emptyText="No closure summary yet." />
+        </CardBody>
+      </Card>
       <ImpactVisualization
         title="Impact map"
         description="A compact view of objects affected by this change request, grouped by impact level."
@@ -63,6 +72,15 @@ export default async function ChangeRequestPage({ params }: { params: { id: stri
 
 function Row({ label, value }: { label: string; value: any }) {
   return <div className="flex items-center justify-between rounded-xl border border-line bg-panel2 p-3"><div className="text-sm text-muted">{label}</div><div className="text-sm font-medium">{value}</div></div>;
+}
+
+function LifecycleStage({ title, value, emptyText }: { title: string; value?: string | null; emptyText: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-panel2 p-4">
+      <div className="text-xs uppercase tracking-[0.2em] text-muted">{title}</div>
+      <div className="mt-2 text-sm text-text">{value || emptyText}</div>
+    </div>
+  );
 }
 
 function statusTone(status: string) {
@@ -137,6 +155,7 @@ function hrefFor(objectType: string, objectId: string) {
   if (objectType === "verification_evidence") return `/verification-evidence/${objectId}`;
   if (objectType === "operational_evidence") return `/operational-evidence/${objectId}`;
   if (objectType === "fmi_contract") return `/fmi-contracts/${objectId}`;
+  if (objectType === "external_artifact") return `/external-artifacts/${objectId}`;
   if (objectType === "baseline") return `/baselines/${objectId}`;
   if (objectType === "change_request") return `/change-requests/${objectId}`;
   return null;

@@ -34,6 +34,31 @@ export function WorkflowActions({
 
   const payload: WorkflowActionPayload = { actor: "local-user" };
 
+  const submitChangeRequestForAnalysis = async () => {
+    await api.submitChangeRequestAnalysis(id, {
+      ...payload,
+      reason: "Ready for analysis",
+      comment: "Move into analysis",
+    });
+  };
+
+  if (kind === "change_request" && (status === "open" || status === "rejected")) {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => run("analysis", submitChangeRequestForAnalysis)}>
+          {busy === "analysis" ? "Submitting..." : "Send to analysis"}
+        </Button>
+        {status === "rejected" ? (
+          <Button variant="secondary" onClick={() => run("reopen", async () => {
+            await api.reopenChangeRequest(id, payload);
+          })}>
+            {busy === "reopen" ? "Reopening..." : "Reopen"}
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
   if (kind === "change_request" && status === "analysis") {
     return (
       <div className="flex flex-wrap gap-2">
@@ -67,16 +92,6 @@ export function WorkflowActions({
         await api.closeChangeRequest(id, payload);
       })}>
         {busy === "close" ? "Closing..." : "Close change request"}
-      </Button>
-    );
-  }
-
-  if (kind === "change_request" && status === "rejected") {
-    return (
-      <Button onClick={() => run("reopen", async () => {
-        await api.reopenChangeRequest(id, payload);
-      })}>
-        {busy === "reopen" ? "Reopening..." : "Reopen"}
       </Button>
     );
   }
