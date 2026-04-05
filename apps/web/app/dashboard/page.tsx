@@ -12,6 +12,7 @@ export default async function DashboardPage() {
   } catch {
     dashboard = null;
   }
+  // TODO: resolve profile per-project when dashboard supports multi-project KPI breakdown.
 
   return (
     <div className="space-y-6">

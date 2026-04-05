@@ -8,6 +8,7 @@ import { getLabels, type LabelSet } from "@/lib/labels";
 import type { Dashboard } from "@/lib/types";
 
 export function DashboardViews({ dashboard, labels = getLabels("engineering") }: { dashboard: Dashboard | null; labels?: LabelSet }) {
+  // TODO: resolve profile per-project when dashboard supports multi-project KPI breakdown.
   const [mode, setMode] = useState<"manager" | "engineering">("manager");
   const projects = dashboard && "projects" in dashboard ? dashboard.projects ?? [] : [];
   const managerCards = useMemo(

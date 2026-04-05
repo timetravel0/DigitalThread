@@ -19,7 +19,7 @@ const tabLabels: Record<string, (labels: LabelSet) => string> = {
   import: () => "Import",
   "simulation-evidence": (labels) => labels.simulationEvidence,
   "operational-evidence": (labels) => labels.operationalEvidence,
-  "operational-runs": () => "Operational Runs",
+  "operational-runs": (labels) => labels.operationalRun,
   sysml: () => "SysML",
   "step-ap242": () => "STEP AP242",
   fmi: () => "FMI",

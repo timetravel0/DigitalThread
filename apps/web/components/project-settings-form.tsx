@@ -11,13 +11,16 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
   const router = useRouter();
   const [profile, setProfile] = useState<DomainProfile>(project.domain_profile);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
     setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
       await api.updateProject(project.id, { domain_profile: profile });
+      setSuccess("Domain profile updated successfully.");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save project settings");
@@ -32,6 +35,7 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
         Changing the domain profile updates labels only. No data is lost.
       </div>
       <ProjectProfileSelector value={profile} onChange={setProfile} />
+      {success ? <div className="rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">{success}</div> : null}
       {error ? <div className="text-sm text-danger">{error}</div> : null}
       <div className="flex flex-wrap gap-2">
         <Button onClick={submit} disabled={saving}>
