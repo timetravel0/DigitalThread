@@ -7,8 +7,37 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
-import { getLabels, type LabelSet } from "@/lib/labels";
+import { getLabels, type DomainProfile, type LabelSet } from "@/lib/labels";
 import type { TestCase } from "@/lib/types";
+
+type TestMethodValue = "bench" | "simulation" | "field" | "inspection";
+
+export const TEST_METHOD_OPTIONS: Record<DomainProfile, { value: TestMethodValue; label: string }[]> = {
+  engineering: [
+    { value: "bench", label: "bench" },
+    { value: "simulation", label: "simulation" },
+    { value: "field", label: "field" },
+    { value: "inspection", label: "inspection" },
+  ],
+  manufacturing: [
+    { value: "bench", label: "production bench" },
+    { value: "simulation", label: "virtual test" },
+    { value: "field", label: "line trial" },
+    { value: "inspection", label: "audit" },
+  ],
+  personal: [
+    { value: "bench", label: "dry run" },
+    { value: "simulation", label: "simulation" },
+    { value: "field", label: "real-world check" },
+    { value: "inspection", label: "inspection" },
+  ],
+  custom: [
+    { value: "bench", label: "bench" },
+    { value: "simulation", label: "simulation" },
+    { value: "field", label: "field" },
+    { value: "inspection", label: "inspection" },
+  ],
+};
 
 const schema = z.object({
   project_id: z.string().uuid(),
@@ -21,10 +50,20 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export function TestCaseForm({ initial, labels: providedLabels }: { initial?: Partial<TestCase>; labels?: LabelSet }) {
+export function TestCaseForm({
+  initial,
+  labels: providedLabels,
+  profile,
+}: {
+  initial?: Partial<TestCase>;
+  labels?: LabelSet;
+  profile?: DomainProfile;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const labels = providedLabels || getLabels("engineering");
+  const profileKey = profile ?? "engineering";
+  const testMethodOptions = TEST_METHOD_OPTIONS[profileKey];
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -62,10 +101,11 @@ export function TestCaseForm({ initial, labels: providedLabels }: { initial?: Pa
       <Textarea placeholder={labels.testCase_description} rows={4} {...form.register("description")} />
       <div className="grid gap-4 md:grid-cols-2">
         <Select {...form.register("method")}>
-          <option value="bench">bench</option>
-          <option value="simulation">simulation</option>
-          <option value="field">field</option>
-          <option value="inspection">inspection</option>
+          {testMethodOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </Select>
         <Select {...form.register("status")}>
           <option value="draft">draft</option>
@@ -81,7 +121,7 @@ export function TestCaseForm({ initial, labels: providedLabels }: { initial?: Pa
         </Select>
       </div>
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Save test case</Button>
+      <Button type="submit">{`Save ${labels.testCase}`}</Button>
     </form>
   );
 }

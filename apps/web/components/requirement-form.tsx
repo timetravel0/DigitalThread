@@ -10,7 +10,10 @@ import { Button, Input, Select, Textarea } from "@/components/ui";
 import { getLabels, type DomainProfile, type LabelSet } from "@/lib/labels";
 import type { Requirement } from "@/lib/types";
 
-export const CATEGORY_OPTIONS: Record<DomainProfile, { value: "performance" | "safety" | "environment" | "operations" | "compliance"; label: string }[]> = {
+type RequirementCategoryValue = "performance" | "safety" | "environment" | "operations" | "compliance";
+type VerificationMethodValue = "analysis" | "inspection" | "test" | "demonstration";
+
+export const CATEGORY_OPTIONS: Record<DomainProfile, { value: RequirementCategoryValue; label: string }[]> = {
   engineering: [
     { value: "performance", label: "performance" },
     { value: "safety", label: "safety" },
@@ -41,6 +44,33 @@ export const CATEGORY_OPTIONS: Record<DomainProfile, { value: "performance" | "s
   ],
 };
 
+export const VERIFICATION_METHOD_OPTIONS: Record<DomainProfile, { value: VerificationMethodValue; label: string }[]> = {
+  engineering: [
+    { value: "analysis", label: "analysis" },
+    { value: "inspection", label: "inspection" },
+    { value: "test", label: "test" },
+    { value: "demonstration", label: "demonstration" },
+  ],
+  manufacturing: [
+    { value: "analysis", label: "measurement analysis" },
+    { value: "inspection", label: "inspection" },
+    { value: "test", label: "production test" },
+    { value: "demonstration", label: "process validation" },
+  ],
+  personal: [
+    { value: "analysis", label: "estimate" },
+    { value: "inspection", label: "check" },
+    { value: "test", label: "try" },
+    { value: "demonstration", label: "demo" },
+  ],
+  custom: [
+    { value: "analysis", label: "analysis" },
+    { value: "inspection", label: "inspection" },
+    { value: "test", label: "test" },
+    { value: "demonstration", label: "demonstration" },
+  ],
+};
+
 const schema = z.object({
   project_id: z.string().uuid(),
   key: z.string().min(1),
@@ -56,17 +86,23 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export function RequirementForm({ initial, onSaved, labels: providedLabels }: { initial?: Partial<Requirement>; onSaved?: () => void; labels?: LabelSet }) {
+export function RequirementForm({
+  initial,
+  onSaved,
+  labels: providedLabels,
+  profile,
+}: {
+  initial?: Partial<Requirement>;
+  onSaved?: () => void;
+  labels?: LabelSet;
+  profile?: DomainProfile;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const labels = providedLabels || getLabels("engineering");
-  const profileKey: DomainProfile =
-    labels.requirement === "Specification"
-      ? "manufacturing"
-      : labels.requirement === "Goal"
-        ? "personal"
-        : "engineering";
+  const profileKey = profile ?? "engineering";
   const categoryOptions = CATEGORY_OPTIONS[profileKey];
+  const verificationMethodOptions = VERIFICATION_METHOD_OPTIONS[profileKey];
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -127,10 +163,11 @@ export function RequirementForm({ initial, onSaved, labels: providedLabels }: { 
           <option value="critical">critical</option>
         </Select>
         <Select {...form.register("verification_method")}>
-          <option value="analysis">analysis</option>
-          <option value="inspection">inspection</option>
-          <option value="test">test</option>
-          <option value="demonstration">demonstration</option>
+          {verificationMethodOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </Select>
         <Select {...form.register("status")}>
           <option value="draft">draft</option>
@@ -150,7 +187,7 @@ export function RequirementForm({ initial, onSaved, labels: providedLabels }: { 
       </div>
       <Textarea placeholder='Verification criteria JSON, for example {"telemetry_thresholds": {"battery_consumption_pct": {"max": 85}}}' rows={6} {...form.register("verification_criteria_json")} />
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Save requirement</Button>
+      <Button type="submit">{`Save ${labels.requirement}`}</Button>
     </form>
   );
 }

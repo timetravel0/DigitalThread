@@ -24,6 +24,11 @@ export default async function DashboardPage() {
 
       <DashboardViews dashboard={dashboard} />
 
+      <SectionTitle
+        title="Get started"
+        description="Seed the workspace that matches the kind of project you want to explore."
+      />
+
       <div className="grid gap-6 xl:grid-cols-3">
         {[
           {
