@@ -11,6 +11,7 @@ import { getLabels, type DomainProfile, type LabelSet } from "@/lib/labels";
 import type { TestCase } from "@/lib/types";
 
 type TestMethodValue = "bench" | "simulation" | "field" | "inspection";
+type TestCaseStatusValue = "draft" | "in_review" | "approved" | "rejected" | "ready" | "executed" | "failed" | "passed" | "archived" | "obsolete";
 
 export const TEST_METHOD_OPTIONS: Record<DomainProfile, { value: TestMethodValue; label: string }[]> = {
   engineering: [
@@ -39,6 +40,57 @@ export const TEST_METHOD_OPTIONS: Record<DomainProfile, { value: TestMethodValue
   ],
 };
 
+const STATUS_OPTIONS: Record<DomainProfile, { value: TestCaseStatusValue; label: string }[]> = {
+  engineering: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "in_review" },
+    { value: "approved", label: "approved" },
+    { value: "rejected", label: "rejected" },
+    { value: "ready", label: "ready" },
+    { value: "executed", label: "executed" },
+    { value: "failed", label: "failed" },
+    { value: "passed", label: "passed" },
+    { value: "archived", label: "archived" },
+    { value: "obsolete", label: "obsolete" },
+  ],
+  manufacturing: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "review" },
+    { value: "approved", label: "released" },
+    { value: "rejected", label: "rework" },
+    { value: "ready", label: "ready" },
+    { value: "executed", label: "executed" },
+    { value: "failed", label: "failed" },
+    { value: "passed", label: "passed" },
+    { value: "archived", label: "retired" },
+    { value: "obsolete", label: "obsolete" },
+  ],
+  personal: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "under review" },
+    { value: "approved", label: "approved" },
+    { value: "rejected", label: "needs work" },
+    { value: "ready", label: "ready" },
+    { value: "executed", label: "done" },
+    { value: "failed", label: "failed" },
+    { value: "passed", label: "passed" },
+    { value: "archived", label: "archived" },
+    { value: "obsolete", label: "obsolete" },
+  ],
+  custom: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "in_review" },
+    { value: "approved", label: "approved" },
+    { value: "rejected", label: "rejected" },
+    { value: "ready", label: "ready" },
+    { value: "executed", label: "executed" },
+    { value: "failed", label: "failed" },
+    { value: "passed", label: "passed" },
+    { value: "archived", label: "archived" },
+    { value: "obsolete", label: "obsolete" },
+  ],
+};
+
 const schema = z.object({
   project_id: z.string().uuid(),
   key: z.string().min(1),
@@ -64,6 +116,7 @@ export function TestCaseForm({
   const labels = providedLabels || getLabels("engineering");
   const profileKey = profile ?? "engineering";
   const testMethodOptions = TEST_METHOD_OPTIONS[profileKey];
+  const statusOptions = STATUS_OPTIONS[profileKey];
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -108,16 +161,11 @@ export function TestCaseForm({
           ))}
         </Select>
         <Select {...form.register("status")}>
-          <option value="draft">draft</option>
-          <option value="in_review">in_review</option>
-          <option value="approved">approved</option>
-          <option value="rejected">rejected</option>
-          <option value="ready">ready</option>
-          <option value="executed">executed</option>
-          <option value="failed">failed</option>
-          <option value="passed">passed</option>
-          <option value="archived">archived</option>
-          <option value="obsolete">obsolete</option>
+          {statusOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </Select>
       </div>
       {error ? <div className="text-sm text-danger">{error}</div> : null}

@@ -8,13 +8,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import { ProjectProfileSelector } from "@/components/project-profile-selector";
-import { getLabels, type DomainProfile } from "@/lib/labels";
+import type { DomainProfile } from "@/lib/labels";
 
 const schema = z.object({
   code: z.string().min(1, "Project code is required"),
   name: z.string().min(1, "Project name is required"),
   description: z.string().optional().default(""),
-  domain_profile: z.enum(["engineering", "manufacturing", "personal"]),
+  domain_profile: z.enum(["engineering", "manufacturing", "personal", "custom"]),
   status: z.enum(["draft", "active", "archived"]),
 });
 
@@ -33,9 +33,6 @@ export function ProjectForm() {
       status: "draft",
     },
   });
-  const profile = form.watch("domain_profile") as DomainProfile;
-  const labels = getLabels(profile);
-
   const submit = form.handleSubmit(async (values) => {
     setError(null);
     try {
@@ -56,7 +53,7 @@ export function ProjectForm() {
         <Input placeholder="Project code" {...form.register("code")} />
         <Input placeholder="Project name" {...form.register("name")} />
       </div>
-      <Textarea placeholder={`Project description - ${labels.requirement_description}`} rows={4} {...form.register("description")} />
+      <Textarea placeholder="Project description" rows={4} {...form.register("description")} />
       <div className="grid gap-4 md:grid-cols-2">
         <Select {...form.register("status")}>
           <option value="draft">draft</option>

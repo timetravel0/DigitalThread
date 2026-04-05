@@ -11,6 +11,7 @@ import { getLabels, type DomainProfile, type LabelSet } from "@/lib/labels";
 import type { Block } from "@/lib/types";
 
 type BlockKindValue = "system" | "subsystem" | "assembly" | "component" | "software" | "interface" | "other";
+type BlockStatusValue = "draft" | "in_review" | "approved" | "rejected" | "obsolete";
 
 export const BLOCK_KIND_OPTIONS: Record<DomainProfile, { value: BlockKindValue; label: string }[]> = {
   engineering: [
@@ -51,6 +52,37 @@ export const BLOCK_KIND_OPTIONS: Record<DomainProfile, { value: BlockKindValue; 
   ],
 };
 
+const STATUS_OPTIONS: Record<DomainProfile, { value: BlockStatusValue; label: string }[]> = {
+  engineering: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "in_review" },
+    { value: "approved", label: "approved" },
+    { value: "rejected", label: "rejected" },
+    { value: "obsolete", label: "obsolete" },
+  ],
+  manufacturing: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "review" },
+    { value: "approved", label: "released" },
+    { value: "rejected", label: "rework" },
+    { value: "obsolete", label: "retired" },
+  ],
+  personal: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "under review" },
+    { value: "approved", label: "ready" },
+    { value: "rejected", label: "needs work" },
+    { value: "obsolete", label: "archived" },
+  ],
+  custom: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "in_review" },
+    { value: "approved", label: "approved" },
+    { value: "rejected", label: "rejected" },
+    { value: "obsolete", label: "obsolete" },
+  ],
+};
+
 const schema = z.object({
   project_id: z.string().uuid(),
   key: z.string().min(1),
@@ -78,6 +110,7 @@ export function BlockForm({
   const labels = providedLabels || getLabels("engineering");
   const profileKey = profile ?? "engineering";
   const blockKindOptions = BLOCK_KIND_OPTIONS[profileKey];
+  const statusOptions = STATUS_OPTIONS[profileKey];
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -128,11 +161,11 @@ export function BlockForm({
           <option value="physical">physical</option>
         </Select>
         <Select {...form.register("status")}>
-          <option value="draft">draft</option>
-          <option value="in_review">in_review</option>
-          <option value="approved">approved</option>
-          <option value="rejected">rejected</option>
-          <option value="obsolete">obsolete</option>
+          {statusOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </Select>
         <Input placeholder="Owner" {...form.register("owner")} />
       </div>

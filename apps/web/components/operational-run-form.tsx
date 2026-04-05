@@ -7,6 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
+import { getLabels, type DomainProfile } from "@/lib/labels";
 import type { OperationalRun } from "@/lib/types";
 
 const schema = z.object({
@@ -25,16 +26,18 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export function OperationalRunForm({ initial }: { initial?: Partial<OperationalRun> }) {
+export function OperationalRunForm({ initial, profile }: { initial?: Partial<OperationalRun>; profile?: DomainProfile }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const labels = getLabels(profile ?? "engineering");
+  const serialPlaceholder = profile === "personal" ? "Device / asset ID" : profile === "manufacturing" ? "Asset / line ID" : "Drone serial";
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       project_id: initial?.project_id || "",
       key: initial?.key || "",
       date: initial?.date || "",
-      drone_serial: initial?.drone_serial || "",
+      drone_serial: initial?.drone_serial || (profile === "engineering" ? "" : "N/A"),
       location: initial?.location || "",
       duration_minutes: initial?.duration_minutes?.toString() || "",
       max_temperature_c: initial?.max_temperature_c?.toString() || "",
@@ -84,7 +87,7 @@ export function OperationalRunForm({ initial }: { initial?: Partial<OperationalR
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <Input type="date" {...form.register("date")} />
-        <Input placeholder="Drone serial" {...form.register("drone_serial")} />
+        <Input placeholder={serialPlaceholder} {...form.register("drone_serial")} />
       </div>
       <Input placeholder="Location" {...form.register("location")} />
       <div className="grid gap-4 md:grid-cols-2">
@@ -102,7 +105,7 @@ export function OperationalRunForm({ initial }: { initial?: Partial<OperationalR
       <Textarea placeholder="Notes" rows={3} {...form.register("notes")} />
       <Textarea placeholder='Telemetry JSON, e.g. {"altitude_m": 43, "return_to_home": true}' rows={6} {...form.register("telemetry_json")} />
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Save operational run</Button>
+      <Button type="submit">{`Save ${labels.operationalRun}`}</Button>
     </form>
   );
 }

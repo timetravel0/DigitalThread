@@ -21,7 +21,7 @@ export type ProjectTab =
   | "authoritative-sources"
   | "software";
 
-const DEFAULT_TABS: Record<DomainProfile, ProjectTab[]> = {
+export const TAB_VISIBILITY: Record<DomainProfile, ProjectTab[]> = {
   engineering: [
     "requirements",
     "blocks",
@@ -88,7 +88,7 @@ const DEFAULT_TABS: Record<DomainProfile, ProjectTab[]> = {
   ],
 };
 
-const ADVANCED_TABS: Record<DomainProfile, ProjectTab[]> = {
+export const ADVANCED_TAB_VISIBILITY: Record<DomainProfile, ProjectTab[]> = {
   engineering: [],
   manufacturing: ["simulation-evidence", "operational-evidence", "operational-runs", "sysml", "step-ap242", "fmi", "authoritative-sources", "software"],
   personal: ["simulation-evidence", "operational-evidence", "operational-runs", "matrix", "non-conformities", "review-queue", "validation", "sysml", "step-ap242", "fmi", "authoritative-sources", "software"],
@@ -97,8 +97,8 @@ const ADVANCED_TABS: Record<DomainProfile, ProjectTab[]> = {
 
 export function getVisibleTabs(profile: DomainProfile | null | undefined, advancedMode: boolean): ProjectTab[] {
   const resolved = profile ?? "engineering";
-  const base = DEFAULT_TABS[resolved] ?? DEFAULT_TABS.engineering;
+  const base = TAB_VISIBILITY[resolved] ?? TAB_VISIBILITY.engineering;
   if (!advancedMode) return base;
-  const advanced = ADVANCED_TABS[resolved] ?? [];
+  const advanced = ADVANCED_TAB_VISIBILITY[resolved] ?? [];
   return [...base, ...advanced];
 }

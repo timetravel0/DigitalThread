@@ -12,6 +12,7 @@ import type { Requirement } from "@/lib/types";
 
 type RequirementCategoryValue = "performance" | "safety" | "environment" | "operations" | "compliance";
 type VerificationMethodValue = "analysis" | "inspection" | "test" | "demonstration";
+type RequirementStatusValue = "draft" | "in_review" | "approved" | "rejected" | "implemented" | "verified" | "failed" | "obsolete" | "retired";
 
 export const CATEGORY_OPTIONS: Record<DomainProfile, { value: RequirementCategoryValue; label: string }[]> = {
   engineering: [
@@ -71,6 +72,53 @@ export const VERIFICATION_METHOD_OPTIONS: Record<DomainProfile, { value: Verific
   ],
 };
 
+const STATUS_OPTIONS: Record<DomainProfile, { value: RequirementStatusValue; label: string }[]> = {
+  engineering: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "in_review" },
+    { value: "approved", label: "approved" },
+    { value: "rejected", label: "rejected" },
+    { value: "implemented", label: "implemented" },
+    { value: "verified", label: "verified" },
+    { value: "failed", label: "failed" },
+    { value: "obsolete", label: "obsolete" },
+    { value: "retired", label: "retired" },
+  ],
+  manufacturing: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "review" },
+    { value: "approved", label: "released" },
+    { value: "rejected", label: "rework" },
+    { value: "implemented", label: "implemented" },
+    { value: "verified", label: "verified" },
+    { value: "failed", label: "failed" },
+    { value: "obsolete", label: "obsolete" },
+    { value: "retired", label: "retired" },
+  ],
+  personal: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "under review" },
+    { value: "approved", label: "approved" },
+    { value: "rejected", label: "needs work" },
+    { value: "implemented", label: "done" },
+    { value: "verified", label: "verified" },
+    { value: "failed", label: "failed" },
+    { value: "obsolete", label: "archived" },
+    { value: "retired", label: "retired" },
+  ],
+  custom: [
+    { value: "draft", label: "draft" },
+    { value: "in_review", label: "in_review" },
+    { value: "approved", label: "approved" },
+    { value: "rejected", label: "rejected" },
+    { value: "implemented", label: "implemented" },
+    { value: "verified", label: "verified" },
+    { value: "failed", label: "failed" },
+    { value: "obsolete", label: "obsolete" },
+    { value: "retired", label: "retired" },
+  ],
+};
+
 const schema = z.object({
   project_id: z.string().uuid(),
   key: z.string().min(1),
@@ -103,6 +151,7 @@ export function RequirementForm({
   const profileKey = profile ?? "engineering";
   const categoryOptions = CATEGORY_OPTIONS[profileKey];
   const verificationMethodOptions = VERIFICATION_METHOD_OPTIONS[profileKey];
+  const statusOptions = STATUS_OPTIONS[profileKey];
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -170,15 +219,11 @@ export function RequirementForm({
           ))}
         </Select>
         <Select {...form.register("status")}>
-          <option value="draft">draft</option>
-          <option value="in_review">in_review</option>
-          <option value="approved">approved</option>
-          <option value="rejected">rejected</option>
-          <option value="implemented">implemented</option>
-          <option value="verified">verified</option>
-          <option value="failed">failed</option>
-          <option value="obsolete">obsolete</option>
-          <option value="retired">retired</option>
+          {statusOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </Select>
       </div>
       <div className="space-y-1">

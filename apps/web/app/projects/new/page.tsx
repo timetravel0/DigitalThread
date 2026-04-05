@@ -6,7 +6,7 @@ export default function NewProjectPage() {
     <div className="space-y-6">
       <SectionTitle
         title="Create project"
-        description="Start a new engineering thread from scratch. The project is blank; you add requirements, blocks, tests, and traceability next."
+        description="Choose a domain profile, then give your project a name and code. You can always change these later."
       />
       <Card>
         <CardHeader><div className="font-semibold">Project details</div></CardHeader>
