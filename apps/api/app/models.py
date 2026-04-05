@@ -387,6 +387,7 @@ class Requirement(TimestampMixin, SQLModel, table=True):
     status: RequirementStatus = Field(default=RequirementStatus.draft, sa_column=Column(SAEnum(RequirementStatus), nullable=False))
     version: int = Field(default=1, nullable=False)
     parent_requirement_id: UUID | None = Field(default=None, foreign_key="requirements.id", index=True)
+    verification_criteria_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     approved_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     approved_by: str | None = Field(default=None, sa_column=Column(String(255), nullable=True))
     rejection_reason: str | None = Field(default=None, sa_column=Column(String, nullable=True))

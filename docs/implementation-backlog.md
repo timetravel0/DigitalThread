@@ -84,6 +84,7 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 
 ### D2 - Software realization traceability
 
+- Status: Implemented in the current codebase.
 - Description: Introduce an optional `SoftwareModule` or equivalent software realization surface.
 - Why it matters: flight software should be traceable as a distinct realization, not only as a block type.
 - Dependencies: D1.
@@ -99,6 +100,9 @@ Epic A is already implemented and treated as the foundation. The backlog below s
 - Acceptance criteria: users can inspect connected objects and relation types from a graph view.
 - Suggested test coverage: data shaping tests, UI snapshot tests, empty-state tests.
 - Complexity: M
+
+Status:
+Implemented as a compact graph explorer with a focused walk-the-thread view that includes requirements, blocks, CAD parts, software realization nodes, tests, and evidence.
 
 ### D4 - Graph-aware impact traversal
 

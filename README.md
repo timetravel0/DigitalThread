@@ -99,22 +99,26 @@ threadlite/
 ## Key Product Areas
 
 - Dashboard with manager and engineering views, KPIs, and recent activity
-- Project pages with tabs for requirements, blocks, tests, simulation evidence, operational evidence, operational runs, traceability, SysML, STEP AP242, FMI, review queue, matrix, baselines, change requests, and import
+- Project pages with tabs for requirements, blocks, tests, simulation evidence, operational evidence, operational runs, traceability, SysML, STEP AP242, FMI, review queue, validation, matrix, baselines, change requests, and import
+- Project pages with a dedicated Software section for explicit software realization traceability
 - Project pages with an Authoritative Sources registry for connectors, external artifacts, artifact links, and configuration contexts
 - Relationship Registry pages that list requirements, links, and evidence with simple filters
 - Requirement, block, and test detail pages with inbound/outbound traceability plus workflow controls
 - Requirement, block, and test detail pages with linked external sources for federated metadata visibility
+- Verification criteria on requirements so telemetry thresholds can close the loop automatically
 - Logical vs physical toggles that let you inspect the drone as architecture intent or physical realization
 - Simulation evidence detail and capture surfaces for model/scenario/input/output/result records
+- Software realization surfaces for explicit software-module traceability and evidence
 - FMI placeholder contract surfaces for simulation model reference metadata
 - Operational evidence detail and capture surfaces for field/telemetry batch records linked to requirements and verification evidence
 - Project import surface for JSON and CSV external data ingestion into external artifacts and verification evidence
 - Traceability matrix with component or test columns
 - Relationship registry with filters for requirements, links, and evidence
-- Traceability graph with a compact relationship explorer by default and a focused graph when you click an object, showing Incoming / Focus / Outgoing columns with readable link explanations, visible edge ports on box boundaries, and extra spacing for multiple links between the same objects
+- Traceability graph with a compact relationship explorer by default and a focused graph when you click an object, showing Incoming / Focus / Outgoing columns, walk-the-thread expansion across requirements, blocks, software realization nodes, CAD parts, tests, and evidence, readable link explanations, visible edge ports on box boundaries, and extra spacing for multiple links between the same objects
 - Impact analysis with direct and two-hop traversal across requirements, blocks, and tests
 - Impact visualization cards on requirement and change request pages so affected objects are easy to scan
 - Baselines for freezing approved versions of core objects
+- Released baselines create a change-request trail when linked components or requirements are changed
 - Change requests with impact summaries
 - Non-conformities with explicit Accept / Rework / Reject dispositions
 - Project export bundles for external validation
@@ -127,7 +131,7 @@ Requirement verification state is computed from linked `VerificationEvidence` fi
 
 - the requirement detail page shows the computed state clearly
 - the requirement detail page includes a reviewer-friendly "Why this status?" panel
-- the panel explains whether the result came from verification evidence or fallback compatibility logic
+- the panel explains whether the result came from verification evidence, telemetry thresholds, simulation evidence, or fallback compatibility logic
 - the dashboard shows a simple breakdown of verification states, not just a single risk count
 - the dashboard rolls those computed states up into its risk metrics
 - compatible test runs and operational runs are used as fallback when evidence is neutral
@@ -150,8 +154,9 @@ If you are new to ThreadLite, start here:
 2. Open a project and use the tabs to move between requirements, blocks, tests, traceability, SysML, matrix, baselines, and change requests.
 3. Use the detail pages to create, edit, review, and approve engineering objects.
 4. Use the registry, matrix, and graph views to understand coverage and connectivity.
-5. Use the import tab when you need to ingest JSON or CSV data into external artifacts or verification evidence.
-6. Use the export bundle when you need a deterministic package for external validation.
+5. Use the validation tab when you want a simplified SidSat-style cockpit with dropdown-based alerts.
+6. Use the import tab when you need to ingest JSON or CSV data into external artifacts or verification evidence.
+7. Use the export bundle when you need a deterministic package for external validation.
 
 The [Platform Logic Guide](docs/platform-logic.md) explains the rules behind these screens so the UI and backend behavior stay understandable together.
 

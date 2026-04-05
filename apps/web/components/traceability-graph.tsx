@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { Badge, Card, CardBody, EmptyState } from "@/components/ui";
 import type {
+  ArtifactLink,
   Block,
   BlockTreeNode,
   Component,
+  ExternalArtifact,
   Link as TraceLink,
   OperationalRun,
   Requirement,
@@ -13,7 +15,7 @@ import type {
 } from "@/lib/types";
 
 type GraphFocus = "core" | "all" | "requirements" | "blocks" | "parts" | "tests" | "evidence";
-type GraphKind = "requirement" | "block" | "component" | "test_case" | "operational_run" | "verification_evidence";
+type GraphKind = "requirement" | "block" | "component" | "external_artifact" | "test_case" | "operational_run" | "verification_evidence";
 type GraphTone = "accent" | "success" | "warning" | "neutral" | "danger";
 
 interface GraphNode {
@@ -43,32 +45,34 @@ interface TraceabilityGraphProps {
   tree: BlockTreeNode[];
   requirements: Requirement[];
   components: Component[];
+  externalArtifacts: ExternalArtifact[];
   tests: TestCase[];
   runs: OperationalRun[];
   links: TraceLink[];
+  artifactLinks: ArtifactLink[];
   sysmlRelations: SysMLRelation[];
   evidence: VerificationEvidence[];
 }
 
-const laneOrder: GraphKind[] = ["requirement", "block", "component", "test_case", "operational_run", "verification_evidence"];
+const laneOrder: GraphKind[] = ["requirement", "block", "component", "external_artifact", "test_case", "operational_run", "verification_evidence"];
 
 const focusKinds: Record<GraphFocus, GraphKind[]> = {
-  core: ["requirement", "block", "test_case"],
+  core: ["requirement", "block", "component", "external_artifact", "test_case"],
   all: laneOrder,
-  requirements: ["requirement"],
-  blocks: ["block"],
-  parts: ["component"],
-  tests: ["test_case"],
+  requirements: ["requirement", "component", "external_artifact", "test_case"],
+  blocks: ["block", "component", "external_artifact"],
+  parts: ["component", "external_artifact"],
+  tests: ["test_case", "component", "external_artifact"],
   evidence: ["operational_run", "verification_evidence"],
 };
 
 const focusRelations: Record<GraphFocus, string[]> = {
-  core: ["contains", "contain", "satisfy", "satisfies", "verify", "verifies", "deriveReqt", "trace"],
+  core: ["contains", "contain", "satisfy", "satisfies", "verify", "verifies", "deriveReqt", "trace", "allocated_to", "maps_to", "authoritative_reference", "validated_against", "synchronized_with", "derived_from_external", "uses", "refine"],
   all: [],
-  requirements: ["deriveReqt", "satisfy", "satisfies", "verify", "verifies", "trace"],
-  blocks: ["contains", "contain", "satisfy", "satisfies", "verify", "verifies", "deriveReqt", "trace"],
-  parts: ["allocate", "allocated_to", "refine", "trace"],
-  tests: ["verify", "verifies", "satisfy", "satisfies", "trace"],
+  requirements: ["deriveReqt", "satisfy", "satisfies", "verify", "verifies", "trace", "allocated_to", "maps_to", "authoritative_reference", "validated_against", "derived_from_external", "synchronized_with", "uses"],
+  blocks: ["contains", "contain", "satisfy", "satisfies", "verify", "verifies", "deriveReqt", "trace", "allocated_to", "maps_to", "authoritative_reference", "validated_against", "derived_from_external", "synchronized_with", "uses"],
+  parts: ["allocate", "allocated_to", "refine", "trace", "maps_to", "authoritative_reference", "validated_against", "derived_from_external", "synchronized_with"],
+  tests: ["verify", "verifies", "satisfy", "satisfies", "trace", "validated_against", "derived_from_external"],
   evidence: ["reports_on", "evidence_of"],
 };
 
@@ -76,6 +80,7 @@ const kindMeta: Record<GraphKind, { label: string; tone: GraphTone; border: stri
   requirement: { label: "Requirement", tone: "accent", border: "border-sky-400/40", fill: "bg-sky-500/10" },
   block: { label: "Block", tone: "neutral", border: "border-cyan-400/40", fill: "bg-cyan-500/10" },
   component: { label: "Part", tone: "warning", border: "border-amber-400/40", fill: "bg-amber-500/10" },
+  external_artifact: { label: "CAD part", tone: "warning", border: "border-orange-400/40", fill: "bg-orange-500/10" },
   test_case: { label: "Test", tone: "success", border: "border-emerald-400/40", fill: "bg-emerald-500/10" },
   operational_run: { label: "Operational evidence", tone: "neutral", border: "border-slate-400/40", fill: "bg-slate-500/10" },
   verification_evidence: { label: "Evidence", tone: "warning", border: "border-orange-400/40", fill: "bg-orange-500/10" },
@@ -90,6 +95,11 @@ const relationTone: Record<string, GraphTone> = {
   allocate: "accent",
   refine: "accent",
   allocated_to: "warning",
+  maps_to: "accent",
+  authoritative_reference: "neutral",
+  validated_against: "success",
+  synchronized_with: "accent",
+  derived_from_external: "warning",
   verifies: "success",
   reports_on: "neutral",
   evidence_of: "warning",
@@ -103,13 +113,15 @@ export function TraceabilityGraph({
   tree,
   requirements,
   components,
+  externalArtifacts,
   tests,
   runs,
   links,
+  artifactLinks,
   sysmlRelations,
   evidence,
 }: TraceabilityGraphProps) {
-  const raw = buildGraph({ blocks, tree, requirements, components, tests, runs, links, sysmlRelations, evidence });
+  const raw = buildGraph({ blocks, tree, requirements, components, externalArtifacts, tests, runs, links, artifactLinks, sysmlRelations, evidence });
   const filtered = applyFocusAndSelection(raw, focus, selectedNodeId ?? null);
 
   if (!filtered.nodes.length) {
@@ -809,9 +821,11 @@ function buildGraph({
   tree,
   requirements,
   components,
+  externalArtifacts,
   tests,
   runs,
   links,
+  artifactLinks,
   sysmlRelations,
   evidence,
 }: Omit<TraceabilityGraphProps, "focus" | "selectedNodeId" | "selectionBaseHref">): { nodes: GraphNode[]; edges: GraphEdge[] } {
@@ -891,6 +905,19 @@ function buildGraph({
     });
   }
 
+  for (const artifact of externalArtifacts) {
+    addNode({
+      id: `external_artifact:${artifact.id}`,
+      kind: "external_artifact",
+      label: artifact.external_id,
+      subtitle: artifact.name,
+      href: `/external-artifacts/${artifact.id}`,
+      status: artifact.status,
+      detail: artifact.artifact_type,
+      lane: 3,
+    });
+  }
+
   for (const test of tests) {
     addNode({
       id: `test_case:${test.id}`,
@@ -963,6 +990,21 @@ function buildGraph({
       target: `${targetKind}:${link.target_id}`,
       relation: link.relation_type,
       tone: relationTone[link.relation_type] ?? "warning",
+    });
+  }
+
+  for (const link of artifactLinks) {
+    const internalKind = federatedKind(link.internal_object_type);
+    if (!internalKind) continue;
+    const sourceId = `${internalKind}:${link.internal_object_id}`;
+    const targetId = `external_artifact:${link.external_artifact_id}`;
+    if (!nodes.has(sourceId) || !nodes.has(targetId)) continue;
+    addEdge({
+      id: `${sourceId}->${targetId}::artifact_${link.relation_type}`,
+      source: sourceId,
+      target: targetId,
+      relation: link.relation_type,
+      tone: relationTone[link.relation_type] ?? "accent",
     });
   }
 
@@ -1050,6 +1092,11 @@ function relationExplanation(relation: string, sourceKind: GraphKind, targetKind
   if (relation === "contains" || relation === "contain") return "Structural containment";
   if (relation === "deriveReqt") return "Derived requirement";
   if (relation === "allocate" || relation === "allocated_to") return "Allocated realization";
+  if (relation === "maps_to") return "Mapped external reference";
+  if (relation === "authoritative_reference") return "Authoritative reference";
+  if (relation === "validated_against") return "Validated against external source";
+  if (relation === "synchronized_with") return "Synchronized external source";
+  if (relation === "derived_from_external") return "Derived external source";
   if (relation === "refine") return "Refinement link";
   if (relation === "reports_on") return "Operational evidence";
   if (relation === "evidence_of") return "Reusable evidence";
@@ -1076,6 +1123,14 @@ function linkKind(kind: string) {
 
 function linkedObjectKind(kind: string) {
   if (kind === "requirement") return "requirement";
+  if (kind === "component") return "component";
+  if (kind === "test_case") return "test_case";
+  return null;
+}
+
+function federatedKind(kind: string) {
+  if (kind === "requirement") return "requirement";
+  if (kind === "block") return "block";
   if (kind === "component") return "component";
   if (kind === "test_case") return "test_case";
   return null;

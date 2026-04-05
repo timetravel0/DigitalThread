@@ -63,6 +63,7 @@ export interface Requirement {
   status: RequirementStatus;
   version: number;
   parent_requirement_id?: ID | null;
+  verification_criteria_json: Record<string, unknown>;
   approved_at?: string | null;
   approved_by?: string | null;
   rejection_reason?: string | null;
@@ -304,6 +305,7 @@ export interface Baseline {
   name: string;
   description: string;
   status: BaselineStatus;
+  release_flag: boolean;
   created_at: string;
   updated_at: string;
 }

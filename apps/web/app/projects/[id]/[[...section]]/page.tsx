@@ -11,6 +11,7 @@ import { RelationshipRegistry } from "@/components/relationship-registry";
 import { ProjectImportForm } from "@/components/project-import-form";
 import { SimulationEvidenceCard } from "@/components/simulation-evidence-card";
 import { SimulationEvidenceForm } from "@/components/simulation-evidence-form";
+import { ValidationWorkbench } from "@/components/validation-workbench";
 import { VerificationStatusBreakdownCard } from "@/components/verification-status-breakdown";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ const tabs = [
   { slug: "requirements", label: "Requirements" },
   { slug: "blocks", label: "Blocks" },
   { slug: "components", label: "Components" },
+  { slug: "software", label: "Software" },
   { slug: "tests", label: "Tests" },
   { slug: "runs", label: "Operational Runs" },
   { slug: "operational-evidence", label: "Operational Evidence" },
@@ -32,6 +34,7 @@ const tabs = [
   { slug: "sysml", label: "SysML" },
   { slug: "step-ap242", label: "STEP AP242" },
   { slug: "review-queue", label: "Review Queue" },
+  { slug: "validation", label: "Validation" },
   { slug: "matrix", label: "Matrix" },
   { slug: "baselines", label: "Baselines" },
   { slug: "non-conformities", label: "Non-Conformities" },
@@ -69,7 +72,7 @@ const layerViews: { key: LayerFilter; label: string }[] = [
 type GraphFocus = "core" | "all" | "requirements" | "blocks" | "parts" | "tests" | "evidence";
 
 const graphFocusViews: { key: GraphFocus; label: string }[] = [
-  { key: "core", label: "Core traceability" },
+  { key: "core", label: "Walk the thread" },
   { key: "requirements", label: "Requirements" },
   { key: "blocks", label: "Blocks" },
   { key: "parts", label: "Parts" },
@@ -174,16 +177,17 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
   }
 
   if (section === "graph") {
-    const [tree, sysmlRelations, evidence] = await Promise.all([
+    const [tree, sysmlRelations, evidence, externalArtifacts] = await Promise.all([
       api.sysmlTree(project.id).catch(() => null),
       api.sysmlRelations(project.id).catch(() => []),
       api.verificationEvidence(project.id).catch(() => []),
+      api.externalArtifacts(project.id).catch(() => []),
     ]);
     return (
       <div className="space-y-6">
         <SectionTitle
           title={`${project.code} - Traceability Graph`}
-          description="A compact relationship explorer for requirements, blocks, parts, tests, operational evidence, and verification evidence."
+          description="Walk the thread from mission requirements through subsystems, software realization nodes, CAD parts, tests, and evidence."
           action={
             <div className="flex flex-wrap gap-2">
               <Button href={`/projects/${project.id}/links`} variant="secondary">Relationship registry</Button>
@@ -212,9 +216,11 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
           tree={tree?.roots || []}
           requirements={requirements}
           components={components}
+          externalArtifacts={externalArtifacts}
           tests={tests}
           runs={runs}
           links={links}
+          artifactLinks={artifactLinks}
           sysmlRelations={sysmlRelations}
           evidence={evidence}
         />
@@ -226,7 +232,117 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
     return <SimpleListPage project={project} section={section} title="Review Queue" description="Items waiting in review." items={(reviewQueue?.items || []).map((item) => ({ key: item.key, label: `${item.object_type}: ${item.title}`, status: item.status, href: `/${item.object_type === "test_case" ? "test-cases" : item.object_type === "block" ? "blocks" : "requirements"}/${item.id}` }))} />;
   }
 
+  if (section === "validation") {
+    return (
+      <div className="space-y-6">
+        <SectionTitle
+          title={`${project.code} - Validation`}
+          description="A SidSat-style validation cockpit for non-technical reviewers. Pick a target requirement, choose a focus, and run a lightweight validation check with immediate alerts."
+        />
+        <Tabs projectId={project.id} section={section} />
+        <ValidationWorkbench
+          projectCode={project.code}
+          projectName={project.name}
+          requirements={requirements}
+        />
+      </div>
+    );
+  }
+
   if (section === "requirements") return <SimpleListPage project={project} section={section} title="Requirements" description="Editable requirements with approval workflow." items={requirements.map((item: any) => ({ key: item.key, label: `${item.key} - ${item.title}`, status: item.status, href: `/requirements/${item.id}` }))} createHref={`/requirements/new?project=${project.id}`} />;
+  if (section === "software") {
+    const softwareComponents = components.filter((item: any) => item.type === "software_module");
+    const softwareDetails = await Promise.all(softwareComponents.map((item: any) => api.component(item.id).catch(() => null)));
+    const linkedRequirementCount = softwareDetails.reduce((count, detail: any) => count + (detail?.links || []).filter((link: any) => link.source_type === "requirement" || link.target_type === "requirement").length, 0);
+    const linkedEvidenceCount = softwareDetails.reduce((count, detail: any) => count + (detail?.verification_evidence || []).length, 0);
+    return (
+      <div className="space-y-6">
+        <SectionTitle
+          title={`${project.code} - Software`}
+          description="Explicit software realization traceability for flight software and other software modules."
+          action={<Button href={`/components/new?project=${project.id}`} variant="secondary">Create component</Button>}
+        />
+        <Tabs projectId={project.id} section={section} />
+        <div className="grid gap-4 md:grid-cols-3">
+          <Mini metric="Software modules" value={softwareComponents.length} />
+          <Mini metric="Requirement links" value={linkedRequirementCount} />
+          <Mini metric="Evidence records" value={linkedEvidenceCount} />
+        </div>
+        {softwareComponents.length ? (
+          <div className="grid gap-6 xl:grid-cols-2">
+            {softwareDetails.map((detail: any, index: number) => {
+              if (!detail) return null;
+              const metadata = detail.component.metadata_json || {};
+              const repository = metadata.repository || metadata.repository_ref || "Not recorded";
+              const branch = metadata.branch || metadata.ref || "Not recorded";
+              const entryPoint = metadata.entry_point || metadata.main_module || "Not recorded";
+              const traceLinks = (detail.links || []).filter((link: any) => {
+                const relation = String(link.relation_type || "");
+                return relation === "allocated_to" || relation === "uses" || relation === "satisfies" || relation === "trace";
+              });
+              return (
+                <Card key={detail.component.id}>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold">{detail.component.key} - {detail.component.name}</div>
+                        <div className="mt-1 text-xs text-muted">Software realization artifact</div>
+                      </div>
+                      <Badge tone="warning">{detail.component.status}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardBody className="space-y-3">
+                    <div className="grid gap-2 text-sm">
+                      <Row label="Version" value={detail.component.version} />
+                      <Row label="Repository" value={repository} />
+                      <Row label="Branch" value={branch} />
+                      <Row label="Entry point" value={entryPoint} />
+                    </div>
+                    <div className="rounded-xl border border-dashed border-line bg-panel2 p-3 text-sm text-muted">
+                      This surface makes software realization explicit. Requirements, blocks, and evidence can trace directly to the software module instead of hiding it inside a generic component list.
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-xs uppercase tracking-[0.2em] text-muted">Traceability</div>
+                      {traceLinks.length ? (
+                        <div className="space-y-2">
+                          {traceLinks.map((link: any) => (
+                            <div key={link.id} className="rounded-xl border border-line bg-panel2 p-3">
+                              <div className="font-medium">{link.source_label || link.source_type} <span className="text-muted">-&gt;</span> {link.target_label || link.target_type}</div>
+                              <div className="text-xs text-muted">{link.relation_type}{link.rationale ? ` · ${link.rationale}` : ""}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted">No requirement, block, or trace links found for this software module.</div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-xs uppercase tracking-[0.2em] text-muted">Evidence</div>
+                      {detail.verification_evidence?.length ? (
+                        <div className="space-y-2">
+                          {detail.verification_evidence.map((evidence: any) => (
+                            <div key={evidence.id} className="rounded-xl border border-line bg-panel2 p-3">
+                              <div className="font-medium">{evidence.title}</div>
+                              <div className="mt-1 text-xs text-muted">{evidence.evidence_type} · {evidence.observed_at || "no observed date"}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted">No verification evidence linked yet.</div>
+                      )}
+                    </div>
+                    <Button href={`/components/${detail.component.id}`} variant="secondary">Open component detail</Button>
+                  </CardBody>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState title="No software modules yet" description="Create a component with type software_module to expose software realization traceability explicitly." />
+        )}
+      </div>
+    );
+  }
   if (section === "blocks") {
     const filteredBlocks = layer === "all" ? blocks : blocks.filter((item: any) => item.abstraction_level === layer);
     return (
@@ -497,7 +613,9 @@ export default async function ProjectWorkspace({ params, searchParams }: { param
             <Button href={`/projects/${project.id}/requirements`} className="w-full">Requirements</Button>
             <Button href={`/projects/${project.id}/blocks`} className="w-full" variant="secondary">Blocks</Button>
             <Button href={`/projects/${project.id}/components`} className="w-full" variant="secondary">Components</Button>
+            <Button href={`/projects/${project.id}/software`} className="w-full" variant="secondary">Software</Button>
             <Button href={`/projects/${project.id}/tests`} className="w-full" variant="secondary">Tests</Button>
+            <Button href={`/projects/${project.id}/validation`} className="w-full" variant="secondary">Validation</Button>
             <Button href={`/projects/${project.id}/simulation-evidence`} className="w-full" variant="secondary">Simulation Evidence</Button>
             <Button href={`/projects/${project.id}/fmi`} className="w-full" variant="secondary">FMI</Button>
             <Button href={`/projects/${project.id}/operational-evidence`} className="w-full" variant="secondary">Operational Evidence</Button>

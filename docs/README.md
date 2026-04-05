@@ -19,4 +19,4 @@ Documentation policy:
 - keep feature documentation aligned for standards placeholders such as AP242 and FMI
 - keep all documentation in English
 
-The same documentation set is also available from inside the application through the `Documentation` navigation item.
+The same documentation set is also available from inside the application through the `Documentation` navigation item, including the Validation cockpit guidance added for the simplified SidSat-style review flow.

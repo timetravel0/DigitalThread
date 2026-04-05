@@ -105,6 +105,25 @@ export default async function RequirementPage({ params }: { params: { id: string
         />
       </div>
 
+      <Card>
+        <CardHeader><div className="font-semibold">Verification criteria</div></CardHeader>
+        <CardBody className="space-y-3 text-sm text-muted">
+          <div className="rounded-xl border border-dashed border-line bg-panel2 p-3">
+            These criteria are evaluated automatically against telemetry, operational evidence, simulation evidence, and linked test results.
+          </div>
+          {Object.keys(data.requirement.verification_criteria_json || {}).length ? (
+            <pre className="overflow-auto rounded-xl border border-line bg-panel2 p-3 text-xs text-text">
+              {JSON.stringify(data.requirement.verification_criteria_json, null, 2)}
+            </pre>
+          ) : (
+            <EmptyState
+              title="No criteria defined"
+              description="Add telemetry thresholds or other measurable conditions in the requirement form to make closed-loop verification deterministic."
+            />
+          )}
+        </CardBody>
+      </Card>
+
       {data.requirement.status === "approved" ? (
         <Card>
           <CardHeader><div className="font-semibold">Approved item editing</div></CardHeader>
@@ -181,7 +200,9 @@ export default async function RequirementPage({ params }: { params: { id: string
               </div>
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full border border-line px-2 py-1">Evidence: {data.verification_evaluation.linked_evidence_count}</span>
-                <span className="rounded-full border border-line px-2 py-1">Operational batches: {data.verification_evaluation.linked_operational_run_count}</span>
+                <span className="rounded-full border border-line px-2 py-1">Simulation batches: {data.simulation_evidence?.length || 0}</span>
+                <span className="rounded-full border border-line px-2 py-1">Operational evidence batches: {data.operational_evidence?.length || 0}</span>
+                <span className="rounded-full border border-line px-2 py-1">Operational runs: {data.verification_evaluation.linked_operational_run_count}</span>
                 <span className="rounded-full border border-line px-2 py-1">Tests: {data.verification_evaluation.linked_test_case_count}</span>
                 <span className="rounded-full border border-line px-2 py-1">Passed: {data.verification_evaluation.passed_test_case_count}</span>
               </div>

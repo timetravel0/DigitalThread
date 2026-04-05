@@ -248,6 +248,45 @@ def _verification_signal_from_evidence(evidence: VerificationEvidence) -> Requir
     return _verification_signal_from_text(combined) if combined else None
 
 
+def _simulation_signal_from_evidence(evidence: SimulationEvidence) -> RequirementVerificationStatus | None:
+    if evidence.result == SimulationEvidenceResult.failed:
+        return RequirementVerificationStatus.failed
+    if evidence.result == SimulationEvidenceResult.partial:
+        return RequirementVerificationStatus.partially_verified
+    if evidence.result == SimulationEvidenceResult.passed:
+        return RequirementVerificationStatus.verified
+    return None
+
+
+def _operational_evidence_signal_from_record(evidence: OperationalEvidence) -> RequirementVerificationStatus | None:
+    if evidence.quality_status == OperationalEvidenceQualityStatus.poor:
+        return RequirementVerificationStatus.failed
+    if evidence.quality_status == OperationalEvidenceQualityStatus.warning:
+        return RequirementVerificationStatus.at_risk
+    if evidence.quality_status == OperationalEvidenceQualityStatus.good:
+        return RequirementVerificationStatus.verified
+    return RequirementVerificationStatus.partially_verified
+
+
+def _threshold_violations(criteria_json: dict[str, Any], measurements: list[tuple[str, dict[str, Any]]]) -> list[str]:
+    thresholds = criteria_json.get("telemetry_thresholds") or criteria_json.get("thresholds")
+    if not isinstance(thresholds, dict):
+        return []
+    violations: list[str] = []
+    for metric, rule in thresholds.items():
+        if not isinstance(rule, dict):
+            continue
+        min_value = rule.get("min")
+        max_value = rule.get("max")
+        for source, payload in measurements:
+            actual = payload.get(metric)
+            if isinstance(actual, (int, float)) and max_value is not None and actual > max_value:
+                violations.append(f"{source}: {metric}={actual} exceeds maximum {max_value}.")
+            if isinstance(actual, (int, float)) and min_value is not None and actual < min_value:
+                violations.append(f"{source}: {metric}={actual} is below minimum {min_value}.")
+    return violations
+
+
 def _verification_status_breakdown(session: Session, requirements: list[Requirement]) -> VerificationStatusBreakdown:
     counts = Counter({status.value: 0 for status in RequirementVerificationStatus})
     for requirement in requirements:
@@ -1226,6 +1265,16 @@ def create_requirement_draft_version(session: Session, obj_id: UUID, payload: Wo
         raise LookupError("Requirement not found")
     if item.status != RequirementStatus.approved:
         raise ValueError("Draft versions can only be created from approved requirements.")
+    released_baselines = _released_baselines_for_object(session, item.project_id, BaselineObjectType.requirement, item.id)
+    if released_baselines:
+        _ensure_change_request_for_released_baseline(
+            session,
+            project_id=item.project_id,
+            object_type="requirement",
+            object_id=item.id,
+            object_label=f"{item.key} - {item.title}",
+            reason=f"Released baseline(s) {', '.join(b.name for b in released_baselines)} include this requirement and a draft version has been created.",
+        )
     draft = Requirement(
         project_id=item.project_id,
         key=item.key,
@@ -1237,6 +1286,7 @@ def create_requirement_draft_version(session: Session, obj_id: UUID, payload: Wo
         status=RequirementStatus.draft,
         version=item.version + 1,
         parent_requirement_id=item.parent_requirement_id,
+        verification_criteria_json=dict(item.verification_criteria_json or {}),
         review_comment=payload.change_summary if payload else None,
     )
     _commit(session, draft)
@@ -1337,6 +1387,17 @@ def update_component(session: Session, obj_id: UUID, payload: ComponentUpdate) -
     item = _get(session, Component, obj_id)
     if item is None:
         raise LookupError("Component not found")
+    released_baselines = _released_baselines_for_object(session, item.project_id, BaselineObjectType.component, item.id)
+    if released_baselines:
+        _ensure_change_request_for_released_baseline(
+            session,
+            project_id=item.project_id,
+            object_type="component",
+            object_id=item.id,
+            object_label=f"{item.key} - {item.name}",
+            reason=f"Released baseline(s) {', '.join(b.name for b in released_baselines)} include this component. A change request is required before editing.",
+        )
+        raise ValueError("Released baseline components cannot be edited in place. A change request has been created.")
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(item, k, v)
     _touch(item)
@@ -1377,6 +1438,16 @@ def create_block_draft_version(session: Session, obj_id: UUID, payload: Workflow
         raise LookupError("Block not found")
     if item.status != BlockStatus.approved:
         raise ValueError("Draft versions can only be created from approved blocks.")
+    released_baselines = _released_baselines_for_object(session, item.project_id, BaselineObjectType.block, item.id)
+    if released_baselines:
+        _ensure_change_request_for_released_baseline(
+            session,
+            project_id=item.project_id,
+            object_type="block",
+            object_id=item.id,
+            object_label=f"{item.key} - {item.name}",
+            reason=f"Released baseline(s) {', '.join(b.name for b in released_baselines)} include this block and a draft version has been created.",
+        )
     draft = Block(
         project_id=item.project_id,
         key=item.key,
@@ -1880,6 +1951,16 @@ def create_test_case_draft_version(session: Session, obj_id: UUID, payload: Work
         raise LookupError("Test case not found")
     if item.status != TestCaseStatus.approved:
         raise ValueError("Draft versions can only be created from approved test cases.")
+    released_baselines = _released_baselines_for_object(session, item.project_id, BaselineObjectType.test_case, item.id)
+    if released_baselines:
+        _ensure_change_request_for_released_baseline(
+            session,
+            project_id=item.project_id,
+            object_type="test_case",
+            object_id=item.id,
+            object_label=f"{item.key} - {item.title}",
+            reason=f"Released baseline(s) {', '.join(b.name for b in released_baselines)} include this test case and a draft version has been created.",
+        )
     draft = TestCase(
         project_id=item.project_id,
         key=item.key,
@@ -2100,6 +2181,74 @@ def _related_baselines_for_configuration_context(session: Session, context: Conf
         if baseline_signature and baseline_signature.issubset(context_signatures):
             related.append(baseline)
     return related
+
+
+def _released_baselines_for_object(session: Session, project_id: UUID, object_type: BaselineObjectType, object_id: UUID) -> list[BaselineRead]:
+    rows = _items(
+        session.exec(
+            select(Baseline)
+            .join(BaselineItem, BaselineItem.baseline_id == Baseline.id)
+            .where(
+                Baseline.project_id == project_id,
+                Baseline.status == BaselineStatus.released,
+                BaselineItem.object_type == object_type,
+                BaselineItem.object_id == object_id,
+            )
+            .order_by(desc(Baseline.created_at), desc(Baseline.id))
+        )
+    )
+    return [BaselineRead.model_validate(row) for row in rows]
+
+
+def _ensure_change_request_for_released_baseline(
+    session: Session,
+    *,
+    project_id: UUID,
+    object_type: str,
+    object_id: UUID,
+    object_label: str,
+    reason: str,
+) -> ChangeRequestRead | None:
+    existing = _first_item(
+        session.exec(
+            select(ChangeRequest)
+            .join(ChangeImpact)
+            .where(
+                ChangeRequest.project_id == project_id,
+                ChangeImpact.object_type == object_type,
+                ChangeImpact.object_id == object_id,
+                ChangeRequest.status.in_([ChangeRequestStatus.open, ChangeRequestStatus.analysis, ChangeRequestStatus.approved]),
+            )
+            .order_by(desc(ChangeRequest.created_at), desc(ChangeRequest.id))
+        )
+    )
+    if existing is not None:
+        return ChangeRequestRead.model_validate(existing)
+    key_prefix = f"CR-REL-{object_type[:3].upper()}-{str(object_id)[:8].upper()}"
+    cr = _add(
+        session,
+        ChangeRequest(
+            project_id=project_id,
+            key=key_prefix,
+            title=f"Released baseline change required for {object_label}",
+            description=reason,
+            status=ChangeRequestStatus.open,
+            severity=Severity.high,
+        ),
+    )
+    _add(
+        session,
+        ChangeImpact(
+            change_request_id=cr.id,
+            object_type=object_type,
+            object_id=object_id,
+            impact_level=ImpactLevel.high,
+            notes=reason,
+        ),
+    )
+    session.commit()
+    session.refresh(cr)
+    return ChangeRequestRead.model_validate(cr)
 
 
 def create_change_request(session: Session, payload: ChangeRequestCreate) -> ChangeRequestRead:
@@ -2676,6 +2825,18 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
         internal_object_type=FederatedInternalObjectType.requirement,
         internal_object_id=requirement.id,
     )
+    simulation_evidence = list_simulation_evidence(
+        session,
+        requirement.project_id,
+        internal_object_type=SimulationEvidenceLinkObjectType.requirement,
+        internal_object_id=requirement.id,
+    )
+    operational_evidence = list_operational_evidence(
+        session,
+        requirement.project_id,
+        internal_object_type=OperationalEvidenceLinkObjectType.requirement,
+        internal_object_id=requirement.id,
+    )
     requirement_links = list_links(session, requirement.project_id, "requirement", requirement.id)
     verification_links = [
         link
@@ -2717,6 +2878,34 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
         elif run.outcome == OperationalOutcome.failure:
             failed_operational_run_count += 1
 
+    operational_evidence_signals = [_operational_evidence_signal_from_record(item) for item in operational_evidence]
+    simulation_signals = [_simulation_signal_from_evidence(item) for item in simulation_evidence]
+
+    measurement_sources: list[tuple[str, dict[str, Any]]] = []
+    for run in operational_runs:
+        payload = {k: v for k, v in {
+            "duration_minutes": run.duration_minutes,
+            "max_temperature_c": run.max_temperature_c,
+            "battery_consumption_pct": run.battery_consumption_pct,
+            "outcome": _status_value(run.outcome),
+        }.items() if v is not None}
+        payload.update({k: v for k, v in run.telemetry_json.items() if v is not None})
+        measurement_sources.append((f"operational run {getattr(run, 'key', 'run')}", payload))
+    for batch in operational_evidence:
+        payload = {}
+        payload.update(batch.aggregated_observations_json)
+        payload.update(batch.derived_metrics_json)
+        payload.update({k: v for k, v in batch.metadata_json.items() if v is not None})
+        measurement_sources.append((f"operational evidence {batch.title}", payload))
+    for simulation in simulation_evidence:
+        payload = {}
+        payload.update(simulation.inputs_json)
+        payload.update({k: v for k, v in simulation.metadata_json.items() if v is not None})
+        payload["result"] = simulation.result.value
+        measurement_sources.append((f"simulation evidence {simulation.title}", payload))
+
+    threshold_violations = _threshold_violations(getattr(requirement, "verification_criteria_json", {}) or {}, measurement_sources)
+
     linked_test_case_count = len(verification_links)
     passed_test_case_count = 0
     partial_test_case_count = 0
@@ -2735,13 +2924,29 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
 
     linked_evidence_count = len(evidence)
     linked_operational_run_count = len(operational_runs)
-    has_any_verification_input = bool(linked_evidence_count or linked_operational_run_count or linked_test_case_count)
+    linked_operational_evidence_count = len(operational_evidence)
+    linked_simulation_evidence_count = len(simulation_evidence)
+    has_any_verification_input = bool(
+        linked_evidence_count
+        or linked_operational_run_count
+        or linked_operational_evidence_count
+        or linked_simulation_evidence_count
+        or linked_test_case_count
+    )
 
     evidence_signals = [_verification_signal_from_evidence(item) for item in evidence]
     explicit_failed_evidence_count = sum(1 for signal in evidence_signals if signal == RequirementVerificationStatus.failed)
     explicit_risk_evidence_count = sum(1 for signal in evidence_signals if signal == RequirementVerificationStatus.at_risk)
     explicit_partial_evidence_count = sum(1 for signal in evidence_signals if signal == RequirementVerificationStatus.partially_verified)
     explicit_verified_evidence_count = sum(1 for signal in evidence_signals if signal == RequirementVerificationStatus.verified)
+    explicit_failed_operational_evidence_count = sum(1 for signal in operational_evidence_signals if signal == RequirementVerificationStatus.failed)
+    explicit_risk_operational_evidence_count = sum(1 for signal in operational_evidence_signals if signal == RequirementVerificationStatus.at_risk)
+    explicit_partial_operational_evidence_count = sum(1 for signal in operational_evidence_signals if signal == RequirementVerificationStatus.partially_verified)
+    explicit_verified_operational_evidence_count = sum(1 for signal in operational_evidence_signals if signal == RequirementVerificationStatus.verified)
+    explicit_failed_simulation_evidence_count = sum(1 for signal in simulation_signals if signal == RequirementVerificationStatus.failed)
+    explicit_risk_simulation_evidence_count = sum(1 for signal in simulation_signals if signal == RequirementVerificationStatus.at_risk)
+    explicit_partial_simulation_evidence_count = sum(1 for signal in simulation_signals if signal == RequirementVerificationStatus.partially_verified)
+    explicit_verified_simulation_evidence_count = sum(1 for signal in simulation_signals if signal == RequirementVerificationStatus.verified)
 
     def _base_kwargs(
         reasons: list[str],
@@ -2776,6 +2981,25 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
             "no verification evidence",
         )
 
+    if threshold_violations:
+        reasons = ["One or more requirement thresholds were exceeded by telemetry or evidence data."]
+        reasons.extend(threshold_violations[:4])
+        return _base_kwargs(reasons, RequirementVerificationStatus.failed, "requirement thresholds")
+
+    if explicit_failed_simulation_evidence_count > 0:
+        reasons = [f"{explicit_failed_simulation_evidence_count} linked simulation evidence record(s) explicitly indicate failure."]
+        if explicit_failed_operational_evidence_count > 0:
+            reasons.append(f"{explicit_failed_operational_evidence_count} operational evidence batch(es) explicitly indicate failure.")
+        if failed_test_case_count > 0:
+            reasons.append(f"{failed_test_case_count} linked test case(s) have a failed latest run.")
+        return _base_kwargs(reasons, RequirementVerificationStatus.failed, "simulation evidence")
+
+    if explicit_failed_operational_evidence_count > 0:
+        reasons = [f"{explicit_failed_operational_evidence_count} operational evidence batch(es) explicitly indicate failure."]
+        if failed_operational_run_count > 0:
+            reasons.append(f"{failed_operational_run_count} operational run(s) recorded a failure.")
+        return _base_kwargs(reasons, RequirementVerificationStatus.failed, "operational evidence")
+
     if explicit_failed_evidence_count > 0:
         reasons = [f"{explicit_failed_evidence_count} linked verification evidence record(s) explicitly indicate failure."]
         if failed_test_case_count > 0:
@@ -2783,6 +3007,20 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
         if failed_operational_run_count > 0:
             reasons.append(f"{failed_operational_run_count} operational evidence batch(es) recorded a failure.")
         return _base_kwargs(reasons, RequirementVerificationStatus.failed, "verification evidence")
+
+    if explicit_risk_simulation_evidence_count > 0:
+        reasons = [f"{explicit_risk_simulation_evidence_count} linked simulation evidence record(s) indicate risk or partial completion."]
+        if explicit_risk_operational_evidence_count > 0:
+            reasons.append(f"{explicit_risk_operational_evidence_count} operational evidence batch(es) indicate risk.")
+        if explicit_partial_simulation_evidence_count > 0:
+            reasons.append(f"{explicit_partial_simulation_evidence_count} simulation evidence record(s) are partial.")
+        return _base_kwargs(reasons, RequirementVerificationStatus.at_risk, "simulation evidence")
+
+    if explicit_risk_operational_evidence_count > 0:
+        reasons = [f"{explicit_risk_operational_evidence_count} operational evidence batch(es) indicate risk."]
+        if stale_operational_run_count > 0:
+            reasons.append(f"{stale_operational_run_count} operational run(s) are stale.")
+        return _base_kwargs(reasons, RequirementVerificationStatus.at_risk, "operational evidence")
 
     if explicit_risk_evidence_count > 0:
         reasons = [f"{explicit_risk_evidence_count} linked verification evidence record(s) explicitly indicate risk or degradation."]
@@ -2813,6 +3051,21 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
             reasons.append("Operational evidence batches are also current.")
         return _base_kwargs(reasons, RequirementVerificationStatus.verified, "verification evidence")
 
+    if explicit_verified_simulation_evidence_count > 0:
+        reasons = ["Linked simulation evidence explicitly supports the requirement."]
+        if linked_test_case_count == 0 and requirement.verification_method == VerificationMethod.test:
+            reasons.append("A verification test case is still expected for this requirement.")
+            return _base_kwargs(reasons, RequirementVerificationStatus.partially_verified, "simulation evidence")
+        if linked_operational_evidence_count > 0 or linked_operational_run_count > 0:
+            reasons.append("Operational feedback is also current.")
+        return _base_kwargs(reasons, RequirementVerificationStatus.verified, "simulation evidence")
+
+    if explicit_verified_operational_evidence_count > 0:
+        reasons = ["Linked operational evidence explicitly supports the requirement."]
+        if linked_operational_run_count > 0:
+            reasons.append("Operational runs are also current.")
+        return _base_kwargs(reasons, RequirementVerificationStatus.verified, "operational evidence")
+
     if failed_test_case_count > 0 or failed_operational_run_count > 0:
         reasons = []
         if failed_test_case_count > 0:
@@ -2821,7 +3074,7 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
             reasons.append(f"{failed_operational_run_count} operational evidence batch(es) recorded a failure.")
         return _base_kwargs(reasons, RequirementVerificationStatus.failed, "test and operational evidence")
 
-    if stale_evidence_count > 0 or stale_operational_run_count > 0 or degraded_operational_run_count > 0:
+    if stale_evidence_count > 0 or stale_operational_run_count > 0 or degraded_operational_run_count > 0 or explicit_partial_operational_evidence_count > 0 or explicit_partial_simulation_evidence_count > 0:
         reasons = []
         if stale_evidence_count > 0:
             reasons.append(f"{stale_evidence_count} evidence record(s) are stale or missing observed dates.")
@@ -2829,6 +3082,10 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
             reasons.append(f"{stale_operational_run_count} operational evidence batch(es) are stale.")
         if degraded_operational_run_count > 0:
             reasons.append(f"{degraded_operational_run_count} operational evidence batch(es) reported degradation.")
+        if explicit_partial_operational_evidence_count > 0:
+            reasons.append(f"{explicit_partial_operational_evidence_count} operational evidence batch(es) indicate partial coverage.")
+        if explicit_partial_simulation_evidence_count > 0:
+            reasons.append(f"{explicit_partial_simulation_evidence_count} simulation evidence record(s) indicate partial coverage.")
         return _base_kwargs(reasons, RequirementVerificationStatus.at_risk, "freshness and run health")
 
     if requirement.verification_method == VerificationMethod.test:
@@ -3403,11 +3660,11 @@ def seed_demo(session: Session) -> dict[str, Any]:
 
     reqs = {}
     for p in [
-        {"project_id": project.id, "key": "DR-REQ-001", "title": "Drone shall fly for at least 30 minutes", "description": "Mission endurance target for the inspection route, with reserve for recovery.", "category": RequirementCategory.performance, "priority": Priority.critical, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
+        {"project_id": project.id, "key": "DR-REQ-001", "title": "Drone shall fly for at least 30 minutes", "description": "Mission endurance target for the inspection route, with reserve for recovery.", "category": RequirementCategory.performance, "priority": Priority.critical, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "verification_criteria_json": {"telemetry_thresholds": {"duration_minutes": {"min": 30}, "battery_consumption_pct": {"max": 85}}}, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
         {"project_id": project.id, "key": "DR-REQ-002", "title": "Drone shall stream real-time video to ground operator", "description": "Operator situational awareness requirement for the inspection mission.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
         {"project_id": project.id, "key": "DR-REQ-003", "title": "Drone shall operate between -5C and 40C", "description": "Environmental constraint derived from the intended mission profile.", "category": RequirementCategory.environment, "priority": Priority.high, "verification_method": VerificationMethod.analysis, "status": RequirementStatus.in_review, "version": 1},
         {"project_id": project.id, "key": "DR-REQ-004", "title": "Drone shall detect obstacles during low altitude flight", "description": "Safety requirement for the inspection route and landing approach.", "category": RequirementCategory.safety, "priority": Priority.critical, "verification_method": VerificationMethod.test, "status": RequirementStatus.approved, "version": 1, "approved_at": datetime.now(timezone.utc), "approved_by": "seed"},
-        {"project_id": project.id, "key": "DR-REQ-005", "title": "Drone shall support remote monitoring of battery and mission status", "description": "Ground-control visibility requirement for mission health and endurance.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.demonstration, "status": RequirementStatus.draft, "version": 1},
+        {"project_id": project.id, "key": "DR-REQ-005", "title": "Drone shall support remote monitoring of battery and mission status", "description": "Ground-control visibility requirement for mission health and endurance.", "category": RequirementCategory.operations, "priority": Priority.high, "verification_method": VerificationMethod.demonstration, "status": RequirementStatus.draft, "version": 1, "verification_criteria_json": {"telemetry_thresholds": {"battery_consumption_pct": {"max": 85}}}},
         {"project_id": project.id, "key": "DR-REQ-006", "title": "Battery pack shall support mission reserve margin of 10 percent", "description": "Derived reserve requirement created from the endurance mission need.", "category": RequirementCategory.performance, "priority": Priority.medium, "verification_method": VerificationMethod.analysis, "status": RequirementStatus.draft, "version": 1, "parent_requirement_id": None},
     ]:
         item = _first_item(session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == p["key"])))
@@ -3698,7 +3955,7 @@ def seed_demo(session: Session) -> dict[str, Any]:
                     "low_battery_warning": True,
                 },
                 metadata_json={"contract_reference": "OP-EVBATCH:DR-RUN-001"},
-                linked_requirement_ids=[reqs["DR-REQ-001"].id],
+                linked_requirement_ids=[reqs["DR-REQ-001"].id, reqs["DR-REQ-005"].id],
                 linked_verification_evidence_ids=[endurance_verification_evidence.id] if endurance_verification_evidence else [],
             ),
         )

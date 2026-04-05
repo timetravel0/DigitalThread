@@ -6,6 +6,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.models import (
     ArtifactLinkRelationType,
+    ArtifactLink,
     AbstractionLevel,
     Block,
     BlockContainmentRelationType,
@@ -20,6 +21,7 @@ from app.models import (
     ConfigurationContextType,
     ConfigurationItemKind,
     ConnectorType,
+    ExternalArtifact,
     ExternalArtifactType,
     ExternalArtifactStatus,
     FederatedInternalObjectType,
@@ -58,6 +60,7 @@ from app.schemas import (
     BlockCreate,
     BlockContainmentCreate,
     BaselineCreate,
+    BaselineStatus,
     FMIContractCreate,
     ConfigurationContextCreate,
     ConfigurationItemMappingCreate,
@@ -84,6 +87,7 @@ from app.schemas import (
     VerificationEvidenceCreate,
     WorkflowActionPayload,
     ComponentCreate,
+    ComponentUpdate,
     ConnectorDefinitionCreate,
 )
 from app.services import (
@@ -138,6 +142,7 @@ from app.services import (
     get_test_case_detail,
     get_project_dashboard,
     list_requirement_history,
+    list_change_requests,
     list_fmi_contracts,
     list_operational_evidence,
     reject_requirement,
@@ -149,6 +154,7 @@ from app.services import (
     seed_demo,
     submit_requirement_for_review,
     update_requirement,
+    update_component,
     update_configuration_context,
     update_non_conformity,
     update_operational_run,
@@ -171,22 +177,29 @@ def test_seed_demo_populates_sysml_driven_kpis():
         req2 = session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == "DR-REQ-002")).one()
         req3 = session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == "DR-REQ-003")).one()
         req4 = session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == "DR-REQ-004")).one()
+        req5 = session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == "DR-REQ-005")).one()
 
         req1_detail = get_requirement_detail(session, req1.id)
         req2_detail = get_requirement_detail(session, req2.id)
         req3_detail = get_requirement_detail(session, req3.id)
         req4_detail = get_requirement_detail(session, req4.id)
+        req5_detail = get_requirement_detail(session, req5.id)
+        external_artifacts = session.exec(select(ExternalArtifact).where(ExternalArtifact.project_id == project.id)).all()
+        artifact_links = session.exec(select(ArtifactLink).where(ArtifactLink.project_id == project.id)).all()
 
         assert dashboard.kpis.total_requirements == 6
         assert dashboard.kpis.requirements_with_allocated_components == 5
-        assert dashboard.kpis.requirements_with_verifying_tests == 4
-        assert dashboard.kpis.requirements_at_risk == 2
+        assert dashboard.kpis.requirements_with_verifying_tests == 5
+        assert dashboard.kpis.requirements_at_risk == 3
         assert dashboard.kpis.failed_tests_last_30_days == 1
         assert dashboard.kpis.open_change_requests == 1
         assert req1_detail["verification_evaluation"].status == RequirementVerificationStatus.failed
         assert req2_detail["verification_evaluation"].status == RequirementVerificationStatus.verified
         assert req3_detail["verification_evaluation"].status == RequirementVerificationStatus.verified
         assert req4_detail["verification_evaluation"].status == RequirementVerificationStatus.at_risk
+        assert req5_detail["verification_evaluation"].status == RequirementVerificationStatus.failed
+        assert any(artifact.artifact_type == ExternalArtifactType.cad_part for artifact in external_artifacts)
+        assert any(link.relation_type == ArtifactLinkRelationType.maps_to for link in artifact_links)
 
 
 def test_verification_evidence_explicit_signals_override_test_run_compatibility():
@@ -571,6 +584,97 @@ def test_requirement_verification_status_engine_uses_evidence_and_test_runs():
             ),
         )
         assert get_requirement_detail(session, verified_requirement.id)["verification_evaluation"].status == RequirementVerificationStatus.verified
+
+
+def test_requirement_verification_status_violates_closed_loop_telemetry_thresholds():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-THRESH", name="Thresholds", description=""))
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-THRESH",
+                title="Telemetry threshold requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.analysis,
+                verification_criteria_json={"telemetry_thresholds": {"battery_consumption_pct": {"max": 85}}},
+            ),
+        )
+        create_operational_evidence(
+            session,
+            OperationalEvidenceCreate(
+                project_id=project.id,
+                title="Threshold breach telemetry batch",
+                source_name="Telemetry aggregator",
+                source_type=OperationalEvidenceSourceType.system,
+                captured_at=datetime.now(timezone.utc),
+                coverage_window_start=datetime.now(timezone.utc) - timedelta(minutes=25),
+                coverage_window_end=datetime.now(timezone.utc),
+                observations_summary="Battery consumption exceeded the allowed threshold.",
+                aggregated_observations_json={"battery_consumption_pct": 88, "duration_minutes": 25},
+                quality_status=OperationalEvidenceQualityStatus.warning,
+                derived_metrics_json={"coverage_minutes": 25},
+                linked_requirement_ids=[requirement.id],
+            ),
+        )
+        detail = get_requirement_detail(session, requirement.id)
+        assert detail["verification_evaluation"].status == RequirementVerificationStatus.failed
+        assert any("exceeds maximum" in reason for reason in detail["verification_evaluation"].reasons)
+
+
+def test_released_baseline_creates_change_request_for_modified_requirement_and_blocks_component_edit():
+    with make_session() as session:
+        project = create_project(session, ProjectCreate(code="P-AST", name="AST", description=""))
+        requirement = create_requirement(
+            session,
+            RequirementCreate(
+                project_id=project.id,
+                key="REQ-AST",
+                title="Released requirement",
+                category=RequirementCategory.performance,
+                priority=Priority.high,
+                verification_method=VerificationMethod.analysis,
+                status=RequirementStatus.approved,
+            ),
+        )
+        component = create_component(
+            session,
+            ComponentCreate(
+                project_id=project.id,
+                key="CMP-AST",
+                name="Released component",
+                description="",
+                type=ComponentType.other,
+                status=ComponentStatus.validated,
+            ),
+        )
+        baseline, _ = create_baseline(
+            session,
+            BaselineCreate(
+                project_id=project.id,
+                name="Released baseline",
+                description="Frozen release snapshot",
+                status=BaselineStatus.released,
+                requirement_ids=[requirement.id],
+                component_ids=[component.id],
+            ),
+        )
+        baseline_detail = get_baseline_detail(session, baseline.id)
+        assert baseline_detail["baseline"].release_flag is True
+
+        draft = create_requirement_draft_version(session, requirement.id, WorkflowActionPayload(actor="systems", change_summary="Update requirement after release"))
+        assert draft.status == RequirementStatus.draft
+        change_requests = list_change_requests(session, project.id)
+        assert any("Released baseline change required" in cr.title for cr in change_requests)
+        cr = next(cr for cr in change_requests if "Released baseline change required" in cr.title)
+        cr_detail = get_change_request_detail(session, cr.id)
+        assert any(impact.object_type == "requirement" and impact.object_id == requirement.id for impact in cr_detail["impacts"])
+
+        with pytest.raises(ValueError, match="Released baseline components cannot be edited in place"):
+            update_component(session, component.id, ComponentUpdate(name="Edited component"))
+        change_requests = list_change_requests(session, project.id)
+        assert any(impact.object_type == "component" and impact.object_id == component.id for cr in change_requests for impact in get_change_request_detail(session, cr.id)["impacts"])
 
 
 def test_verification_evidence_naive_observed_at_does_not_break_requirement_evaluation():

@@ -98,7 +98,7 @@ The architecture below still describes the intended semantics and extension path
 - Key fields: `id`, `project_id`, `name`, `key`, `version`, `repository_ref`, `status`, `metadata_json`.
 - Relations: linked to requirements, blocks, external artifacts, and verification evidence.
 - Why needed: flight software often needs a clearer lifecycle than a generic block.
-- Phase: optional until the demo needs it.
+- Phase: implemented as a dedicated software realization surface on top of the existing `Component` model with `type = software_module`.
 
 #### PhysicalPart
 
@@ -201,8 +201,9 @@ The major UI additions after federation are:
 
 - configuration comparison and review-gate views,
 - verification evidence pages,
+- a lightweight validation cockpit with dropdown-based checks,
 - non-conformity pages,
-- graph or relationship visualization,
+- graph / relationship visualization for walk-the-thread exploration,
 - logical vs physical traceability views,
 - standards and connector contract pages,
   - evidence-driven impact summaries and compact impact maps.

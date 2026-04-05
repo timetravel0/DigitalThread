@@ -19,6 +19,7 @@ const schema = z.object({
   verification_method: z.enum(["analysis", "inspection", "test", "demonstration"]),
   status: z.enum(["draft", "in_review", "approved", "rejected", "implemented", "verified", "failed", "obsolete", "retired"]),
   parent_requirement_id: z.string().optional().or(z.literal("")),
+  verification_criteria_json: z.string().optional().default("{}"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -38,19 +39,23 @@ export function RequirementForm({ initial, onSaved }: { initial?: Partial<Requir
       verification_method: initial?.verification_method || "test",
       status: initial?.status || "draft",
       parent_requirement_id: initial?.parent_requirement_id || "",
+      verification_criteria_json: JSON.stringify(initial?.verification_criteria_json || {}, null, 2),
     },
   });
 
   const submit = form.handleSubmit(async (values) => {
     setError(null);
     try {
+      const verification_criteria_json = values.verification_criteria_json?.trim()
+        ? JSON.parse(values.verification_criteria_json)
+        : {};
       if (initial?.id) {
-        await api.updateRequirement(initial.id, values);
+        await api.updateRequirement(initial.id, { ...values, verification_criteria_json });
         onSaved?.();
         router.refresh();
         router.push(`/requirements/${initial.id}`);
       } else {
-        const created = await api.createRequirement(values);
+        const created = await api.createRequirement({ ...values, verification_criteria_json });
         onSaved?.();
         router.push(`/requirements/${created.id}`);
       }
@@ -100,6 +105,7 @@ export function RequirementForm({ initial, onSaved }: { initial?: Partial<Requir
         </Select>
       </div>
       <Input placeholder="Parent requirement ID (optional)" {...form.register("parent_requirement_id")} />
+      <Textarea placeholder='Verification criteria JSON, for example {"telemetry_thresholds": {"battery_consumption_pct": {"max": 85}}}' rows={6} {...form.register("verification_criteria_json")} />
       {error ? <div className="text-sm text-danger">{error}</div> : null}
       <Button type="submit">Save requirement</Button>
     </form>

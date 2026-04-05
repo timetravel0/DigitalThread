@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function ComponentPage({ params }: { params: { id: string } }) {
   const data = await api.component(params.id).catch(() => null);
   if (!data) return <div className="text-sm text-muted">Component not found.</div>;
+  const releasedBaselines = (data.impact.related_baselines || []).filter((baseline: any) => baseline.release_flag || baseline.status === "released");
   return (
     <div className="space-y-6">
       <SectionTitle title={`${data.component.key} - ${data.component.name}`} description={data.component.description} />
@@ -37,12 +38,40 @@ export default async function ComponentPage({ params }: { params: { id: string }
           </CardBody>
         </Card>
       </div>
+      <Card>
+        <CardHeader><div className="font-semibold">Released baselines</div></CardHeader>
+        <CardBody className="space-y-3">
+          <div className="rounded-xl border border-dashed border-line bg-panel2 p-3 text-sm text-muted">
+            If this component belongs to a released baseline, any direct edit must route through a change request first.
+          </div>
+          {releasedBaselines.length ? (
+            releasedBaselines.map((baseline: any) => (
+              <Link key={baseline.id} href={`/baselines/${baseline.id}`} className="block rounded-xl border border-line bg-panel2 p-4 hover:border-accent/50">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="font-semibold">{baseline.name}</div>
+                    <div className="mt-1 text-sm text-muted">{baseline.description || "No description provided."}</div>
+                  </div>
+                  <Badge tone={baseline.release_flag ? "danger" : "neutral"}>{baseline.release_flag ? "Released" : baseline.status}</Badge>
+                </div>
+              </Link>
+            ))
+          ) : (
+            <div className="text-sm text-muted">No released baseline currently includes this component.</div>
+          )}
+        </CardBody>
+      </Card>
       {data.component.type === "software_module" ? (
         <Card>
-          <CardHeader><div className="font-semibold">Software realization</div></CardHeader>
+          <CardHeader><div className="font-semibold">Software realization traceability</div></CardHeader>
           <CardBody className="space-y-3 text-sm text-muted">
-            <p>This component is treated as a software realization artifact, so requirements, blocks, and evidence can trace directly to it.</p>
-            <p>Use the linked evidence panel below to connect telemetry, simulation, or test evidence to the software module.</p>
+            <p>This component is treated as an explicit software realization artifact, so requirements, blocks, and evidence can trace directly to it.</p>
+            <p>Use the requirement and block traceability panel, together with the evidence section, to inspect how the software module fits the drone thread.</p>
+            <div className="grid gap-2 rounded-xl border border-line bg-panel2 p-3 text-sm text-text">
+              <Row label="Repository" value={data.component.metadata_json?.repository || data.component.metadata_json?.repository_ref || "Not recorded"} />
+              <Row label="Branch" value={data.component.metadata_json?.branch || data.component.metadata_json?.ref || "Not recorded"} />
+              <Row label="Entry point" value={data.component.metadata_json?.entry_point || data.component.metadata_json?.main_module || "Not recorded"} />
+            </div>
           </CardBody>
         </Card>
       ) : null}

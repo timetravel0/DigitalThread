@@ -26,7 +26,7 @@ The most important risk in the current foundation is governance hardness. Config
 | MBSE / SysML alignment | Internal SysML-inspired trace semantics | Partial | Existing `SysMLRelation`, satisfaction, verification, derivation views | The internal model is useful but still not a standards-shaped contract | Preserve the current views and add mapping contracts rather than a rewrite |
 | MBSE / SysML alignment | SysML v2-aligned mapping surface | Implemented | `SysMLMappingContractResponse`, `/api/projects/{project_id}/sysml/mapping-contract`, and the SysML mapping contract view | The internal model now has an explicit contract-shaped projection to SysML concepts | Preserve the mapping contract and extend it only when more standards contracts are needed |
 | PLM / physical part linkage | Explicit physical part modeling | Partial | Generic `Component` and `Block` records, plus external PLM-linked artifacts | The demo can reference PLM parts, but physical realization is still partly generic | Keep the current abstraction for now and introduce a stronger part model only if needed |
-| Software module traceability | Software realization traceability | Partial | Software appears through generic block/component typing and external links | No distinct software module lifecycle yet | Add a software realization layer only when the demo needs it |
+| Software module traceability | Software realization traceability | Implemented | Dedicated `Software` workspace section, `software_module` component type, repository metadata in component detail, and evidence/traceability surfaces | Software realization is now explicit instead of implied | Preserve the current surface and extend it only if a dedicated lifecycle becomes necessary |
 | Test and verification evidence | Test execution records | Partial | `TestCase`, `TestRun`, test UI and demo data | Execution exists, but evidence is still run-centric | Keep test runs as execution records and use evidence for reviewable claims |
 | Test and verification evidence | First-class verification evidence | Implemented | `VerificationEvidence` model, requirement status engine, requirement detail UI, dashboard summary, and export bundle | Verification status can now be derived from a durable evidence layer | Preserve the current evidence model and extend it with future telemetry and simulation contracts only |
 | Simulation feedback | Simulation-linked evidence | Implemented | `SimulationEvidence` is a first-class record with requirement, test case, and verification-evidence links | Simulation evidence is now distinct from test runs and generic verification evidence | Keep simulation evidence explicit and extend it with future contracts when needed |
@@ -43,7 +43,7 @@ The most important risk in the current foundation is governance hardness. Config
 | Standards support | SysML v2-shaped mapping path | Implemented | SysML mapping contract endpoint, export bundle inclusion, and SysML mapping contract UI | SysML alignment is now explicit rather than narrative | Extend the contract only when newer standards mappings are required |
 | Standards support | STEP AP242 placeholder contract | Implemented | `STEPAP242ContractResponse`, `/api/projects/{project_id}/step-ap242-contract`, export bundle inclusion, and the STEP AP242 contract view | Physical part linkage now has an explicit AP242-style contract shape | Keep the contract lightweight and focus FMI work only on future adapter needs |
 | Standards support | FMI placeholder contract | Implemented | `FMIContractResponse`, `/api/projects/{project_id}/fmi-contracts`, export bundle inclusion, and the FMI contract view | Simulation interoperability now has an explicit placeholder contract shape | Keep the contract lightweight and extend it only when FMI-like adapters are needed |
-| Graph visualization | Relationship graph view | Missing | Current UI uses lists, cards, and matrices | Federation is visible, but not graph-centric | Add a node-link or relationship browser view after the core model settles |
+| Graph visualization | Relationship graph view | Implemented | Compact graph explorer with walk-the-thread focus, CAD parts, software nodes, and evidence links | The graph is now available, but future densification or alternative layouts may still be useful | Preserve the current graph and extend only if a denser graph-native experience becomes necessary |
 | Export / exchange | Deterministic bundle with federation data | Implemented | Export now includes connectors, external artifacts, versions, links, contexts, and mappings | The bundle is useful as a handoff artifact | Keep the schema stable and use it as the seed for exchange contracts |
 | Extensibility toward SME productization | Domain-specific architecture that can absorb more aerospace semantics | Partial | Monorepo, service layer, seeded drone demo, and clean federation primitives | The product is extensible, but some semantics are still generic | Evolve the next layers without disrupting the current federation base |
 
@@ -53,9 +53,9 @@ The most important risk in the current foundation is governance hardness. Config
 2. There is no context-to-context comparison or configuration diff view.
 3. Non-conformities are modeled as independent lifecycle objects, but their lifecycle can still be hardened further if the product requires stricter audit rules.
 4. Standards-aware contracts for FMI are implemented as a lightweight placeholder surface.
-5. Relationship visualization is still list-based rather than graph-based.
+5. Relationship visualization now exists as a graph, but alternative layouts may still be useful for very dense projects.
 6. Change management is not yet tied to evidence, disposition, and closure semantics.
-7. The physical part and software realization model is still partially generic.
+7. The physical part model remains partially generic, but software realization is now explicit.
 
 ## Recommended Implementation Sequence
 
@@ -64,5 +64,5 @@ The most important risk in the current foundation is governance hardness. Config
 3. Add non-conformity objects and connect them to evidence and change.
 4. Expand change management into a traceable lifecycle with audit records.
 5. Add FMI adapters and other lightweight import adapters.
-6. Add graph-based trace visualization and traversal improvements.
-7. Refine physical/software realization modeling only where the demo needs it.
+6. Extend graph-based trace visualization only if denser relationship browsing becomes a future need.
+7. Refine physical realization modeling only where the demo needs it.

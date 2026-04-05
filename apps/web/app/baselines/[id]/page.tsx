@@ -45,6 +45,13 @@ export default async function BaselinePage({ params, searchParams }: { params: {
             <Stat label="Bridge status" value={<Badge tone="accent">{data.bridge_context.status}</Badge>} />
             <Stat label="Items" value={data.bridge_context.item_count} />
           </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Stat
+              label="Release flag"
+              value={<Badge tone={data.baseline.release_flag ? "danger" : "neutral"}>{data.baseline.release_flag ? "Released" : "Not released"}</Badge>}
+            />
+            <Stat label="Baseline status" value={<Badge tone={data.baseline.status === "released" ? "success" : "neutral"}>{data.baseline.status}</Badge>} />
+          </div>
           <div className="rounded-xl border border-dashed border-line bg-panel p-3 text-sm text-muted">
             Bridge source: <span className="text-text">{data.bridge_context.baseline_name}</span>
           </div>

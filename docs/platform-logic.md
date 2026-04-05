@@ -106,6 +106,8 @@ Verification uses a layered model:
 Evaluation is evidence-led:
 
 - explicit verification evidence signals take precedence
+- telemetry threshold breaches on a requirement are treated as a direct failure signal
+- simulation evidence and operational evidence are first-class inputs, not hidden inside run records
 - compatible test runs and operational runs act as fallback when evidence is neutral
 - failures dominate risk, and risk dominates partial support
 - approval status stays separate from verification status
@@ -129,7 +131,27 @@ The dashboard and project summary pages use the computed verification states to 
 - `failed`
 - `not_covered`
 
-## 7. Baseline Logic
+## 7. Validation Cockpit Logic
+
+The validation cockpit is a lightweight, client-side review surface.
+
+It works like this:
+
+1. the user selects a target requirement
+2. the user chooses a validation focus such as mission, power, thermal, evidence, or release gate
+3. the user presses `Start Validation`
+4. the UI fetches the current requirement detail from the API
+5. the UI computes immediate alerts from the requirement's verification criteria, linked evidence, released baselines, and open change requests
+
+This keeps the feature simple:
+
+- no new validation job table
+- no new backend validation engine
+- no hidden state transitions
+
+The cockpit is meant to help reviewers understand what needs attention, not to replace the requirement verification engine.
+
+## 8. Baseline Logic
 
 Baselines are frozen internal snapshots.
 
@@ -139,12 +161,18 @@ When a baseline is created:
 - the object version is captured at baseline time
 - baseline items keep object type, object id, and object version
 
+When a baseline is marked as released:
+
+- the baseline becomes a release flag for change control
+- follow-up edits to linked components or requirements should route through a change request
+- the baseline detail page surfaces the release flag so reviewers can see which snapshots are authoritative
+
 This means a baseline answers:
 
 - what was approved
 - which version was approved
 
-## 8. Configuration Context Logic
+## 9. Configuration Context Logic
 
 Configuration contexts are broader than baselines.
 
@@ -164,7 +192,7 @@ They support:
 Use baselines when you want a frozen internal snapshot.
 Use configuration contexts when you want a review gate or mixed internal/external scope.
 
-## 9. Impact Logic
+## 10. Impact Logic
 
 Impact analysis is pragmatic, not exhaustive graph theory.
 
@@ -195,7 +223,7 @@ When a block changes, the impact view looks at:
 - parent and child blocks through containment
 - downstream evidence and change records where relevant
 
-## 10. Matrix Logic
+## 11. Matrix Logic
 
 The matrix view is a deterministic coverage table.
 
@@ -205,7 +233,7 @@ The matrix view is a deterministic coverage table.
 
 This view is intentionally simple so reviewers can answer coverage questions quickly.
 
-## 11. SysML-Inspired Semantics
+## 12. SysML-Inspired Semantics
 
 ThreadLite implements a focused SysML subset:
 
@@ -229,13 +257,14 @@ The logical vs physical toggle is implemented as a read-only projection over `Bl
 
 This toggle does not change the underlying data model or create alternate records.
 
-## 12. Seed Logic
+## 13. Seed Logic
 
 The seeded drone project is intentionally structured to exercise the main platform rules:
 
 - requirements cover endurance, video, environment, obstacle detection, and telemetry
 - blocks show logical and physical structure
 - components map realization
+- a dedicated software module exposes flight software as a distinct realization layer
 - tests provide verification
 - simulation evidence, operational evidence, and runs show closed-loop behavior
 - a change request and a baseline demonstrate review control
@@ -250,15 +279,16 @@ The demo narrative is deliberate: mission need -> architecture -> evidence -> ch
 
 The seed is designed to make the dashboard, matrix, graph, SysML, and export views useful immediately.
 
-The traceability graph is intentionally a compact relationship explorer rather than a node-link canvas.
+The traceability graph is intentionally a compact relationship explorer rather than a heavy node-link canvas.
 
 - the graph includes all objects that belong to the chosen focus
 - the focus buttons reduce the network only when the reviewer wants less density
 - clicking a box opens a focused graph with separate Incoming / Focus / Outgoing columns
+- the graph walk includes requirements, blocks, software realization nodes, CAD parts, tests, and evidence so reviewers can move from the mission need to the physical realization and back again
 - the default view is compact and card-based, while the focused view uses a wider graph layout with visible link labels, visible edge ports on the box boundary, separators, and extra routing space for repeated links between the same objects
 - relation explanations sit on the link itself so reviewers can see why the relation exists
 
-## 13. Export Logic
+## 14. Export Logic
 
 The export bundle is a deterministic JSON package.
 
@@ -281,7 +311,7 @@ Why this matters:
 - external tools can validate the result without needing the UI
 - the bundle can serve as an audit or handoff artifact
 
-## 14. Import Logic
+## 15. Import Logic
 
 Import is intentionally lightweight.
 
@@ -305,7 +335,7 @@ Why this matters:
 - it keeps the importer simple enough to review in the UI
 - it avoids adding a larger file pipeline before the product needs it
 
-## 15. Local Runtime Logic
+## 16. Local Runtime Logic
 
 ThreadLite supports two runtime modes:
 
@@ -314,7 +344,7 @@ ThreadLite supports two runtime modes:
 
 The local mode is intentionally simple so developers can work without a database server.
 
-## 16. Documentation Logic
+## 17. Documentation Logic
 
 The repository documentation is surfaced inside the application as a built-in manual.
 
@@ -325,7 +355,7 @@ That means:
 - the user guide should remain aligned with the actual screens and flows
 - the platform logic guide should remain aligned with the backend rules
 
-## 17. Service Layer Structure
+## 18. Service Layer Structure
 
 The backend service layer is split into a small set of domain entry points for maintainability.
 
@@ -335,7 +365,7 @@ The backend service layer is split into a small set of domain entry points for m
 
 This split keeps the behavior stable while making the high-change domains easier to locate.
 
-## 18. What Is Intentionally Deferred
+## 19. What Is Intentionally Deferred
 
 The platform does not yet implement:
 

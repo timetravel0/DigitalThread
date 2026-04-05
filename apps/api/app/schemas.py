@@ -4,7 +4,7 @@ from datetime import date as dt_date, datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models import *
 
@@ -44,6 +44,7 @@ class RequirementBase(BaseModel):
     status: RequirementStatus = RequirementStatus.draft
     version: int = 1
     parent_requirement_id: UUID | None = None
+    verification_criteria_json: dict[str, Any] = Field(default_factory=dict)
     approved_at: datetime | None = None
     approved_by: str | None = None
     rejection_reason: str | None = None
@@ -65,6 +66,7 @@ class RequirementUpdate(BaseModel):
     status: RequirementStatus | None = None
     version: int | None = None
     parent_requirement_id: UUID | None = None
+    verification_criteria_json: dict[str, Any] | None = None
     approved_at: datetime | None = None
     approved_by: str | None = None
     rejection_reason: str | None = None
@@ -423,6 +425,12 @@ class BaselineRead(BaselineCreate, ORMBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    release_flag: bool = False
+
+    @model_validator(mode="after")
+    def _derive_release_flag(self) -> "BaselineRead":
+        self.release_flag = self.status == BaselineStatus.released
+        return self
 
 
 class BaselineDetailRead(BaseModel):

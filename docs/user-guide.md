@@ -60,6 +60,7 @@ Tabs you will use:
 - `Requirements` for requirement authoring
 - `Blocks` for SysML-inspired structural elements
 - `Components` for realization objects
+- `Software` for explicit software realization traceability
 - `Tests` for verification test cases and runs
 - `Simulation Evidence` for model-based evidence records
 - `Operational Evidence` for field or telemetry batches
@@ -68,6 +69,7 @@ Tabs you will use:
 - `Graph` for visual relationship exploration
 - `SysML` for block structure, satisfaction, verification, and derivation views
 - `Review Queue` for items waiting for approval
+- `Validation` for a lightweight validation cockpit with dropdowns and immediate alerts
 - `Matrix` for requirement coverage analysis
 - `Baselines` for approved snapshots
 - `Change Requests` for change control
@@ -148,6 +150,21 @@ How to use them:
 2. create or inspect component records
 3. use metadata for supplier, part number, firmware, or other project-specific details
 4. link components to requirements and tests for traceability
+
+## 7.1 Software
+
+What software is for:
+
+- surface software modules as a distinct realization layer instead of hiding them in a generic component list
+- show which requirements, blocks, and evidence point to the software module
+- keep repository metadata visible so the software thread is understandable in review
+
+How to use it:
+
+1. open the `Software` tab
+2. inspect the software modules in the project
+3. open a software module detail page to inspect repository metadata, traceability, and evidence
+4. use the component form with `software_module` type when you want to author a new software realization artifact
 
 ## 8. Test Cases
 
@@ -250,9 +267,10 @@ How to use it:
 2. create evidence from a test result, simulation output, inspection, or telemetry source
 3. link it to the relevant requirement and test case
 4. reuse the same evidence record when you need to reference it in review or export workflows
-5. use the computed verification badge on the requirement detail page to see whether the requirement is `verified`, `partially_verified`, `at_risk`, `failed`, or `not_covered`
-6. note that verification evidence is evaluated first, with test or operational runs used only as compatibility fallback when the evidence itself is neutral
-7. inspect the "Why this status?" panel to see the decision source and the main reasons behind the computed result
+5. define telemetry thresholds in the requirement when you want the platform to close the loop automatically
+6. use the computed verification badge on the requirement detail page to see whether the requirement is `verified`, `partially_verified`, `at_risk`, `failed`, or `not_covered`
+7. note that verification evidence is evaluated first, with telemetry thresholds, simulation evidence, and operational evidence also participating before test or operational runs are treated as fallback
+8. inspect the "Why this status?" panel to see the decision source and the main reasons behind the computed result
 
 ## 14. Traceability
 
@@ -272,7 +290,7 @@ How to use it:
 
 What it shows:
 
-- a compact relationship explorer for the chosen focus, including requirements, blocks, parts, tests, runs, evidence, and changes
+- a compact relationship explorer for the chosen focus, including requirements, blocks, CAD parts, software modules, tests, runs, evidence, and changes
 - focus filters that let you reduce the view when you want less density
 - click-to-isolate behavior that opens a focused graph with separate Incoming / Focus / Outgoing columns
 - readable link explanations on each connection so you can see why the relation exists, with visible edge ports on the box boundary and extra spacing when multiple links connect the same pair of objects
@@ -284,7 +302,7 @@ How to use it:
 2. choose a focus mode when you want to narrow the network
 3. use `Core traceability` for the default review-oriented view
 4. use `All` when you want to inspect the entire project network
-5. click any box to open a focused graph for that object and its direct incoming/outgoing neighbors, with separated link tracks and clearer labels
+5. click any box to open a focused graph for that object and its connected thread, with separated link tracks, CAD part nodes, software realization nodes, and clearer labels
 
 Tip:
 
@@ -348,6 +366,7 @@ What baselines are for:
 
 - capture approved content at a point in time
 - preserve object versions for later comparison or audit
+- mark a baseline as released when you want follow-up edits to generate a change-request trail automatically
 
 How to use them:
 
@@ -420,6 +439,22 @@ How to use it:
 4. include requirement or test case links on verification evidence rows
 5. submit the import and inspect the created records in the result panel
 
+## 23. Validation
+
+What validation is for:
+
+- give non-technical reviewers a quick way to check a requirement without reading the full backend model
+- show immediate alerts based on the selected requirement's verification criteria and current evidence
+- highlight release-gate issues when a requirement is part of a released baseline
+
+How to use it:
+
+1. open `Validation` in a project workspace
+2. choose a target requirement
+3. choose a validation focus such as mission, power, thermal, evidence, or release gate
+4. press `Start Validation`
+5. inspect the summary, threshold checks, and alert cards
+
 ## 24. Export
 
 What export does:
@@ -433,7 +468,7 @@ How to use it:
 2. click `Export JSON`
 3. send the bundle to another tool or environment for validation
 
-## 24. Common Workflows
+## 25. Common Workflows
 
 ### Explore the seeded demo
 
