@@ -10,6 +10,7 @@ import { Button, Input, Select, Textarea } from "@/components/ui";
 import { getLabels, type DomainProfile, type LabelSet } from "@/lib/labels";
 import { useToast } from "@/lib/toast-context";
 import type { Requirement } from "@/lib/types";
+import { FormFooter, JsonTextareaField, InlineHelp } from "@/components/form-helpers";
 
 type RequirementCategoryValue = "performance" | "safety" | "environment" | "operations" | "compliance";
 type VerificationMethodValue = "analysis" | "inspection" | "test" | "demonstration";
@@ -224,14 +225,17 @@ export function RequirementForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Select {...form.register("project_id")} disabled={!projects.length}>
-          {(projects.length ? projects : currentProject ? [currentProject] : []).map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.code} - {project.name}
-            </option>
-          ))}
-        </Select>
-        <Input placeholder={`${labels.requirement} key`} {...form.register("key")} />
+        <div className="space-y-1">
+          <Select {...form.register("project_id")} disabled={!projects.length}>
+            {(projects.length ? projects : currentProject ? [currentProject] : []).map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.code} - {project.name}
+              </option>
+            ))}
+          </Select>
+          <InlineHelp>Select the project that owns this {labels.requirement.toLowerCase()}.</InlineHelp>
+        </div>
+        <Input placeholder={`${labels.requirement} key`} readOnly {...form.register("key")} />
       </div>
       <Input placeholder={`${labels.requirement} title`} {...form.register("title")} />
       <Textarea placeholder={labels.requirement_description} rows={4} {...form.register("description")} />
@@ -268,9 +272,16 @@ export function RequirementForm({
         <Input placeholder={`Parent ${labels.requirement} ID (optional)`} {...form.register("parent_requirement_id")} />
         <p className="text-xs text-muted">Related {labels.block} traceability is shown from the requirement detail page.</p>
       </div>
-      <Textarea placeholder='Verification criteria JSON, for example {"telemetry_thresholds": {"battery_consumption_pct": {"max": 85}}}' rows={6} {...form.register("verification_criteria_json")} />
+      <JsonTextareaField
+        label="Verification criteria"
+        description="Use this to define the measurable conditions that close the loop on this requirement. Leave it empty if the requirement is still qualitative."
+        example='{"telemetry_thresholds": {"battery_consumption_pct": {"max": 85}}, "expected_result": "passed"}'
+        rows={6}
+        error={null}
+        {...form.register("verification_criteria_json")}
+      />
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">{`Save ${labels.requirement}`}</Button>
+      <FormFooter submitLabel={`Save ${labels.requirement}`} onCancel={() => router.back()} />
     </form>
   );
 }

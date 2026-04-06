@@ -9,6 +9,7 @@ import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import type { ConnectorDefinition } from "@/lib/types";
 import type { DomainProfile } from "@/lib/labels";
+import { FormFooter, JsonTextareaField, InlineHelp } from "@/components/form-helpers";
 
 type ProjectOption = {
   id: string;
@@ -77,13 +78,16 @@ export function ConnectorForm({ initial, projects = [], initialProjectId }: { in
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Select {...form.register("project_id")} disabled={!projects.length}>
-          {(projects.length ? projects : projects[0] ? [projects[0]] : []).map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.code} - {project.name}
-            </option>
-          ))}
-        </Select>
+        <div className="space-y-1">
+          <Select {...form.register("project_id")} disabled={!projects.length}>
+            {(projects.length ? projects : projects[0] ? [projects[0]] : []).map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.code} - {project.name}
+              </option>
+            ))}
+          </Select>
+          <InlineHelp>Select the project that owns this connector.</InlineHelp>
+        </div>
         <Input placeholder="Connector name" {...form.register("name")} />
       </div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -103,9 +107,15 @@ export function ConnectorForm({ initial, projects = [], initialProjectId }: { in
       </div>
       <Input placeholder="Base URL" {...form.register("base_url")} />
       <Textarea placeholder="Description" rows={3} {...form.register("description")} />
-      <Textarea placeholder="Metadata JSON" rows={5} {...form.register("metadata_json")} />
+      <JsonTextareaField
+        label="Connector metadata"
+        description="Use this for connector-specific settings or notes that are not covered by the standard fields."
+        example='{"sync_mode": "manual", "owner": "integration-team"}'
+        rows={5}
+        {...form.register("metadata_json")}
+      />
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Save connector</Button>
+      <FormFooter submitLabel="Save connector" onCancel={() => router.back()} />
     </form>
   );
 }

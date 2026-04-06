@@ -9,6 +9,7 @@ import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import { getLabels, type DomainProfile } from "@/lib/labels";
 import type { OperationalRun } from "@/lib/types";
+import { FormFooter, JsonTextareaField, InlineHelp } from "@/components/form-helpers";
 
 type ProjectOption = {
   id: string;
@@ -105,13 +106,16 @@ export function OperationalRunForm({ initial, profile, projects = [], initialPro
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Select {...form.register("project_id")} disabled={!projects.length}>
-          {(projects.length ? projects : currentProject ? [currentProject] : []).map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.code} - {project.name}
-            </option>
-          ))}
-        </Select>
+        <div className="space-y-1">
+          <Select {...form.register("project_id")} disabled={!projects.length}>
+            {(projects.length ? projects : currentProject ? [currentProject] : []).map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.code} - {project.name}
+              </option>
+            ))}
+          </Select>
+          <InlineHelp>Select the project that owns this operational run.</InlineHelp>
+        </div>
         <Input placeholder="Run key" readOnly {...form.register("key")} />
       </div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -132,9 +136,15 @@ export function OperationalRunForm({ initial, profile, projects = [], initialPro
         <Input type="number" step="0.1" placeholder="Battery consumption %" {...form.register("battery_consumption_pct")} />
       </div>
       <Textarea placeholder="Notes" rows={3} {...form.register("notes")} />
-      <Textarea placeholder='Telemetry JSON, e.g. {"altitude_m": 43, "return_to_home": true}' rows={6} {...form.register("telemetry_json")} />
+      <JsonTextareaField
+        label="Telemetry"
+        description="Add structured telemetry only when it helps explain the run. Leave {} if the run does not need extra data."
+        example='{"altitude_m": 43, "return_to_home": true}'
+        rows={6}
+        {...form.register("telemetry_json")}
+      />
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">{`Save ${labels.operationalRun}`}</Button>
+      <FormFooter submitLabel={`Save ${labels.operationalRun}`} onCancel={() => router.back()} />
     </form>
   );
 }

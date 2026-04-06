@@ -117,6 +117,7 @@ from app.main import (
     update_configuration_context_endpoint,
     mapping_contract_endpoint,
     step_ap242_contract_endpoint,
+    project_tab_stats_endpoint,
     seed_manufacturing_demo_endpoint,
     seed_personal_demo_endpoint,
 )
@@ -1491,6 +1492,22 @@ def test_profile_seed_endpoints_create_profile_specific_projects():
         assert personal["seeded"] is True
         assert manufacturing_project.domain_profile == "manufacturing"
         assert personal_project.domain_profile == "personal"
+
+
+def test_project_tab_stats_endpoint_reports_core_thread_counts():
+    with make_session() as session:
+        seed_manufacturing_demo_endpoint(session=session)
+        project = session.exec(select(Project).where(Project.code == "MFG-001")).one()
+
+        stats = project_tab_stats_endpoint(project.id, session=session)
+
+        assert stats.requirements >= 8
+        assert stats.blocks >= 6
+        assert stats.tests >= 8
+        assert stats.baselines >= 1
+        assert stats.change_requests >= 1
+        assert stats.simulation_evidence >= 2
+        assert stats.operational_evidence >= 2
 
 
 def test_csv_import_endpoint_creates_external_artifacts_and_verification_evidence():

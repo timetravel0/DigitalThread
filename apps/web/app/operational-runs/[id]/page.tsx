@@ -46,7 +46,7 @@ export default async function OperationalRunPage({ params }: { params: { id: str
                 </div>
               ))
             ) : (
-              <div className="text-sm text-muted">No requirements linked yet.</div>
+              <div className="text-sm text-muted">No requirements linked yet. Operational runs belong here when a flight, field test, or homelab execution needs to be traced back to the requirements it exercised.</div>
             )}
           </CardBody>
         </Card>
@@ -69,7 +69,7 @@ export default async function OperationalRunPage({ params }: { params: { id: str
                 </div>
               ))
             ) : (
-              <div className="text-sm text-muted">No directly impacted objects found.</div>
+              <div className="text-sm text-muted">No directly impacted objects found yet. Impact preview becomes useful when the run is tied to requirements, blocks, or evidence that could change because of it.</div>
             )}
           </CardBody>
         </Card>

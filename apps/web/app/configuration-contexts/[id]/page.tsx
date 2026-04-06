@@ -72,7 +72,9 @@ export default async function ConfigurationContextPage({ params, searchParams }:
                   </Link>
                 ))
               ) : (
-                <div className="rounded-xl border border-dashed border-line bg-panel2 p-3 text-sm text-muted">No matching baseline found yet.</div>
+                <div className="rounded-xl border border-dashed border-line bg-panel2 p-3 text-sm text-muted">
+                  No matching baseline found yet. A related baseline appears when the context realizes the same approved internal item set, so keep the context aligned with the frozen review snapshot.
+                </div>
               )}
             </div>
           </CardBody>
@@ -94,7 +96,7 @@ export default async function ConfigurationContextPage({ params, searchParams }:
                   </div>
                 ))
               ) : (
-                <div className="text-sm text-muted">No internal items.</div>
+                <div className="rounded-xl border border-dashed border-line bg-panel2 p-3 text-sm text-muted">No internal items are mapped yet. Add requirements, blocks, or test cases to this context so reviewers can see which approved internal objects it represents.</div>
               )}
             </div>
             <div className="space-y-3">
@@ -112,7 +114,7 @@ export default async function ConfigurationContextPage({ params, searchParams }:
                   </div>
                 ))
               ) : (
-                <div className="text-sm text-muted">No external items.</div>
+                <div className="rounded-xl border border-dashed border-line bg-panel2 p-3 text-sm text-muted">No external items are mapped yet. Add external artifact versions here when you need the context to point back to authoritative tool-owned records.</div>
               )}
             </div>
           </CardBody>
@@ -194,7 +196,7 @@ export default async function ConfigurationContextPage({ params, searchParams }:
               </div>
             ))
           ) : (
-            <div className="text-sm text-muted">No lifecycle events recorded yet.</div>
+            <div className="rounded-xl border border-dashed border-line bg-panel2 p-3 text-sm text-muted">No lifecycle events recorded yet. A context becomes easier to review once its active, frozen, or obsolete transitions are captured explicitly.</div>
           )}
         </CardBody>
       </Card>
@@ -239,7 +241,7 @@ export default async function ConfigurationContextPage({ params, searchParams }:
               </div>
             ))
           ) : (
-            <div className="text-sm text-muted">No mappings yet.</div>
+            <div className="rounded-xl border border-dashed border-line bg-panel2 p-3 text-sm text-muted">No mappings yet. Add internal and external items above so this context can show which approved object set it represents.</div>
           )}
         </CardBody>
       </Card>

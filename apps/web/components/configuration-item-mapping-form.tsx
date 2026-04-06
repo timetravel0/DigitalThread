@@ -10,6 +10,7 @@ import { Button, Input, Select, Textarea } from "@/components/ui";
 import type {
   ExternalArtifactVersion,
 } from "@/lib/types";
+import { FormFooter, InlineHelp } from "@/components/form-helpers";
 
 type EditableInternalObjectType = "requirement" | "block" | "test_case";
 type InternalConfigurationItemKind = "internal_requirement" | "internal_block" | "internal_test_case";
@@ -137,8 +138,9 @@ export function InternalConfigurationItemMappingForm({
             <Input placeholder="Role label" disabled={disabled} {...form.register("role_label")} />
           </div>
           <Textarea placeholder="Notes" rows={3} disabled={disabled} {...form.register("notes")} />
+          <InlineHelp>Use notes to explain how the selected internal object maps into the context.</InlineHelp>
           {error ? <div className="text-sm text-danger">{error}</div> : null}
-          <Button type="submit" disabled={disabled}>Add internal item</Button>
+          <FormFooter submitLabel="Add internal item" onCancel={() => router.back()} cancelDisabled={disabled} />
         </>
       ) : (
         <div className="rounded-xl border border-dashed border-line bg-panel2 p-4 text-sm text-muted">No internal items available in this project yet.</div>
@@ -209,8 +211,9 @@ export function ExternalConfigurationItemMappingForm({
             <Input value="Authoritative external reference" readOnly disabled />
           </div>
           <Textarea placeholder="Notes" rows={3} disabled={disabled} {...form.register("notes")} />
+          <InlineHelp>Use notes to explain how the selected external version maps into the context.</InlineHelp>
           {error ? <div className="text-sm text-danger">{error}</div> : null}
-          <Button type="submit" disabled={disabled}>Add external item</Button>
+          <FormFooter submitLabel="Add external item" onCancel={() => router.back()} cancelDisabled={disabled} />
         </>
       ) : (
         <div className="rounded-xl border border-dashed border-line bg-panel2 p-4 text-sm text-muted">No external artifact versions are available in this project yet.</div>

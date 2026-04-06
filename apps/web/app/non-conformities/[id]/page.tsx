@@ -52,7 +52,7 @@ export default async function NonConformityPage({ params }: { params: { id: stri
                 </div>
               ))
             ) : (
-              <div className="text-sm text-muted">No impacted objects found yet.</div>
+              <div className="text-sm text-muted">No impacted objects found yet. Non-conformities belong here when a deviation needs to stay linked to the requirements or tests it affects.</div>
             )}
           </CardBody>
         </Card>
@@ -91,7 +91,7 @@ export default async function NonConformityPage({ params }: { params: { id: stri
                 </div>
               ))
             ) : (
-              <div className="text-sm text-muted">No impacted objects linked yet.</div>
+                <div className="text-sm text-muted">No impacted objects linked yet. Add the related requirement or object so the deviation stays tied to the thread it affects.</div>
             )}
           </CardBody>
         </Card>
@@ -119,7 +119,7 @@ export default async function NonConformityPage({ params }: { params: { id: stri
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-muted">No verification evidence linked yet.</div>
+              <div className="text-sm text-muted">No verification evidence linked yet. Attach evidence here when a test, inspection, or review proves the non-conformity and supports the disposition decision.</div>
             )}
             <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
               <div className="mb-3 text-sm font-medium">Add verification evidence</div>
@@ -162,7 +162,7 @@ export default async function NonConformityPage({ params }: { params: { id: stri
               </div>
             ))
           ) : (
-            <div className="text-sm text-muted">No NCR audit records yet.</div>
+            <div className="text-sm text-muted">No NCR audit records yet. The audit trail becomes useful once the disposition, status, and comments are recorded over time.</div>
           )}
         </CardBody>
       </Card>

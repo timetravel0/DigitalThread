@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import type { ProjectImportFormat, ProjectImportResponse } from "@/lib/types";
 import { Button, Card, CardBody, Input, Select, Textarea } from "@/components/ui";
+import { FormFooter, InlineHelp } from "@/components/form-helpers";
 
 const schema = z.object({
   format: z.enum(["json", "csv"]),
@@ -69,8 +70,11 @@ export function ProjectImportForm({ projectId }: { projectId: string }) {
           <Input value={projectId} readOnly className="bg-slate-950/60" />
         </div>
         <Textarea rows={18} placeholder="Paste JSON or CSV content here" {...form.register("content")} />
+        <InlineHelp>
+          JSON supports `external_artifacts` and `verification_evidence` arrays. CSV supports a `record_type` column with one record per row.
+        </InlineHelp>
         {error ? <div className="text-sm text-danger">{error}</div> : null}
-        <Button type="submit">Import records</Button>
+        <FormFooter submitLabel="Import records" onCancel={() => router.back()} />
       </form>
 
       <Card>

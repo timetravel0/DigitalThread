@@ -4,11 +4,13 @@ import { getLabels } from "@/lib/labels";
 import { ArtifactLinkForm } from "@/components/artifact-link-form";
 import { ImpactVisualization, type ImpactVisualizationNode, type ImpactVisualizationSection } from "@/components/impact-visualization";
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, SectionTitle } from "@/components/ui";
+import { RelationshipLinkForm } from "@/components/relationship-link-form";
 import { OperationalEvidenceCard } from "@/components/operational-evidence-card";
 import { OperationalEvidenceForm } from "@/components/operational-evidence-form";
 import { SimulationEvidenceCard } from "@/components/simulation-evidence-card";
 import { SimulationEvidenceForm } from "@/components/simulation-evidence-form";
 import { SimulationEvidenceMetadata } from "@/components/simulation-evidence-metadata";
+import { RelationshipDeleteButton } from "@/components/relationship-delete-button";
 import { VerificationEvidenceForm } from "@/components/verification-evidence-form";
 import { WorkflowActions } from "@/components/workflow-actions";
 
@@ -23,20 +25,29 @@ export default async function RequirementPage({ params }: { params: { id: string
     api.externalArtifacts(data.requirement.project_id).catch(() => []),
     api.fmiContracts(data.requirement.project_id).catch(() => []),
   ]);
+  const [blocks, components, testCases] = await Promise.all([
+    api.blocks(data.requirement.project_id).catch(() => []),
+    api.components(data.requirement.project_id).catch(() => []),
+    api.testCases(data.requirement.project_id).catch(() => []),
+  ]);
+  const sysmlRelations = await api.sysmlRelations(data.requirement.project_id, { object_type: "requirement", object_id: data.requirement.id }).catch(() => []);
+  const blockLabels = new Map(blocks.map((item: any) => [item.id, `${item.key} - ${item.name}`]));
+  const componentLabels = new Map(components.map((item: any) => [item.id, `${item.key} - ${item.name}`]));
+  const testLabels = new Map(testCases.map((item: any) => [item.id, `${item.key} - ${item.title}`]));
   const impactSections = [
     {
       title: "Direct impacts",
       description: "Objects immediately connected to the requirement.",
       tone: "accent",
       items: (data.impact.direct || []).map((item: any) => impactNode(item, objectHref)),
-      emptyText: "No direct impacts detected yet.",
+      emptyText: "No direct impacts detected yet. Direct impacts belong here when this requirement is linked to blocks, tests, or evidence that should move together with it.",
     },
     {
       title: "Secondary impacts",
       description: "Objects reached through the next hop in the impact traversal.",
       tone: "warning",
       items: (data.impact.secondary || []).map((item: any) => impactNode(item, objectHref)),
-      emptyText: "No secondary impacts detected yet.",
+      emptyText: "No secondary impacts detected yet. Secondary impacts appear when a direct neighbor causes the next hop to matter too, so the impact chain stays visible.",
     },
     {
       title: "Related baselines",
@@ -48,7 +59,7 @@ export default async function RequirementPage({ params }: { params: { id: string
         href: `/baselines/${item.id}`,
         meta: `${item.status} snapshot`,
       })),
-      emptyText: "No related baselines found.",
+      emptyText: "No related baselines found. Baselines belong here when this requirement is part of a frozen review snapshot that reviewers may need to compare later.",
     },
     {
       title: "Open change requests",
@@ -60,7 +71,7 @@ export default async function RequirementPage({ params }: { params: { id: string
         href: `/change-requests/${item.id}`,
         meta: `${item.status} Â· ${item.severity}`,
       })),
-      emptyText: "No open change requests found.",
+      emptyText: "No open change requests found. Change requests belong here when the requirement is being revised and the impact should stay visible while the change is in flight.",
     },
   ] satisfies ImpactVisualizationSection[];
 
@@ -138,16 +149,91 @@ export default async function RequirementPage({ params }: { params: { id: string
         </Card>
       ) : null}
 
+      <Card>
+        <CardHeader><div className="font-semibold">Connect this requirement</div></CardHeader>
+        <CardBody className="grid gap-6 xl:grid-cols-3">
+          <div id="connect-blocks">
+            <RelationshipLinkForm
+              projectId={data.requirement.project_id}
+              kind="sysml"
+              sourceType="requirement"
+              sourceId={data.requirement.id}
+              sourceLabel={`${data.requirement.key} - ${data.requirement.title}`}
+              relationType="allocate"
+              relationLabel="Allocate to block"
+              targetType="block"
+              targetLabel="block"
+              targets={blocks.map((item: any) => ({ id: item.id, label: `${item.key} - ${item.name}` }))}
+              title="Blocks and subsystems"
+              description="Use this when the requirement needs to point at the block structure that realizes it."
+              emptyDescription="Blocks belong here when you want the requirement to point to the structural architecture it depends on."
+              submitLabel="Link block"
+              emptyAction={<Button href={`/projects/${data.requirement.project_id}/blocks`} variant="secondary">Open blocks</Button>}
+            />
+          </div>
+          <div id="connect-components">
+            <RelationshipLinkForm
+              projectId={data.requirement.project_id}
+              kind="link"
+              sourceType="requirement"
+              sourceId={data.requirement.id}
+              sourceLabel={`${data.requirement.key} - ${data.requirement.title}`}
+              relationType="allocated_to"
+              relationLabel="Allocate to component"
+              targetType="component"
+              targetLabel="component"
+              targets={components.map((item: any) => ({ id: item.id, label: `${item.key} - ${item.name}` }))}
+              title="Components and realizations"
+              description="Use this when a component implements or allocates to this requirement."
+              emptyDescription="Components belong here when the requirement is realized by a physical or software element."
+              submitLabel="Link component"
+              emptyAction={<Button href={`/projects/${data.requirement.project_id}/components`} variant="secondary">Open components</Button>}
+            />
+          </div>
+          <div id="connect-tests">
+            <RelationshipLinkForm
+              projectId={data.requirement.project_id}
+              kind="link"
+              sourceType="requirement"
+              sourceId={data.requirement.id}
+              sourceLabel={`${data.requirement.key} - ${data.requirement.title}`}
+              relationType="verifies"
+              relationLabel="Verify with test"
+              targetType="test_case"
+              targetLabel="test case"
+              targets={testCases.map((item: any) => ({ id: item.id, label: `${item.key} - ${item.title}` }))}
+              title="Tests and checks"
+              description="Use this when a test case proves the requirement."
+              emptyDescription="Test cases belong here when you want the requirement to have an explicit verification path."
+              submitLabel="Link test"
+              emptyAction={<Button href={`/projects/${data.requirement.project_id}/tests`} variant="secondary">Open tests</Button>}
+            />
+          </div>
+        </CardBody>
+      </Card>
+
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader><div className="font-semibold">Traceability</div></CardHeader>
           <CardBody className="space-y-3">
             {(data.links || []).map((link: any) => (
               <div key={link.id} className="rounded-xl border border-line bg-panel2 p-3">
-                <div className="font-medium">{link.source_label || link.source_type} <span className="text-muted">-&gt;</span> {link.target_label || link.target_type}</div>
-                <div className="text-xs text-muted">{link.relation_type}</div>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">{link.source_label || link.source_type} <span className="text-muted">-&gt;</span> {link.target_label || link.target_type}</div>
+                    <div className="text-xs text-muted">{link.relation_type}</div>
+                  </div>
+                  <RelationshipDeleteButton kind="link" id={link.id} label={`${link.source_label || link.source_type} to ${link.target_label || link.target_type}`} />
+                </div>
               </div>
             ))}
+            {!data.links.length ? (
+              <EmptyState
+                title="No traceability links yet"
+                description="Traceability belongs here when the requirement is connected to blocks, components, or tests. Use the link forms above to create the first relationship."
+                action={<Button href="#connect-blocks" variant="secondary">Connect objects</Button>}
+              />
+            ) : null}
           </CardBody>
         </Card>
         <Card>
@@ -161,7 +247,7 @@ export default async function RequirementPage({ params }: { params: { id: string
                 </div>
               ))
             ) : (
-              <div className="text-sm text-muted">No external sources linked yet.</div>
+              <div className="text-sm text-muted">No external sources linked yet. Requirements often point to a specification, standard, or upstream document; add one here when the requirement needs an authoritative reference.</div>
             )}
             <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
               <div className="mb-3 text-sm font-medium">Add linked external source</div>
@@ -173,6 +259,50 @@ export default async function RequirementPage({ params }: { params: { id: string
                 artifacts={artifacts}
               />
             </div>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader><div className="font-semibold">SysML relations</div></CardHeader>
+          <CardBody className="space-y-3">
+            {sysmlRelations.length ? (
+              sysmlRelations.map((relation: any) => {
+                const sourceLabel = relation.source_type === "requirement" && relation.source_id === data.requirement.id
+                  ? `${data.requirement.key} - ${data.requirement.title}`
+                  : relation.source_type === "block"
+                    ? blockLabels.get(relation.source_id) || relation.source_type
+                    : relation.source_type === "component"
+                      ? componentLabels.get(relation.source_id) || relation.source_type
+                      : relation.source_type === "test_case"
+                        ? testLabels.get(relation.source_id) || relation.source_type
+                        : relation.source_type;
+                const targetLabel = relation.target_type === "requirement" && relation.target_id === data.requirement.id
+                  ? `${data.requirement.key} - ${data.requirement.title}`
+                  : relation.target_type === "block"
+                    ? blockLabels.get(relation.target_id) || relation.target_type
+                    : relation.target_type === "component"
+                      ? componentLabels.get(relation.target_id) || relation.target_type
+                      : relation.target_type === "test_case"
+                        ? testLabels.get(relation.target_id) || relation.target_type
+                        : relation.target_type;
+                return (
+                  <div key={relation.id} className="rounded-xl border border-line bg-panel2 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium">{sourceLabel} <span className="text-muted">-&gt;</span> {targetLabel}</div>
+                        <div className="text-xs text-muted">{relation.relation_type}{relation.rationale ? ` · ${relation.rationale}` : ""}</div>
+                      </div>
+                      <RelationshipDeleteButton kind="sysml" id={relation.id} label={`${sourceLabel} to ${targetLabel}`} />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <EmptyState
+                title="No SysML relations yet"
+                description="SysML relations belong here when this requirement is connected to blocks or other structural objects. Use the link forms above to create the first one."
+                action={<Button href="#connect-blocks" variant="secondary">Connect objects</Button>}
+              />
+            )}
           </CardBody>
         </Card>
         <Card>

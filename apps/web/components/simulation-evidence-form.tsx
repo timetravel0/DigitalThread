@@ -7,6 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Badge, Button, Input, Select, Textarea } from "@/components/ui";
+import { FormFooter, JsonTextareaField, InlineHelp } from "@/components/form-helpers";
 
 const schema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -154,8 +155,20 @@ export function SimulationEvidenceForm({
       </div>
       <Textarea placeholder="Expected behavior" rows={3} {...form.register("expected_behavior")} />
       <Textarea placeholder="Observed behavior" rows={3} {...form.register("observed_behavior")} />
-      <Textarea placeholder='Inputs JSON, e.g. {"ambient_low_c": -6}' rows={4} {...form.register("inputs_json")} />
-      <Textarea placeholder='Metadata JSON, e.g. {"contract_reference": "FMI-placeholder:THERMAL-ENVELOPE"}' rows={4} {...form.register("metadata_json")} />
+      <JsonTextareaField
+        label="Simulation inputs"
+        description="Capture the input set that makes this scenario reproducible."
+        example='{"ambient_low_c": -6, "payload_kg": 1.2}'
+        rows={4}
+        {...form.register("inputs_json")}
+      />
+      <JsonTextareaField
+        label="Simulation metadata"
+        description="Use this for contract references, environment notes, or tool-specific context."
+        example='{"contract_reference": "FMI-placeholder:THERMAL-ENVELOPE"}'
+        rows={4}
+        {...form.register("metadata_json")}
+      />
       <div className="grid gap-4 md:grid-cols-3">
         <Select {...form.register("linked_requirement_id")}>
           <option value="">Optional requirement</option>
@@ -175,7 +188,7 @@ export function SimulationEvidenceForm({
         {fmiContractOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
       </Select>
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Add simulation evidence</Button>
+      <FormFooter submitLabel="Add simulation evidence" onCancel={() => router.back()} />
     </form>
   );
 }

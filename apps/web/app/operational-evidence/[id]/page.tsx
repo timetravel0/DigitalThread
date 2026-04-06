@@ -33,7 +33,7 @@ export default async function OperationalEvidencePage({ params }: { params: { id
                 </div>
               </div>
             );
-          }) : <div className="text-sm text-muted">No related objects linked yet.</div>}
+          }) : <div className="text-sm text-muted">No related objects linked yet. Operational evidence belongs here when telemetry or batch observations need to stay connected to the requirement or verification record they support.</div>}
         </CardBody>
       </Card>
       <Link href="/projects" className="text-sm text-accent">Back to projects</Link>

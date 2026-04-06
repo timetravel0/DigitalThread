@@ -168,6 +168,8 @@ export const api = {
   operationalRuns: (projectId: string) => request<OperationalRun[]>(`/operational-runs?project_id=${projectId}`),
   operationalRun: (id: string) => request<OperationalRunDetail>(`/operational-runs/${id}`),
   createOperationalRun: (payload: Record<string, unknown>) => request<OperationalRun>(`/operational-runs`, { method: "POST", body: JSON.stringify(payload) }),
+  createLink: (payload: Record<string, unknown>) => request<Link>(`/links`, { method: "POST", body: JSON.stringify(payload) }),
+  deleteLink: (id: string) => request<void>(`/links/${id}`, { method: "DELETE" }),
   links: (projectId: string, objectType?: string, objectId?: string) => {
     const qs = new URLSearchParams();
     qs.set("project_id", projectId);
@@ -191,6 +193,8 @@ export const api = {
     }
     return request<SysMLRelation[]>(`/sysml-relations?${qs.toString()}`);
   },
+  createSysMLRelation: (payload: Record<string, unknown>) => request<SysMLRelation>(`/sysml-relations`, { method: "POST", body: JSON.stringify(payload) }),
+  deleteSysMLRelation: (id: string) => request<void>(`/sysml-relations/${id}`, { method: "DELETE" }),
   reviewQueue: (projectId: string) => request<ReviewQueueResponse>(`/review-queue?project_id=${projectId}`),
   matrix: (projectId: string, mode: "components" | "tests", filters?: { status?: string; category?: string }) => {
     const qs = new URLSearchParams({ mode });

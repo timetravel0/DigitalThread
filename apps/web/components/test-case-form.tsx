@@ -10,6 +10,7 @@ import { Button, Input, Select, Textarea } from "@/components/ui";
 import { getLabels, type DomainProfile, type LabelSet } from "@/lib/labels";
 import { useToast } from "@/lib/toast-context";
 import type { TestCase } from "@/lib/types";
+import { FormFooter, InlineHelp } from "@/components/form-helpers";
 
 type TestMethodValue = "bench" | "simulation" | "field" | "inspection";
 type TestCaseStatusValue = "draft" | "in_review" | "approved" | "rejected" | "ready" | "executed" | "failed" | "passed" | "archived" | "obsolete";
@@ -179,13 +180,16 @@ export function TestCaseForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Select {...form.register("project_id")} disabled={!projects.length}>
-          {(projects.length ? projects : currentProject ? [currentProject] : []).map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.code} - {project.name}
-            </option>
-          ))}
-        </Select>
+        <div className="space-y-1">
+          <Select {...form.register("project_id")} disabled={!projects.length}>
+            {(projects.length ? projects : currentProject ? [currentProject] : []).map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.code} - {project.name}
+              </option>
+            ))}
+          </Select>
+          <InlineHelp>Select the project that owns this {labels.testCase.toLowerCase()}.</InlineHelp>
+        </div>
         <Input placeholder={`${labels.testCase} key`} readOnly {...form.register("key")} />
       </div>
       <Input placeholder={`${labels.testCase} title`} {...form.register("title")} />
@@ -207,7 +211,7 @@ export function TestCaseForm({
         </Select>
       </div>
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">{`Save ${labels.testCase}`}</Button>
+      <FormFooter submitLabel={`Save ${labels.testCase}`} onCancel={() => router.back()} />
     </form>
   );
 }

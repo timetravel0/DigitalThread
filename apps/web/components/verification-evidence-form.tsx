@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import type { VerificationEvidenceType } from "@/lib/types";
+import { FormFooter, JsonTextareaField, InlineHelp } from "@/components/form-helpers";
 
 const schema = z.object({
   title: z.string().min(1),
@@ -128,6 +129,7 @@ export function VerificationEvidenceForm({
           <option value="other">other</option>
         </Select>
       </div>
+      <InlineHelp>Pick the evidence type that best matches the source material you are recording.</InlineHelp>
       <div className="grid gap-4 md:grid-cols-2">
         <Input type="datetime-local" {...form.register("observed_at")} />
         <Input placeholder="Source name" {...form.register("source_name")} />
@@ -139,12 +141,24 @@ export function VerificationEvidenceForm({
           <div className="text-xs uppercase tracking-[0.2em] text-muted">Simulation details</div>
           <Input placeholder="Simulation model" {...form.register("simulation_model")} />
           <Input placeholder="Simulation scenario" {...form.register("simulation_scenario")} />
-          <Textarea placeholder='Simulation inputs JSON, e.g. {"airspeed": 17}' rows={4} {...form.register("simulation_inputs_json")} />
-          <Textarea placeholder='Simulation outputs JSON, e.g. {"max_temperature": 41.2}' rows={4} {...form.register("simulation_outputs_json")} />
+          <JsonTextareaField
+            label="Simulation inputs"
+            description="Record the scenario inputs that matter to the evidence trail."
+            example='{"airspeed": 17, "temperature_c": -6}'
+            rows={4}
+            {...form.register("simulation_inputs_json")}
+          />
+          <JsonTextareaField
+            label="Simulation outputs"
+            description="Record the observed outputs or result payload from the simulation."
+            example='{"max_temperature": 41.2, "passed": true}'
+            rows={4}
+            {...form.register("simulation_outputs_json")}
+          />
         </div>
       ) : null}
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Add verification evidence</Button>
+      <FormFooter submitLabel="Add verification evidence" onCancel={() => router.back()} />
     </form>
   );
 }

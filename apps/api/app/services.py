@@ -1676,21 +1676,574 @@ def _seed_manufacturing_demo_details(session: Session, project_id: UUID, base: d
 
     tst2 = _first_item(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == "MFG-QC-002")))
     if tst2 is None:
-        tst2 = create_test_case(
-            session,
-            TestCaseCreate(
+            tst2 = create_test_case(
+                session,
+                TestCaseCreate(
+                    project_id=project.id,
+                    key="MFG-QC-002",
+                    title="Reject Routing Check",
+                    description="Inspection check that underfilled units are routed to the reject lane.",
+                    method=TestMethod.inspection,
+                    status=TestCaseStatus.approved,
+                    version=1,
+                    approved_at=datetime.now(timezone.utc),
+                    approved_by="seed",
+                ),
+            )
+            tst2 = _get(session, TestCase, tst2.id)
+
+    def ensure_requirement(
+        key: str,
+        title: str,
+        description: str,
+        category: RequirementCategory,
+        priority: Priority,
+        verification_method: VerificationMethod,
+    ) -> Requirement:
+        item = _first_item(session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == key)))
+        if item is None:
+            item = create_requirement(
+                session,
+                RequirementCreate(
+                    project_id=project.id,
+                    key=key,
+                    title=title,
+                    description=description,
+                    category=category,
+                    priority=priority,
+                    verification_method=verification_method,
+                    status=RequirementStatus.approved,
+                    version=1,
+                    approved_at=datetime.now(timezone.utc),
+                    approved_by="seed",
+                ),
+            )
+            item = _get(session, Requirement, item.id)
+        if item is None:
+            raise LookupError(f"Manufacturing seed requirement {key} not found")
+        return item
+
+    def ensure_block(
+        key: str,
+        name: str,
+        description: str,
+        block_kind: BlockKind,
+        abstraction_level: AbstractionLevel,
+    ) -> Block:
+        item = _first_item(session.exec(select(Block).where(Block.project_id == project.id, Block.key == key)))
+        if item is None:
+            item = create_block(
+                session,
+                BlockCreate(
+                    project_id=project.id,
+                    key=key,
+                    name=name,
+                    description=description,
+                    block_kind=block_kind,
+                    abstraction_level=abstraction_level,
+                    status=BlockStatus.approved,
+                    version=1,
+                    approved_at=datetime.now(timezone.utc),
+                    approved_by="seed",
+                ),
+            )
+            item = _get(session, Block, item.id)
+        if item is None:
+            raise LookupError(f"Manufacturing seed block {key} not found")
+        return item
+
+    def ensure_component(
+        key: str,
+        name: str,
+        description: str,
+        component_type: ComponentType,
+        *,
+        part_number: str | None = None,
+        supplier: str | None = None,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> Component:
+        item = _first_item(session.exec(select(Component).where(Component.project_id == project.id, Component.key == key)))
+        if item is None:
+            item = create_component(
+                session,
+                ComponentCreate(
+                    project_id=project.id,
+                    key=key,
+                    name=name,
+                    description=description,
+                    type=component_type,
+                    part_number=part_number,
+                    supplier=supplier,
+                    status=ComponentStatus.validated,
+                    version=1,
+                    metadata_json=metadata_json or {"seeded": True},
+                ),
+            )
+            item = _get(session, Component, item.id)
+        if item is None:
+            raise LookupError(f"Manufacturing seed component {key} not found")
+        return item
+
+    def ensure_test_case(
+        key: str,
+        title: str,
+        description: str,
+        method: TestMethod,
+    ) -> TestCase:
+        item = _first_item(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == key)))
+        if item is None:
+            item = create_test_case(
+                session,
+                TestCaseCreate(
+                    project_id=project.id,
+                    key=key,
+                    title=title,
+                    description=description,
+                    method=method,
+                    status=TestCaseStatus.approved,
+                    version=1,
+                    approved_at=datetime.now(timezone.utc),
+                    approved_by="seed",
+                ),
+            )
+            item = _get(session, TestCase, item.id)
+        if item is None:
+            raise LookupError(f"Manufacturing seed test case {key} not found")
+        return item
+
+    req3 = ensure_requirement(
+        "MFG-SPEC-003",
+        "Caps shall seat before seal at line rate",
+        "Caps must be applied cleanly before sealing so the SME can keep the bottle line stable at rated speed.",
+        RequirementCategory.performance,
+        Priority.high,
+        VerificationMethod.test,
+    )
+    req4 = ensure_requirement(
+        "MFG-SPEC-004",
+        "Changeover between bottle sizes shall finish within 10 minutes",
+        "Small-batch manufacturing needs quick product changeovers to keep the line economical.",
+        RequirementCategory.operations,
+        Priority.medium,
+        VerificationMethod.demonstration,
+    )
+    req5 = ensure_requirement(
+        "MFG-SPEC-005",
+        "Operators shall see live batch counters and reject counts",
+        "The shift team needs a simple live view of filled units, rejects, and open alerts.",
+        RequirementCategory.operations,
+        Priority.medium,
+        VerificationMethod.inspection,
+    )
+    req6 = ensure_requirement(
+        "MFG-SPEC-006",
+        "Reject bin shall alarm before overflow",
+        "The reject stream must raise an alarm before the bin reaches a spill condition.",
+        RequirementCategory.safety,
+        Priority.high,
+        VerificationMethod.test,
+    )
+    req7 = ensure_requirement(
+        "MFG-SPEC-007",
+        "Guard doors shall stop the line immediately when opened",
+        "Operator safety requires immediate stop behavior when line guards are opened.",
+        RequirementCategory.safety,
+        Priority.critical,
+        VerificationMethod.inspection,
+    )
+    req8 = ensure_requirement(
+        "MFG-SPEC-008",
+        "Lot and shift identifiers shall be recorded for every batch",
+        "The SME needs lightweight traceability from fill run to lot, shift, and operator handover.",
+        RequirementCategory.compliance,
+        Priority.medium,
+        VerificationMethod.analysis,
+    )
+
+    blk3 = ensure_block(
+        "MFG-BLK-003",
+        "Capping Station",
+        "Logical and physical capping station that closes the bottle before final seal.",
+        BlockKind.subsystem,
+        AbstractionLevel.logical,
+    )
+    blk4 = ensure_block(
+        "MFG-BLK-004",
+        "Reject Handling Cell",
+        "Reject handling cell that routes underfilled or damaged units away from good stock.",
+        BlockKind.subsystem,
+        AbstractionLevel.logical,
+    )
+    blk5 = ensure_block(
+        "MFG-BLK-005",
+        "Controls Cabinet",
+        "Controls cabinet hosting the PLC, HMI, and interlock logic used by the SME line.",
+        BlockKind.system,
+        AbstractionLevel.logical,
+    )
+    blk6 = ensure_block(
+        "MFG-BLK-006",
+        "Quality Review Module",
+        "Operator review module for batch counts, reject trends, and lot traceability.",
+        BlockKind.software,
+        AbstractionLevel.logical,
+    )
+
+    comp3 = ensure_component(
+        "MFG-CMP-003",
+        "Servo Capper",
+        "Servo-driven capping mechanism used to seat caps consistently before sealing.",
+        ComponentType.motor,
+        part_number="MFG-CAP-01",
+        supplier="PackRight",
+        metadata_json={"torque_nm": 1.8, "station": "capping"},
+    )
+    comp4 = ensure_component(
+        "MFG-CMP-004",
+        "Reject Gate Actuator",
+        "Actuator that diverts non-conforming packs to the reject chute.",
+        ComponentType.other,
+        part_number="MFG-REJ-01",
+        supplier="FlowSort",
+        metadata_json={"mode": "divert", "station": "reject-handling"},
+    )
+    comp5 = ensure_component(
+        "MFG-CMP-005",
+        "Batch PLC",
+        "Controls logic for batch sequencing, interlocks, and line changeover timing.",
+        ComponentType.software_module,
+        part_number="MFG-PLC-01",
+        supplier="LineLogic",
+        metadata_json={"firmware": "v3.2", "control_scope": "batch-sequencing"},
+    )
+    comp6 = ensure_component(
+        "MFG-CMP-006",
+        "Operator HMI",
+        "Simple operator screen for batch counts, reject counters, and line status.",
+        ComponentType.software_module,
+        part_number="MFG-HMI-01",
+        supplier="LineLogic",
+        metadata_json={"screen_role": "production-summary"},
+    )
+    comp7 = ensure_component(
+        "MFG-CMP-007",
+        "Barcode Scanner",
+        "Scanner used to capture lot and shift identifiers for each production batch.",
+        ComponentType.sensor,
+        part_number="MFG-SCAN-01",
+        supplier="TraceFlow",
+        metadata_json={"scan_type": "linear", "purpose": "lot-traceability"},
+    )
+
+    tst3 = ensure_test_case(
+        "MFG-QC-003",
+        "Cap Placement Check",
+        "Check that caps seat cleanly before the seal station runs at line rate.",
+        TestMethod.inspection,
+    )
+    tst4 = ensure_test_case(
+        "MFG-QC-004",
+        "Changeover Timing Check",
+        "Bench check that the line can switch between bottle sizes inside the 10 minute target.",
+        TestMethod.bench,
+    )
+    tst5 = ensure_test_case(
+        "MFG-QC-005",
+        "Batch Counter Display Check",
+        "Operator check that batch and reject counters are visible on the HMI.",
+        TestMethod.inspection,
+    )
+    tst6 = ensure_test_case(
+        "MFG-QC-006",
+        "Reject Bin Alarm Check",
+        "Quality check that the reject bin raises an alarm before overflow.",
+        TestMethod.field,
+    )
+    tst7 = ensure_test_case(
+        "MFG-QC-007",
+        "Guard Interlock Check",
+        "Safety check that guard door opening stops the line immediately.",
+        TestMethod.inspection,
+    )
+    tst8 = ensure_test_case(
+        "MFG-QC-008",
+        "Lot Traceability Check",
+        "Traceability check that the lot and shift identifier are captured for each batch.",
+        TestMethod.inspection,
+    )
+
+    for parent_id, child_id in [
+        (blk1.id, blk2.id),
+        (blk1.id, blk5.id),
+        (blk5.id, blk3.id),
+        (blk5.id, blk4.id),
+        (blk5.id, blk6.id),
+    ]:
+        if not session.exec(
+            select(BlockContainment).where(
+                BlockContainment.project_id == project.id,
+                BlockContainment.parent_block_id == parent_id,
+                BlockContainment.child_block_id == child_id,
+            )
+        ).first():
+            create_block_containment(
+                session,
+                BlockContainmentCreate(
+                    project_id=project.id,
+                    parent_block_id=parent_id,
+                    child_block_id=child_id,
+                    relation_type=BlockContainmentRelationType.contains,
+                ),
+            )
+
+    manufacturing_relations = [
+        (blk3, req3, SysMLRelationType.satisfy, "The capping station satisfies the cap-placement requirement."),
+        (blk4, req6, SysMLRelationType.satisfy, "The reject cell satisfies the reject-bin alarm requirement."),
+        (blk5, req4, SysMLRelationType.satisfy, "The controls cabinet satisfies the changeover timing requirement."),
+        (blk5, req5, SysMLRelationType.satisfy, "The controls cabinet satisfies the live batch visibility requirement."),
+        (blk5, req7, SysMLRelationType.satisfy, "The controls cabinet satisfies the guard interlock requirement."),
+        (blk6, req8, SysMLRelationType.satisfy, "The quality review module satisfies the lot traceability requirement."),
+        (comp3, req3, SysMLRelationType.trace, "The servo capper realizes cap placement."),
+        (comp4, req6, SysMLRelationType.trace, "The reject gate actuator realizes reject diversion."),
+        (comp5, req4, SysMLRelationType.trace, "The batch PLC realizes rapid changeover."),
+        (comp5, req7, SysMLRelationType.trace, "The batch PLC realizes guard interlocks."),
+        (comp6, req5, SysMLRelationType.trace, "The operator HMI realizes live batch visibility."),
+        (comp7, req8, SysMLRelationType.trace, "The barcode scanner realizes lot traceability."),
+        (tst3, req3, SysMLRelationType.verify, "The cap placement check verifies the capping requirement."),
+        (tst4, req4, SysMLRelationType.verify, "The changeover timing check verifies the changeover requirement."),
+        (tst5, req5, SysMLRelationType.verify, "The batch counter display check verifies the operator visibility requirement."),
+        (tst6, req6, SysMLRelationType.verify, "The reject bin alarm check verifies the reject alarm requirement."),
+        (tst7, req7, SysMLRelationType.verify, "The guard interlock check verifies the safety stop requirement."),
+        (tst8, req8, SysMLRelationType.verify, "The lot traceability check verifies the traceability requirement."),
+    ]
+    for source, target, relation_type, rationale in manufacturing_relations:
+        if not session.exec(
+            select(SysMLRelation).where(
+                SysMLRelation.project_id == project.id,
+                SysMLRelation.source_type == (
+                    SysMLObjectType.block
+                    if isinstance(source, Block)
+                    else SysMLObjectType.component
+                    if isinstance(source, Component)
+                    else SysMLObjectType.test_case
+                ),
+                SysMLRelation.source_id == source.id,
+                SysMLRelation.target_type == SysMLObjectType.requirement,
+                SysMLRelation.target_id == target.id,
+                SysMLRelation.relation_type == relation_type,
+            )
+        ).first():
+            create_sysml_relation(
+                session,
+                SysMLRelationCreate(
+                    project_id=project.id,
+                    source_type=(
+                        SysMLObjectType.block
+                        if isinstance(source, Block)
+                        else SysMLObjectType.component
+                        if isinstance(source, Component)
+                        else SysMLObjectType.test_case
+                    ),
+                    source_id=source.id,
+                    target_type=SysMLObjectType.requirement,
+                    target_id=target.id,
+                    relation_type=relation_type,
+                    rationale=rationale,
+                ),
+            )
+
+    for requirement, component, test_case, rationale in [
+        (req3, comp3, tst3, "Cap placement requirement allocates to the servo capper and is verified by the cap check."),
+        (req4, comp5, tst4, "Changeover requirement allocates to the batch PLC and is verified by timing."),
+        (req5, comp6, tst5, "Batch visibility requirement allocates to the operator HMI and is verified by the display check."),
+        (req6, comp4, tst6, "Reject-bin alarm requirement allocates to the reject actuator and is verified by the alarm check."),
+        (req7, comp5, tst7, "Guard interlock requirement allocates to the batch PLC and is verified by the interlock check."),
+        (req8, comp7, tst8, "Lot traceability requirement allocates to the barcode scanner and is verified by the traceability check."),
+    ]:
+        for link in [
+            LinkCreate(
                 project_id=project.id,
-                key="MFG-QC-002",
-                title="Reject Routing Check",
-                description="Inspection check that underfilled units are routed to the reject lane.",
-                method=TestMethod.inspection,
-                status=TestCaseStatus.approved,
-                version=1,
-                approved_at=datetime.now(timezone.utc),
-                approved_by="seed",
+                source_type=LinkObjectType.requirement,
+                source_id=requirement.id,
+                target_type=LinkObjectType.component,
+                target_id=component.id,
+                relation_type=RelationType.allocated_to,
+                rationale=rationale,
+            ),
+            LinkCreate(
+                project_id=project.id,
+                source_type=LinkObjectType.requirement,
+                source_id=requirement.id,
+                target_type=LinkObjectType.test_case,
+                target_id=test_case.id,
+                relation_type=RelationType.verifies,
+                rationale=rationale,
+            ),
+        ]:
+            if not session.exec(
+                select(Link).where(
+                    Link.project_id == project.id,
+                    Link.source_type == link.source_type,
+                    Link.source_id == link.source_id,
+                    Link.target_type == link.target_type,
+                    Link.target_id == link.target_id,
+                    Link.relation_type == link.relation_type,
+                )
+            ).first():
+                _add(session, Link.model_validate(link))
+
+    for evidence_payload in [
+        {
+            "title": "Cap placement verification evidence",
+            "summary": "Field evidence shows caps seat cleanly before sealing at line rate.",
+            "evidence_type": VerificationEvidenceType.inspection,
+            "source_name": "Line QA",
+            "source_reference": "MFG-QC-003",
+            "linked_requirement_ids": [req3.id],
+            "linked_test_case_ids": [tst3.id],
+            "linked_component_ids": [comp3.id],
+        },
+        {
+            "title": "Changeover timing verification evidence",
+            "summary": "Changeover timing evidence shows the SME line can switch bottle sizes within the 10 minute target.",
+            "evidence_type": VerificationEvidenceType.test_result,
+            "source_name": "Line QA",
+            "source_reference": "MFG-QC-004",
+            "linked_requirement_ids": [req4.id],
+            "linked_test_case_ids": [tst4.id],
+            "linked_component_ids": [comp5.id],
+        },
+        {
+            "title": "Batch display verification evidence",
+            "summary": "HMI review confirms the batch and reject counters are visible to operators during the shift.",
+            "evidence_type": VerificationEvidenceType.analysis,
+            "source_name": "Shift Review",
+            "source_reference": "MFG-QC-005",
+            "linked_requirement_ids": [req5.id],
+            "linked_test_case_ids": [tst5.id],
+            "linked_component_ids": [comp6.id],
+        },
+        {
+            "title": "Reject bin alarm verification evidence",
+            "summary": "Alarm evidence confirms the reject bin notifies the operator before overflow.",
+            "evidence_type": VerificationEvidenceType.test_result,
+            "source_name": "QA Lab",
+            "source_reference": "MFG-QC-006",
+            "linked_requirement_ids": [req6.id],
+            "linked_test_case_ids": [tst6.id],
+            "linked_component_ids": [comp4.id],
+        },
+        {
+            "title": "Guard interlock verification evidence",
+            "summary": "Safety evidence confirms the guard door stops the line immediately when opened.",
+            "evidence_type": VerificationEvidenceType.inspection,
+            "source_name": "Safety Audit",
+            "source_reference": "MFG-QC-007",
+            "linked_requirement_ids": [req7.id],
+            "linked_test_case_ids": [tst7.id],
+            "linked_component_ids": [comp5.id],
+        },
+        {
+            "title": "Lot traceability verification evidence",
+            "summary": "Traceability evidence shows lot and shift identifiers are recorded for every batch.",
+            "evidence_type": VerificationEvidenceType.analysis,
+            "source_name": "MES Review",
+            "source_reference": "MFG-QC-008",
+            "linked_requirement_ids": [req8.id],
+            "linked_test_case_ids": [tst8.id],
+            "linked_component_ids": [comp7.id],
+        },
+    ]:
+        if not session.exec(
+            select(VerificationEvidence).where(
+                VerificationEvidence.project_id == project.id,
+                VerificationEvidence.title == evidence_payload["title"],
+            )
+        ).first():
+            create_verification_evidence(
+                session,
+                VerificationEvidenceCreate(
+                    project_id=project.id,
+                    title=evidence_payload["title"],
+                    evidence_type=evidence_payload["evidence_type"],
+                    summary=evidence_payload["summary"],
+                    source_name=evidence_payload["source_name"],
+                    source_reference=evidence_payload["source_reference"],
+                    observed_at=datetime.now(timezone.utc),
+                    metadata_json={"seeded": True, "profile": "manufacturing"},
+                    linked_requirement_ids=evidence_payload["linked_requirement_ids"],
+                    linked_test_case_ids=evidence_payload["linked_test_case_ids"],
+                    linked_component_ids=evidence_payload["linked_component_ids"],
+                ),
+            )
+
+    first_cap_evidence = _first_item(
+        session.exec(
+            select(VerificationEvidence).where(
+                VerificationEvidence.project_id == project.id,
+                VerificationEvidence.title == "Cap placement verification evidence",
+            )
+        )
+    )
+    first_changeover_evidence = _first_item(
+        session.exec(
+            select(VerificationEvidence).where(
+                VerificationEvidence.project_id == project.id,
+                VerificationEvidence.title == "Changeover timing verification evidence",
+            )
+        )
+    )
+    if not session.exec(
+        select(SimulationEvidence).where(
+            SimulationEvidence.project_id == project.id,
+            SimulationEvidence.title == "Manufacturing changeover simulation",
+        )
+    ).first():
+        create_simulation_evidence(
+            session,
+            SimulationEvidenceCreate(
+                project_id=project.id,
+                title="Manufacturing changeover simulation",
+                model_reference="Packaging Line Model",
+                scenario_name="Bottle size swap with reject burst",
+                input_summary="Simulate a short production run that includes a size changeover and a reject burst.",
+                inputs_json={"line_speed_units_per_min": 30, "changeover_minutes": 8, "reject_spike_pct": 2.0},
+                expected_behavior="The line changes over within the target and rejects are routed without overflow.",
+                observed_behavior="Simulation stayed within the changeover target and rejects were routed cleanly.",
+                result=SimulationEvidenceResult.passed,
+                execution_timestamp=datetime.now(timezone.utc),
+                metadata_json={"seeded": True, "profile": "manufacturing"},
+                linked_requirement_ids=[req4.id, req6.id, req7.id],
+                linked_test_case_ids=[tst4.id, tst6.id, tst7.id],
+                linked_verification_evidence_ids=[e.id for e in [first_cap_evidence, first_changeover_evidence] if e is not None],
             ),
         )
-        tst2 = _get(session, TestCase, tst2.id)
+
+    if not session.exec(
+        select(OperationalEvidence).where(
+            OperationalEvidence.project_id == project.id,
+            OperationalEvidence.title == "Manufacturing quality review telemetry batch",
+        )
+    ).first():
+        create_operational_evidence(
+            session,
+            OperationalEvidenceCreate(
+                project_id=project.id,
+                title="Manufacturing quality review telemetry batch",
+                source_name="MES aggregator",
+                source_type=OperationalEvidenceSourceType.system,
+                captured_at=datetime.now(timezone.utc),
+                coverage_window_start=datetime.now(timezone.utc) - timedelta(hours=8),
+                coverage_window_end=datetime.now(timezone.utc),
+                observations_summary="Shift telemetry shows the operator HMI, reject lane, and lot capture stayed aligned through the run.",
+                aggregated_observations_json={"batch_counter_visible": True, "reject_lane_clear": True, "lot_capture_complete": True},
+                quality_status=OperationalEvidenceQualityStatus.good,
+                derived_metrics_json={"counter_visibility_pct": 100, "lot_capture_pct": 100},
+                metadata_json={"seeded": True, "profile": "manufacturing"},
+                linked_requirement_ids=[req5.id, req6.id, req8.id],
+                linked_verification_evidence_ids=[e.id for e in [first_cap_evidence, first_changeover_evidence] if e is not None],
+            ),
+        )
 
     if not session.exec(
         select(BlockContainment).where(
@@ -1865,8 +2418,8 @@ def _seed_manufacturing_demo_details(session: Session, project_id: UUID, base: d
             ChangeRequestCreate(
                 project_id=project.id,
                 key="MFG-CR-001",
-                title="Tune fill-head calibration after reject-lane review",
-                description="Shift evidence shows the fill head should be tuned to keep the reject lane calm and maintain quality release cadence.",
+                title="Tune fill-head calibration and line controls after changeover review",
+                description="Shift evidence shows the fill head, capper timing, and control logic should be tuned together so the reject lane stays calm and the line keeps its quality cadence.",
                 status=ChangeRequestStatus.open,
                 severity=Severity.high,
             ),
@@ -1874,8 +2427,14 @@ def _seed_manufacturing_demo_details(session: Session, project_id: UUID, base: d
     if not session.exec(select(ChangeImpact).where(ChangeImpact.change_request_id == cr.id)).first():
         for impact in [
             {"object_type": "requirement", "object_id": req1.id, "impact_level": ImpactLevel.high, "notes": "Fill accuracy target may need calibration adjustments."},
+            {"object_type": "requirement", "object_id": req4.id, "impact_level": ImpactLevel.high, "notes": "Changeover timing depends on line control tuning."},
+            {"object_type": "requirement", "object_id": req7.id, "impact_level": ImpactLevel.medium, "notes": "Safety interlocks may need a control review."},
             {"object_type": "component", "object_id": comp1.id, "impact_level": ImpactLevel.high, "notes": "Fill head assembly is the primary tuning lever."},
+            {"object_type": "component", "object_id": comp3.id, "impact_level": ImpactLevel.medium, "notes": "Capper timing is part of the coordinated changeover."},
+            {"object_type": "component", "object_id": comp5.id, "impact_level": ImpactLevel.high, "notes": "Batch PLC governs the line control change."},
             {"object_type": "test_case", "object_id": tst1.id, "impact_level": ImpactLevel.medium, "notes": "Accuracy check may need tighter acceptance bands."},
+            {"object_type": "test_case", "object_id": tst4.id, "impact_level": ImpactLevel.medium, "notes": "Changeover timing should be rechecked after the control update."},
+            {"object_type": "test_case", "object_id": tst7.id, "impact_level": ImpactLevel.medium, "notes": "Guard interlock behavior should be revalidated after the control change."},
         ]:
             _add(session, ChangeImpact(change_request_id=cr.id, **impact))
 
@@ -1952,21 +2511,568 @@ def _seed_personal_demo_details(session: Session, project_id: UUID, base: dict[s
 
     tst2 = _first_item(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == "HOME-VER-002")))
     if tst2 is None:
-        tst2 = create_test_case(
-            session,
-            TestCaseCreate(
+            tst2 = create_test_case(
+                session,
+                TestCaseCreate(
+                    project_id=project.id,
+                    key="HOME-VER-002",
+                    title="Restore Drill",
+                    description="Verification drill showing files can be restored inside the 15 minute target.",
+                    method=TestMethod.inspection,
+                    status=TestCaseStatus.approved,
+                    version=1,
+                    approved_at=datetime.now(timezone.utc),
+                    approved_by="seed",
+                ),
+            )
+            tst2 = _get(session, TestCase, tst2.id)
+
+    def ensure_requirement(
+        key: str,
+        title: str,
+        description: str,
+        category: RequirementCategory,
+        priority: Priority,
+        verification_method: VerificationMethod,
+    ) -> Requirement:
+        item = _first_item(session.exec(select(Requirement).where(Requirement.project_id == project.id, Requirement.key == key)))
+        if item is None:
+            item = create_requirement(
+                session,
+                RequirementCreate(
+                    project_id=project.id,
+                    key=key,
+                    title=title,
+                    description=description,
+                    category=category,
+                    priority=priority,
+                    verification_method=verification_method,
+                    status=RequirementStatus.approved,
+                    version=1,
+                    approved_at=datetime.now(timezone.utc),
+                    approved_by="seed",
+                ),
+            )
+            item = _get(session, Requirement, item.id)
+        if item is None:
+            raise LookupError(f"Personal seed requirement {key} not found")
+        return item
+
+    def ensure_block(
+        key: str,
+        name: str,
+        description: str,
+        block_kind: BlockKind,
+        abstraction_level: AbstractionLevel,
+    ) -> Block:
+        item = _first_item(session.exec(select(Block).where(Block.project_id == project.id, Block.key == key)))
+        if item is None:
+            item = create_block(
+                session,
+                BlockCreate(
+                    project_id=project.id,
+                    key=key,
+                    name=name,
+                    description=description,
+                    block_kind=block_kind,
+                    abstraction_level=abstraction_level,
+                    status=BlockStatus.approved,
+                    version=1,
+                    approved_at=datetime.now(timezone.utc),
+                    approved_by="seed",
+                ),
+            )
+            item = _get(session, Block, item.id)
+        if item is None:
+            raise LookupError(f"Personal seed block {key} not found")
+        return item
+
+    def ensure_component(
+        key: str,
+        name: str,
+        description: str,
+        component_type: ComponentType,
+        *,
+        part_number: str | None = None,
+        supplier: str | None = None,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> Component:
+        item = _first_item(session.exec(select(Component).where(Component.project_id == project.id, Component.key == key)))
+        if item is None:
+            item = create_component(
+                session,
+                ComponentCreate(
+                    project_id=project.id,
+                    key=key,
+                    name=name,
+                    description=description,
+                    type=component_type,
+                    part_number=part_number,
+                    supplier=supplier,
+                    status=ComponentStatus.validated,
+                    version=1,
+                    metadata_json=metadata_json or {"seeded": True},
+                ),
+            )
+            item = _get(session, Component, item.id)
+        if item is None:
+            raise LookupError(f"Personal seed component {key} not found")
+        return item
+
+    def ensure_test_case(
+        key: str,
+        title: str,
+        description: str,
+        method: TestMethod,
+    ) -> TestCase:
+        item = _first_item(session.exec(select(TestCase).where(TestCase.project_id == project.id, TestCase.key == key)))
+        if item is None:
+            item = create_test_case(
+                session,
+                TestCaseCreate(
+                    project_id=project.id,
+                    key=key,
+                    title=title,
+                    description=description,
+                    method=method,
+                    status=TestCaseStatus.approved,
+                    version=1,
+                    approved_at=datetime.now(timezone.utc),
+                    approved_by="seed",
+                ),
+            )
+            item = _get(session, TestCase, item.id)
+        if item is None:
+            raise LookupError(f"Personal seed test case {key} not found")
+        return item
+
+    req3 = ensure_requirement(
+        "HOME-GOAL-003",
+        "Guest Wi-Fi shall stay isolated from the backup network",
+        "The home network must keep guest devices away from the backup VLAN and storage devices.",
+        RequirementCategory.compliance,
+        Priority.high,
+        VerificationMethod.inspection,
+    )
+    req4 = ensure_requirement(
+        "HOME-GOAL-004",
+        "Nightly backup sync shall finish before 02:00",
+        "The homelab needs predictable overnight backups that finish before the morning work window.",
+        RequirementCategory.performance,
+        Priority.medium,
+        VerificationMethod.test,
+    )
+    req5 = ensure_requirement(
+        "HOME-GOAL-005",
+        "Core networking gear shall ride through a 20 minute outage on UPS",
+        "Router, access point, and backup storage should stay up long enough to survive short outages.",
+        RequirementCategory.operations,
+        Priority.high,
+        VerificationMethod.demonstration,
+    )
+    req6 = ensure_requirement(
+        "HOME-GOAL-006",
+        "Remote administration shall require VPN access",
+        "Remote access should be available only through a VPN gateway instead of direct exposure.",
+        RequirementCategory.safety,
+        Priority.high,
+        VerificationMethod.inspection,
+    )
+    req7 = ensure_requirement(
+        "HOME-GOAL-007",
+        "Backup data shall remain encrypted at rest",
+        "The home storage platform must keep backup data encrypted when the disks are not in use.",
+        RequirementCategory.compliance,
+        Priority.medium,
+        VerificationMethod.analysis,
+    )
+    req8 = ensure_requirement(
+        "HOME-GOAL-008",
+        "A monthly restore drill shall be logged and reviewed",
+        "The household should practice a restore so the backup plan stays trustworthy.",
+        RequirementCategory.operations,
+        Priority.medium,
+        VerificationMethod.test,
+    )
+
+    blk3 = ensure_block(
+        "HOME-BLK-003",
+        "Guest Network Segment",
+        "Guest Wi-Fi and isolated network segment used for visitors and low-trust devices.",
+        BlockKind.subsystem,
+        AbstractionLevel.logical,
+    )
+    blk4 = ensure_block(
+        "HOME-BLK-004",
+        "Power Resilience Subsystem",
+        "Power resilience setup that keeps core services alive during a short outage.",
+        BlockKind.subsystem,
+        AbstractionLevel.logical,
+    )
+    blk5 = ensure_block(
+        "HOME-BLK-005",
+        "Remote Access Gateway",
+        "Remote access path used for safe administration of the home lab from outside the house.",
+        BlockKind.interface,
+        AbstractionLevel.logical,
+    )
+    blk6 = ensure_block(
+        "HOME-BLK-006",
+        "Media Sync Service",
+        "Nightly synchronization service that keeps media, snapshots, and backup jobs on schedule.",
+        BlockKind.software,
+        AbstractionLevel.logical,
+    )
+
+    comp3 = ensure_component(
+        "HOME-CMP-003",
+        "Router/Firewall Appliance",
+        "Router and firewall used to segment the home network and enforce VPN-only remote access.",
+        ComponentType.other,
+        part_number="HOME-RTR-01",
+        supplier="NetHome",
+        metadata_json={"roles": ["routing", "firewall"], "wan_failover": False},
+    )
+    comp4 = ensure_component(
+        "HOME-CMP-004",
+        "UPS Unit",
+        "Uninterruptible power supply that keeps the core networking gear online during outages.",
+        ComponentType.other,
+        part_number="HOME-UPS-01",
+        supplier="PowerSafe",
+        metadata_json={"runtime_minutes": 20, "protected_load": "network-core"},
+    )
+    comp5 = ensure_component(
+        "HOME-CMP-005",
+        "VPN Gateway",
+        "Software gateway that exposes remote administration only through authenticated VPN access.",
+        ComponentType.software_module,
+        part_number="HOME-VPN-01",
+        supplier="NetHome",
+        metadata_json={"protocol": "wireguard", "remote_admin": True},
+    )
+    comp6 = ensure_component(
+        "HOME-CMP-006",
+        "Wi-Fi Access Point",
+        "Access point for the main home network and guest isolation setup.",
+        ComponentType.other,
+        part_number="HOME-AP-01",
+        supplier="NetHome",
+        metadata_json={"ssid_count": 2, "guest_isolation": True},
+    )
+    comp7 = ensure_component(
+        "HOME-CMP-007",
+        "Backup Orchestrator",
+        "Automation service that schedules backup windows and checks restore drill outcomes.",
+        ComponentType.software_module,
+        part_number="HOME-BKP-01",
+        supplier="SyncedHome",
+        metadata_json={"backup_window": "02:00", "drill_cadence": "monthly"},
+    )
+
+    tst3 = ensure_test_case(
+        "HOME-VER-003",
+        "Guest Isolation Check",
+        "Check that guest devices cannot reach the backup VLAN or NAS shares.",
+        TestMethod.inspection,
+    )
+    tst4 = ensure_test_case(
+        "HOME-VER-004",
+        "Backup Window Check",
+        "Check that nightly sync completes before the 02:00 window closes.",
+        TestMethod.bench,
+    )
+    tst5 = ensure_test_case(
+        "HOME-VER-005",
+        "UPS Runtime Check",
+        "Check that the core network stays online for at least 20 minutes on UPS.",
+        TestMethod.field,
+    )
+    tst6 = ensure_test_case(
+        "HOME-VER-006",
+        "Remote Access Check",
+        "Check that remote administration requires VPN access and rejects direct exposure.",
+        TestMethod.inspection,
+    )
+    tst7 = ensure_test_case(
+        "HOME-VER-007",
+        "Encryption-at-Rest Check",
+        "Check that backup data remains encrypted when the storage node is offline.",
+        TestMethod.inspection,
+    )
+    tst8 = ensure_test_case(
+        "HOME-VER-008",
+        "Monthly Drill Review Check",
+        "Check that the monthly restore drill is logged and reviewed.",
+        TestMethod.inspection,
+    )
+
+    for parent_id, child_id in [
+        (blk1.id, blk2.id),
+        (blk1.id, blk3.id),
+        (blk1.id, blk4.id),
+        (blk1.id, blk5.id),
+        (blk1.id, blk6.id),
+    ]:
+        if not session.exec(
+            select(BlockContainment).where(
+                BlockContainment.project_id == project.id,
+                BlockContainment.parent_block_id == parent_id,
+                BlockContainment.child_block_id == child_id,
+            )
+        ).first():
+            create_block_containment(
+                session,
+                BlockContainmentCreate(
+                    project_id=project.id,
+                    parent_block_id=parent_id,
+                    child_block_id=child_id,
+                    relation_type=BlockContainmentRelationType.contains,
+                ),
+            )
+
+    personal_relations = [
+        (blk3, req3, SysMLRelationType.satisfy, "The guest network segment satisfies guest isolation."),
+        (blk4, req5, SysMLRelationType.satisfy, "The power resilience subsystem satisfies outage resilience."),
+        (blk5, req6, SysMLRelationType.satisfy, "The remote access gateway satisfies VPN-only administration."),
+        (blk6, req4, SysMLRelationType.satisfy, "The media sync service satisfies the overnight sync target."),
+        (blk6, req8, SysMLRelationType.satisfy, "The media sync service satisfies the monthly drill cadence."),
+        (comp3, req3, SysMLRelationType.trace, "The router/firewall realizes guest isolation."),
+        (comp4, req5, SysMLRelationType.trace, "The UPS realizes outage resilience."),
+        (comp5, req6, SysMLRelationType.trace, "The VPN gateway realizes remote administration control."),
+        (comp6, req3, SysMLRelationType.trace, "The access point realizes guest Wi-Fi segmentation."),
+        (comp7, req4, SysMLRelationType.trace, "The backup orchestrator realizes overnight sync timing."),
+        (comp7, req8, SysMLRelationType.trace, "The backup orchestrator realizes the monthly drill cadence."),
+        (tst3, req3, SysMLRelationType.verify, "The guest isolation check verifies the isolation requirement."),
+        (tst4, req4, SysMLRelationType.verify, "The backup window check verifies the overnight sync requirement."),
+        (tst5, req5, SysMLRelationType.verify, "The UPS runtime check verifies outage resilience."),
+        (tst6, req6, SysMLRelationType.verify, "The remote access check verifies VPN-only administration."),
+        (tst7, req7, SysMLRelationType.verify, "The encryption-at-rest check verifies backup encryption."),
+        (tst8, req8, SysMLRelationType.verify, "The monthly drill review check verifies the restore drill cadence."),
+    ]
+    for source, target, relation_type, rationale in personal_relations:
+        source_type = (
+            SysMLObjectType.block
+            if isinstance(source, Block)
+            else SysMLObjectType.component
+            if isinstance(source, Component)
+            else SysMLObjectType.test_case
+        )
+        if not session.exec(
+            select(SysMLRelation).where(
+                SysMLRelation.project_id == project.id,
+                SysMLRelation.source_type == source_type,
+                SysMLRelation.source_id == source.id,
+                SysMLRelation.target_type == SysMLObjectType.requirement,
+                SysMLRelation.target_id == target.id,
+                SysMLRelation.relation_type == relation_type,
+            )
+        ).first():
+            create_sysml_relation(
+                session,
+                SysMLRelationCreate(
+                    project_id=project.id,
+                    source_type=source_type,
+                    source_id=source.id,
+                    target_type=SysMLObjectType.requirement,
+                    target_id=target.id,
+                    relation_type=relation_type,
+                    rationale=rationale,
+                ),
+            )
+
+    for requirement, component, test_case, rationale in [
+        (req3, comp3, tst3, "Guest isolation requirement allocates to the router/firewall and is verified by the isolation check."),
+        (req4, comp7, tst4, "Nightly sync requirement allocates to the backup orchestrator and is verified by the backup window check."),
+        (req5, comp4, tst5, "UPS resilience requirement allocates to the UPS and is verified by the runtime check."),
+        (req6, comp5, tst6, "VPN-only administration requirement allocates to the VPN gateway and is verified by the remote access check."),
+        (req7, comp2, tst7, "Encryption-at-rest requirement allocates to the NAS appliance and is verified by the encryption check."),
+        (req8, comp7, tst8, "Monthly drill requirement allocates to the backup orchestrator and is verified by the drill review."),
+    ]:
+        for link in [
+            LinkCreate(
                 project_id=project.id,
-                key="HOME-VER-002",
-                title="Restore Drill",
-                description="Verification drill showing files can be restored inside the 15 minute target.",
-                method=TestMethod.inspection,
-                status=TestCaseStatus.approved,
-                version=1,
-                approved_at=datetime.now(timezone.utc),
-                approved_by="seed",
+                source_type=LinkObjectType.requirement,
+                source_id=requirement.id,
+                target_type=LinkObjectType.component,
+                target_id=component.id,
+                relation_type=RelationType.allocated_to,
+                rationale=rationale,
+            ),
+            LinkCreate(
+                project_id=project.id,
+                source_type=LinkObjectType.requirement,
+                source_id=requirement.id,
+                target_type=LinkObjectType.test_case,
+                target_id=test_case.id,
+                relation_type=RelationType.verifies,
+                rationale=rationale,
+            ),
+        ]:
+            if not session.exec(
+                select(Link).where(
+                    Link.project_id == project.id,
+                    Link.source_type == link.source_type,
+                    Link.source_id == link.source_id,
+                    Link.target_type == link.target_type,
+                    Link.target_id == link.target_id,
+                    Link.relation_type == link.relation_type,
+                )
+            ).first():
+                _add(session, Link.model_validate(link))
+
+    for evidence_payload in [
+        {
+            "title": "Guest isolation verification evidence",
+            "summary": "Home router evidence confirms guest devices cannot reach the backup VLAN.",
+            "evidence_type": VerificationEvidenceType.inspection,
+            "source_name": "Home review",
+            "source_reference": "HOME-VER-003",
+            "linked_requirement_ids": [req3.id],
+            "linked_test_case_ids": [tst3.id],
+            "linked_component_ids": [comp3.id, comp6.id],
+        },
+        {
+            "title": "Backup window verification evidence",
+            "summary": "Backup timing evidence shows the nightly sync finishes before 02:00.",
+            "evidence_type": VerificationEvidenceType.test_result,
+            "source_name": "Backup monitor",
+            "source_reference": "HOME-VER-004",
+            "linked_requirement_ids": [req4.id],
+            "linked_test_case_ids": [tst4.id],
+            "linked_component_ids": [comp7.id],
+        },
+        {
+            "title": "UPS runtime verification evidence",
+            "summary": "Power evidence confirms the core network survives the outage window on UPS.",
+            "evidence_type": VerificationEvidenceType.analysis,
+            "source_name": "Power audit",
+            "source_reference": "HOME-VER-005",
+            "linked_requirement_ids": [req5.id],
+            "linked_test_case_ids": [tst5.id],
+            "linked_component_ids": [comp4.id],
+        },
+        {
+            "title": "VPN access verification evidence",
+            "summary": "Access evidence shows remote administration is only available through VPN.",
+            "evidence_type": VerificationEvidenceType.inspection,
+            "source_name": "Network review",
+            "source_reference": "HOME-VER-006",
+            "linked_requirement_ids": [req6.id],
+            "linked_test_case_ids": [tst6.id],
+            "linked_component_ids": [comp5.id],
+        },
+        {
+            "title": "Encryption-at-rest verification evidence",
+            "summary": "Storage review confirms backups are encrypted when the NAS is offline.",
+            "evidence_type": VerificationEvidenceType.analysis,
+            "source_name": "Storage review",
+            "source_reference": "HOME-VER-007",
+            "linked_requirement_ids": [req7.id],
+            "linked_test_case_ids": [tst7.id],
+            "linked_component_ids": [comp2.id],
+        },
+        {
+            "title": "Monthly drill verification evidence",
+            "summary": "Restore drill records show the monthly review is logged and repeatable.",
+            "evidence_type": VerificationEvidenceType.test_result,
+            "source_name": "Home QA",
+            "source_reference": "HOME-VER-008",
+            "linked_requirement_ids": [req8.id],
+            "linked_test_case_ids": [tst8.id],
+            "linked_component_ids": [comp7.id],
+        },
+    ]:
+        if not session.exec(
+            select(VerificationEvidence).where(
+                VerificationEvidence.project_id == project.id,
+                VerificationEvidence.title == evidence_payload["title"],
+            )
+        ).first():
+            create_verification_evidence(
+                session,
+                VerificationEvidenceCreate(
+                    project_id=project.id,
+                    title=evidence_payload["title"],
+                    evidence_type=evidence_payload["evidence_type"],
+                    summary=evidence_payload["summary"],
+                    source_name=evidence_payload["source_name"],
+                    source_reference=evidence_payload["source_reference"],
+                    observed_at=datetime.now(timezone.utc),
+                    metadata_json={"seeded": True, "profile": "personal"},
+                    linked_requirement_ids=evidence_payload["linked_requirement_ids"],
+                    linked_test_case_ids=evidence_payload["linked_test_case_ids"],
+                    linked_component_ids=evidence_payload["linked_component_ids"],
+                ),
+            )
+
+    first_guest_evidence = _first_item(
+        session.exec(
+            select(VerificationEvidence).where(
+                VerificationEvidence.project_id == project.id,
+                VerificationEvidence.title == "Guest isolation verification evidence",
+            )
+        )
+    )
+    first_backup_evidence = _first_item(
+        session.exec(
+            select(VerificationEvidence).where(
+                VerificationEvidence.project_id == project.id,
+                VerificationEvidence.title == "Backup window verification evidence",
+            )
+        )
+    )
+    if not session.exec(
+        select(SimulationEvidence).where(
+            SimulationEvidence.project_id == project.id,
+            SimulationEvidence.title == "Home outage recovery simulation",
+        )
+    ).first():
+        create_simulation_evidence(
+            session,
+            SimulationEvidenceCreate(
+                project_id=project.id,
+                title="Home outage recovery simulation",
+                model_reference="Home Network Model",
+                scenario_name="Guest traffic and power outage",
+                input_summary="Simulate a short outage while backups run and guest devices remain active.",
+                inputs_json={"outage_minutes": 20, "backup_window_hours": 8, "guest_clients": 4},
+                expected_behavior="Guest devices stay isolated while backups complete inside the window.",
+                observed_behavior="The network kept guests isolated and the backup job completed in time.",
+                result=SimulationEvidenceResult.passed,
+                execution_timestamp=datetime.now(timezone.utc),
+                metadata_json={"seeded": True, "profile": "personal"},
+                linked_requirement_ids=[req3.id, req4.id, req5.id],
+                linked_test_case_ids=[tst3.id, tst4.id, tst5.id],
+                linked_verification_evidence_ids=[e.id for e in [first_guest_evidence, first_backup_evidence] if e is not None],
             ),
         )
-        tst2 = _get(session, TestCase, tst2.id)
+
+    if not session.exec(
+        select(OperationalEvidence).where(
+            OperationalEvidence.project_id == project.id,
+            OperationalEvidence.title == "Home network telemetry batch",
+        )
+    ).first():
+        create_operational_evidence(
+            session,
+            OperationalEvidenceCreate(
+                project_id=project.id,
+                title="Home network telemetry batch",
+                source_name="Home monitor",
+                source_type=OperationalEvidenceSourceType.system,
+                captured_at=datetime.now(timezone.utc),
+                coverage_window_start=datetime.now(timezone.utc) - timedelta(hours=8),
+                coverage_window_end=datetime.now(timezone.utc),
+                observations_summary="Telemetry shows the guest network stayed isolated and the backup window completed overnight.",
+                aggregated_observations_json={"guest_isolated": True, "backup_completed": True, "vpn_only": True},
+                quality_status=OperationalEvidenceQualityStatus.good,
+                derived_metrics_json={"backup_success_rate": 1.0, "guest_isolation_checks": 1},
+                metadata_json={"seeded": True, "profile": "personal"},
+                linked_requirement_ids=[req3.id, req4.id, req6.id, req8.id],
+                linked_verification_evidence_ids=[e.id for e in [first_guest_evidence, first_backup_evidence] if e is not None],
+            ),
+        )
 
     if not session.exec(
         select(BlockContainment).where(
@@ -2141,8 +3247,8 @@ def _seed_personal_demo_details(session: Session, project_id: UUID, base: dict[s
             ChangeRequestCreate(
                 project_id=project.id,
                 key="HOME-CR-001",
-                title="Add UPS-backed storage for overnight resilience",
-                description="The overnight evidence shows the home backup path should gain UPS-backed storage and a tighter restore rule.",
+                title="Add UPS-backed storage and VPN hardening for overnight resilience",
+                description="The richer home thread shows backups, guest isolation, UPS continuity, and remote access controls should be handled together.",
                 status=ChangeRequestStatus.open,
                 severity=Severity.medium,
             ),
@@ -2150,8 +3256,16 @@ def _seed_personal_demo_details(session: Session, project_id: UUID, base: dict[s
     if not session.exec(select(ChangeImpact).where(ChangeImpact.change_request_id == cr.id)).first():
         for impact in [
             {"object_type": "requirement", "object_id": req1.id, "impact_level": ImpactLevel.high, "notes": "Backup availability may require tighter resilience controls."},
+            {"object_type": "requirement", "object_id": req3.id, "impact_level": ImpactLevel.medium, "notes": "Guest isolation may need network segmentation review."},
+            {"object_type": "requirement", "object_id": req5.id, "impact_level": ImpactLevel.high, "notes": "UPS runtime affects the resilience story."},
+            {"object_type": "requirement", "object_id": req6.id, "impact_level": ImpactLevel.medium, "notes": "Remote access policy must align with VPN hardening."},
             {"object_type": "component", "object_id": comp1.id, "impact_level": ImpactLevel.high, "notes": "Backup storage node is the primary resilience concern."},
+            {"object_type": "component", "object_id": comp3.id, "impact_level": ImpactLevel.medium, "notes": "Router/firewall segmentation may need a configuration update."},
+            {"object_type": "component", "object_id": comp4.id, "impact_level": ImpactLevel.high, "notes": "UPS-backed continuity is the main resilience lever."},
+            {"object_type": "component", "object_id": comp5.id, "impact_level": ImpactLevel.medium, "notes": "VPN gateway controls remote administration."},
             {"object_type": "test_case", "object_id": tst1.id, "impact_level": ImpactLevel.medium, "notes": "Overnight backup check may need an additional outage step."},
+            {"object_type": "test_case", "object_id": tst3.id, "impact_level": ImpactLevel.medium, "notes": "Guest isolation should be rechecked after the network change."},
+            {"object_type": "test_case", "object_id": tst5.id, "impact_level": ImpactLevel.medium, "notes": "UPS runtime should be revalidated after the resilience update."},
         ]:
             _add(session, ChangeImpact(change_request_id=cr.id, **impact))
 
@@ -3473,6 +4587,14 @@ def create_link(session: Session, payload: LinkCreate) -> LinkRead:
     return _read(LinkRead, _add(session, Link.model_validate(payload)))
 
 
+def delete_link(session: Session, link_id: UUID) -> None:
+    item = _get(session, Link, link_id)
+    if item is None:
+        raise LookupError("Link not found")
+    session.delete(item)
+    session.commit()
+
+
 def list_links(session: Session, project_id: UUID, object_type: str | None = None, object_id: UUID | None = None) -> list[LinkRead]:
     stmt = select(Link).where(Link.project_id == project_id)
     if object_type and object_id:
@@ -3532,6 +4654,30 @@ def get_project_dashboard(session: Session, project_id: UUID) -> ProjectDashboar
         recent_test_runs=test_runs[:5],
         recent_changes=change_requests[:5],
         recent_links=list_links(session, project_id)[:5],
+    )
+
+
+def get_project_tab_stats(session: Session, project_id: UUID) -> ProjectTabStats:
+    requirements = _items(session.exec(select(Requirement).where(Requirement.project_id == project_id)))
+    blocks = _items(session.exec(select(Block).where(Block.project_id == project_id)))
+    tests = _items(session.exec(select(TestCase).where(TestCase.project_id == project_id)))
+    baselines = _items(session.exec(select(Baseline).where(Baseline.project_id == project_id)))
+    change_requests = _items(session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project_id)))
+    non_conformities = _items(session.exec(select(NonConformity).where(NonConformity.project_id == project_id)))
+    simulation_evidence = _items(session.exec(select(SimulationEvidence).where(SimulationEvidence.project_id == project_id)))
+    operational_evidence = _items(session.exec(select(OperationalEvidence).where(OperationalEvidence.project_id == project_id)))
+    operational_runs = _items(session.exec(select(OperationalRun).where(OperationalRun.project_id == project_id)))
+
+    return ProjectTabStats(
+        requirements=len(requirements),
+        blocks=len(blocks),
+        tests=len(tests),
+        baselines=len(baselines),
+        change_requests=len(change_requests),
+        non_conformities=len(non_conformities),
+        simulation_evidence=len(simulation_evidence),
+        operational_evidence=len(operational_evidence),
+        operational_runs=len(operational_runs),
     )
 
 

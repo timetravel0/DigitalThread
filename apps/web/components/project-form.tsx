@@ -9,6 +9,7 @@ import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import { ProjectProfileSelector } from "@/components/project-profile-selector";
 import type { DomainProfile } from "@/lib/labels";
+import { FormFooter, InlineHelp } from "@/components/form-helpers";
 
 const schema = z.object({
   code: z.string().min(1, "Project code is required"),
@@ -54,6 +55,7 @@ export function ProjectForm() {
         <Input placeholder="Project name" {...form.register("name")} />
       </div>
       <Textarea placeholder="Project description" rows={4} {...form.register("description")} />
+      <InlineHelp>Write a short summary of the project purpose so new users can orient themselves quickly.</InlineHelp>
       <div className="grid gap-4 md:grid-cols-2">
         <Select {...form.register("status")}>
           <option value="draft">draft</option>
@@ -62,7 +64,7 @@ export function ProjectForm() {
         </Select>
       </div>
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Create project</Button>
+      <FormFooter submitLabel="Create project" onCancel={() => router.back()} />
     </form>
   );
 }

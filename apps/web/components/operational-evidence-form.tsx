@@ -7,6 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Badge, Button, Input, Select, Textarea } from "@/components/ui";
+import { FormFooter, JsonTextareaField, InlineHelp } from "@/components/form-helpers";
 
 const schema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -146,9 +147,27 @@ export function OperationalEvidenceForm({
         <Input type="datetime-local" {...form.register("coverage_window_end")} />
       </div>
       <Textarea placeholder="Observations summary" rows={3} {...form.register("observations_summary")} />
-      <Textarea placeholder='Aggregated observations JSON, e.g. {"duration_minutes": 22}' rows={4} {...form.register("aggregated_observations_json")} />
-      <Textarea placeholder='Derived metrics JSON, e.g. {"coverage_minutes": 22}' rows={4} {...form.register("derived_metrics_json")} />
-      <Textarea placeholder='Metadata JSON, e.g. {"contract_reference": "OP-EVBATCH:DR-RUN-001"}' rows={4} {...form.register("metadata_json")} />
+      <JsonTextareaField
+        label="Aggregated observations"
+        description="Summarize the captured operational observations in a structured way when you need more than free text."
+        example='{"duration_minutes": 22, "environment": "indoor"}'
+        rows={4}
+        {...form.register("aggregated_observations_json")}
+      />
+      <JsonTextareaField
+        label="Derived metrics"
+        description="Capture calculated results or health indicators from the evidence batch."
+        example='{"coverage_minutes": 22, "retry_count": 1}'
+        rows={4}
+        {...form.register("derived_metrics_json")}
+      />
+      <JsonTextareaField
+        label="Metadata"
+        description="Use this for references, batch identifiers, or contextual details that are not part of the standard evidence fields."
+        example='{"contract_reference": "OP-EVBATCH:DR-RUN-001"}'
+        rows={4}
+        {...form.register("metadata_json")}
+      />
       <div className="grid gap-4 md:grid-cols-2">
         <Select {...form.register("linked_requirement_id")}>
           <option value="">Optional requirement</option>
@@ -160,7 +179,7 @@ export function OperationalEvidenceForm({
         </Select>
       </div>
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Add operational evidence</Button>
+      <FormFooter submitLabel="Add operational evidence" onCancel={() => router.back()} />
     </form>
   );
 }

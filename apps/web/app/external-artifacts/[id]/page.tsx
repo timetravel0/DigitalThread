@@ -38,7 +38,7 @@ export default async function ExternalArtifactPage({ params }: { params: { id: s
                 </div>
               ))
             ) : (
-              <div className="text-sm text-muted">No versions recorded.</div>
+              <div className="text-sm text-muted">No versions recorded yet. External artifact versions belong here when you need to track an authoritative source over time.</div>
             )}
             <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
               <div className="text-sm font-medium">Add version</div>
@@ -61,7 +61,7 @@ export default async function ExternalArtifactPage({ params }: { params: { id: s
               </div>
             ))
           ) : (
-            <div className="text-sm text-muted">No artifact links recorded yet.</div>
+            <div className="text-sm text-muted">No artifact links recorded yet. Links belong here when internal requirements, blocks, or tests need to point to this external source of truth.</div>
           )}
         </CardBody>
       </Card>

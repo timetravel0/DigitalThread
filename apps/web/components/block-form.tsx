@@ -10,6 +10,7 @@ import { Button, Input, Select, Textarea } from "@/components/ui";
 import { getLabels, type DomainProfile, type LabelSet } from "@/lib/labels";
 import { useToast } from "@/lib/toast-context";
 import type { Block } from "@/lib/types";
+import { FormFooter, InlineHelp } from "@/components/form-helpers";
 
 type BlockKindValue = "system" | "subsystem" | "assembly" | "component" | "software" | "interface" | "other";
 type BlockStatusValue = "draft" | "in_review" | "approved" | "rejected" | "obsolete";
@@ -175,13 +176,16 @@ export function BlockForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Select {...form.register("project_id")} disabled={!projects.length}>
-          {(projects.length ? projects : currentProject ? [currentProject] : []).map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.code} - {project.name}
-            </option>
-          ))}
-        </Select>
+        <div className="space-y-1">
+          <Select {...form.register("project_id")} disabled={!projects.length}>
+            {(projects.length ? projects : currentProject ? [currentProject] : []).map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.code} - {project.name}
+              </option>
+            ))}
+          </Select>
+          <InlineHelp>Select the project that owns this {labels.block.toLowerCase()}.</InlineHelp>
+        </div>
         <Input placeholder={`${labels.block} key`} readOnly {...form.register("key")} />
       </div>
       <Input placeholder={`${labels.block} name`} {...form.register("name")} />
@@ -208,7 +212,7 @@ export function BlockForm({
         <Input placeholder="Owner" {...form.register("owner")} />
       </div>
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">{`Save ${labels.block}`}</Button>
+      <FormFooter submitLabel={`Save ${labels.block}`} onCancel={() => router.back()} />
     </form>
   );
 }

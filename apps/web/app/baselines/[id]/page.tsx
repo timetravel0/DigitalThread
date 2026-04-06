@@ -89,7 +89,10 @@ export default async function BaselinePage({ params, searchParams }: { params: {
               </div>
             ))
           ) : (
-            <div className="text-sm text-muted">No lifecycle events recorded yet.</div>
+            <EmptyState
+              title="No lifecycle events yet"
+              description="A baseline becomes meaningful when it has a clear release or obsolescence history. Record the lifecycle action so reviewers can see how this snapshot is being used."
+            />
           )}
         </CardBody>
       </Card>
@@ -126,7 +129,11 @@ export default async function BaselinePage({ params, searchParams }: { params: {
               </Link>
             ))
           ) : (
-            <EmptyState title="No matching configuration context" description="No configuration context in this project contains the same approved item set as this baseline." />
+            <EmptyState
+              title="No matching configuration context"
+              description="A matching configuration context appears when another snapshot contains the same approved item set as this baseline. Create or update a context in the authoritative sources area to make the comparison possible."
+              action={<Button href={`/projects/${projectId}/authoritative-sources?tab=configuration-contexts`} variant="secondary">Open authoritative sources</Button>}
+            />
           )}
         </CardBody>
       </Card>
@@ -159,7 +166,7 @@ export default async function BaselinePage({ params, searchParams }: { params: {
           ) : (
             <EmptyState
               title="No configuration contexts yet"
-              description="Create a configuration context in this project to compare it against the baseline snapshot."
+              description="Configuration contexts belong here when you want to compare a working or review-gate snapshot against a baseline. Add one in authoritative sources so the approved item set can be compared later."
               action={<Button href={`/configuration-contexts/new?project=${projectId}`}>Create configuration context</Button>}
             />
           )}
@@ -231,7 +238,7 @@ export default async function BaselinePage({ params, searchParams }: { params: {
           ) : (
             <EmptyState
               title="No second baseline yet"
-              description="Create at least two baselines in the project to compare approved snapshots directly."
+              description="A second baseline belongs here when you need to compare two approved snapshots directly. Create or release another baseline in the project once the thread has changed enough to justify a comparison."
             />
           )}
           {baselineComparison ? (

@@ -926,6 +926,18 @@ class DashboardKpis(BaseModel):
     open_change_requests: int
 
 
+class ProjectTabStats(BaseModel):
+    requirements: int
+    blocks: int
+    tests: int
+    baselines: int
+    change_requests: int
+    non_conformities: int
+    simulation_evidence: int
+    operational_evidence: int
+    operational_runs: int
+
+
 class ProjectDashboard(BaseModel):
     project: ProjectRead
     kpis: DashboardKpis

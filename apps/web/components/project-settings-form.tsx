@@ -38,6 +38,9 @@ export function ProjectSettingsForm({ project }: { project: Project }) {
       {success ? <div className="rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">{success}</div> : null}
       {error ? <div className="text-sm text-danger">{error}</div> : null}
       <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" onClick={() => router.back()}>
+          Cancel
+        </Button>
         <Button onClick={submit} disabled={saving}>
           {saving ? "Saving..." : "Save settings"}
         </Button>

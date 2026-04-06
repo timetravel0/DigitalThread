@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Badge, Card, CardBody, CardHeader, EmptyState } from "@/components/ui";
+import { Badge, Button, Card, CardBody, CardHeader, EmptyState } from "@/components/ui";
 
 type RegistryKind = "all" | "requirements" | "links" | "evidence";
 type LinkKind = "all" | "generic" | "sysml" | "artifact";
@@ -113,7 +113,11 @@ export function RelationshipRegistry({
                 ))}
               </div>
             ) : (
-              <EmptyState title="No requirements found" description="Create requirements to populate the registry." />
+              <EmptyState
+                title="No requirements in the registry"
+                description={`Requirements anchor the thread and make links, evidence, and review meaningful. Create ${labels.requirement || "requirements"} first so this registry can show the objects everything else connects back to.`}
+                action={<Button href={`/requirements/new?project=${projectId}`}>Create {labels.requirement || "requirement"}</Button>}
+              />
             )}
           </CardBody>
         </Card>
@@ -126,7 +130,7 @@ export function RelationshipRegistry({
             {(linkKind === "all" || linkKind === "generic") ? (
               <RegistryLinkGroup
                 title="Generic links"
-                emptyTitle="No generic links yet"
+                emptyTitle="No generic links in this view yet"
                 items={links}
                 renderItem={(item) => (
                   <div className="rounded-xl border border-line bg-panel2 p-4">
@@ -145,7 +149,7 @@ export function RelationshipRegistry({
             {(linkKind === "all" || linkKind === "sysml") ? (
               <RegistryLinkGroup
                 title="SysML relations"
-                emptyTitle="No SysML relations yet"
+                emptyTitle="No SysML relations in this view yet"
                 items={sysmlRelations}
                 renderItem={(item) => (
                   <div className="rounded-xl border border-line bg-panel2 p-4">
@@ -164,7 +168,7 @@ export function RelationshipRegistry({
             {(linkKind === "all" || linkKind === "artifact") ? (
               <RegistryLinkGroup
                 title="Artifact links"
-                emptyTitle="No artifact links yet"
+                emptyTitle="No artifact links in this view yet"
                 items={artifactLinks}
                 renderItem={(item) => (
                   <div className="rounded-xl border border-line bg-panel2 p-4">
@@ -195,7 +199,7 @@ export function RelationshipRegistry({
             {(evidenceKind === "all" || evidenceKind === "verification") ? (
               <RegistryEvidenceGroup
                 title="Verification evidence"
-                emptyTitle="No verification evidence yet"
+                emptyTitle="No verification evidence in this view yet"
                 items={verificationEvidence}
                 renderItem={(item) => (
                   <Link href={`/verification-evidence/${item.id}`} className="block rounded-xl border border-line bg-panel2 p-4 hover:border-accent/50">
@@ -214,7 +218,7 @@ export function RelationshipRegistry({
             {(evidenceKind === "all" || evidenceKind === "simulation") ? (
               <RegistryEvidenceGroup
                 title="Simulation evidence"
-                emptyTitle="No simulation evidence yet"
+                emptyTitle="No simulation evidence in this view yet"
                 items={simulationEvidence}
                 renderItem={(item) => (
                   <Link href={`/simulation-evidence/${item.id}`} className="block rounded-xl border border-line bg-panel2 p-4 hover:border-accent/50">
@@ -233,7 +237,7 @@ export function RelationshipRegistry({
             {(evidenceKind === "all" || evidenceKind === "operational") ? (
               <RegistryEvidenceGroup
                 title="Operational evidence"
-                emptyTitle="No operational evidence yet"
+                emptyTitle="No operational evidence in this view yet"
                 items={operationalEvidence}
                 renderItem={(item) => (
                   <Link href={`/operational-evidence/${item.id}`} className="block rounded-xl border border-line bg-panel2 p-4 hover:border-accent/50">
@@ -262,7 +266,7 @@ function RegistryLinkGroup({ title, emptyTitle, items, renderItem }: { title: st
         <div className="font-medium">{title}</div>
         <div className="text-xs text-muted">{items.length} records</div>
       </div>
-      {items.length ? <div className="space-y-3">{items.map((item) => <div key={item.id}>{renderItem(item)}</div>)}</div> : <EmptyState title={emptyTitle} description={`No ${title.toLowerCase()} match the current filters.`} />}
+      {items.length ? <div className="space-y-3">{items.map((item) => <div key={item.id}>{renderItem(item)}</div>)}</div> : <EmptyState title={emptyTitle} description={registryEmptyDescription(title)} />}
     </section>
   );
 }
@@ -274,9 +278,28 @@ function RegistryEvidenceGroup({ title, emptyTitle, items, renderItem }: { title
         <div className="font-medium">{title}</div>
         <div className="text-xs text-muted">{items.length} records</div>
       </div>
-      {items.length ? <div className="space-y-3">{items.map((item) => <div key={item.id}>{renderItem(item)}</div>)}</div> : <EmptyState title={emptyTitle} description={`No ${title.toLowerCase()} match the current filters.`} />}
+      {items.length ? <div className="space-y-3">{items.map((item) => <div key={item.id}>{renderItem(item)}</div>)}</div> : <EmptyState title={emptyTitle} description={registryEmptyDescription(title)} />}
     </section>
   );
+}
+
+function registryEmptyDescription(title: string) {
+  if (title.toLowerCase().includes("verification")) {
+    return "Verification evidence belongs here when tests, inspections, or reviews prove a requirement. Add evidence from the relevant requirement or test detail page so the registry can show the proof trail.";
+  }
+  if (title.toLowerCase().includes("simulation")) {
+    return "Simulation evidence belongs here when a model or scenario explains the requirement. Create simulation evidence from the requirement or test page to make the model-to-thread link visible.";
+  }
+  if (title.toLowerCase().includes("operational")) {
+    return "Operational evidence belongs here when field telemetry or run records confirm how the project behaves in practice. Add it from a requirement, verification record, or operational run so the registry stays connected.";
+  }
+  if (title.toLowerCase().includes("artifact")) {
+    return "Artifact links belong here when an internal object needs a pointer to the owning external source. Add them from a requirement, block, or test detail page to keep the authoritative source explicit.";
+  }
+  if (title.toLowerCase().includes("sysml")) {
+    return "SysML relations belong here when requirements, blocks, and tests need explicit structural links. Create or edit the underlying objects to populate the relation registry.";
+  }
+  return `No ${title.toLowerCase()} match the current filters. Add links from the relevant detail page so this registry can explain how the thread is connected.`;
 }
 
 function Stat({ label, value, href, active }: { label: string; value: number; href: string; active?: boolean }) {

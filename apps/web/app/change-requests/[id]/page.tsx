@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { ImpactVisualization, type ImpactVisualizationSection } from "@/components/impact-visualization";
-import { Badge, Card, CardBody, CardHeader, SectionTitle } from "@/components/ui";
+import { Badge, Card, CardBody, CardHeader, EmptyState, SectionTitle } from "@/components/ui";
 import { WorkflowActions } from "@/components/workflow-actions";
 
 export const dynamic = "force-dynamic";
@@ -26,10 +26,10 @@ export default async function ChangeRequestPage({ params }: { params: { id: stri
       <Card>
         <CardHeader><div className="font-semibold">Lifecycle summary</div></CardHeader>
         <CardBody className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <LifecycleStage title="Analysis" value={data.change_request.analysis_summary} emptyText="No analysis summary yet." />
-          <LifecycleStage title="Disposition" value={data.change_request.disposition_summary} emptyText="No disposition summary yet." />
-          <LifecycleStage title="Implementation" value={data.change_request.implementation_summary} emptyText="No implementation summary yet." />
-          <LifecycleStage title="Closure" value={data.change_request.closure_summary} emptyText="No closure summary yet." />
+          <LifecycleStage title="Analysis" value={data.change_request.analysis_summary} emptyText="Analysis explains what changed, why it matters, and which objects are likely affected. Add that summary before the request moves forward." />
+          <LifecycleStage title="Disposition" value={data.change_request.disposition_summary} emptyText="Disposition records the review decision and the next action. Use it to show whether the change should be accepted, reworked, or rejected." />
+          <LifecycleStage title="Implementation" value={data.change_request.implementation_summary} emptyText="Implementation explains what was changed in the thread after the decision. Add it once the request starts to alter requirements, blocks, or tests." />
+          <LifecycleStage title="Closure" value={data.change_request.closure_summary} emptyText="Closure records the final review outcome and why the change can be closed. Add it when the request is fully resolved." />
         </CardBody>
       </Card>
       <ImpactVisualization
@@ -61,7 +61,7 @@ export default async function ChangeRequestPage({ params }: { params: { id: stri
               </div>
             ))
           ) : (
-            <div className="text-sm text-muted">No lifecycle events recorded yet.</div>
+            <EmptyState title="No lifecycle events yet" description="Change requests gain value when analysis, disposition, implementation, and closure are recorded as they move through review. Use the action above to start the lifecycle." />
           )}
         </CardBody>
       </Card>
@@ -115,27 +115,27 @@ function buildChangeRequestSections(data: any): ImpactVisualizationSection[] {
     else grouped.low.push(node);
   }
   return [
-    {
-      title: "High impact",
-      description: "Objects that need immediate attention.",
-      tone: "danger",
-      items: grouped.high,
-      emptyText: "No high impact objects linked yet.",
-    },
-    {
-      title: "Medium impact",
-      description: "Objects that should be reviewed before release.",
-      tone: "warning",
-      items: grouped.medium,
-      emptyText: "No medium impact objects linked yet.",
-    },
-    {
-      title: "Low impact",
-      description: "Objects with a smaller expected effect.",
-      tone: "accent",
-      items: grouped.low,
-      emptyText: "No low impact objects linked yet.",
-    },
+      {
+        title: "High impact",
+        description: "Objects that are likely to need immediate review or a follow-up change.",
+        tone: "danger",
+        items: grouped.high,
+        emptyText: "No high impact objects are linked yet. High impact items belong here when the requested change affects requirements, tests, blocks, or evidence enough to need immediate attention.",
+      },
+      {
+        title: "Medium impact",
+        description: "Objects that should be reviewed before release because the change could still affect them.",
+        tone: "warning",
+        items: grouped.medium,
+        emptyText: "No medium impact objects are linked yet. Medium impact items belong here when the change matters, but not enough to block the whole thread immediately.",
+      },
+      {
+        title: "Low impact",
+        description: "Objects with a smaller expected effect that still need to stay visible to reviewers.",
+        tone: "accent",
+        items: grouped.low,
+        emptyText: "No low impact objects are linked yet. Low impact items belong here when the change has a limited effect but still deserves traceability.",
+      },
   ];
 }
 

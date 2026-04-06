@@ -86,7 +86,6 @@ export function ProjectNavigationGuide({
         { href: `/projects/${projectId}/requirements`, label: labels.requirements },
         { href: `/projects/${projectId}/blocks`, label: labels.blocks },
         { href: `/projects/${projectId}/tests`, label: labels.testCases },
-        { href: `/projects/${projectId}/software`, label: "Software" },
       ],
     },
     {
@@ -94,7 +93,6 @@ export function ProjectNavigationGuide({
       description: "See how objects connect and where the thread passes through the model.",
       items: [
         { href: `/projects/${projectId}/graph`, label: "Traceability graph" },
-        { href: `/projects/${projectId}/matrix`, label: "Matrix view" },
         { href: `/projects/${projectId}/links`, label: labels.links },
       ],
     },
@@ -104,7 +102,6 @@ export function ProjectNavigationGuide({
       items: [
         { href: `/projects/${projectId}/baselines`, label: labels.baselines },
         { href: `/projects/${projectId}/change-requests`, label: labels.changeRequests },
-        { href: `/projects/${projectId}/non-conformities`, label: labels.nonConformities },
         { href: `/projects/${projectId}/review-queue`, label: "Review Queue" },
       ],
     },
@@ -145,8 +142,6 @@ export function ProjectNavigationGuide({
             <Button href={`/projects/${projectId}/simulation-evidence`} variant="secondary">{labels.simulationEvidence}</Button>
             <Button href={`/projects/${projectId}/operational-evidence`} variant="secondary">{labels.operationalEvidence}</Button>
             <Button href={`/projects/${projectId}/import`} variant="secondary">Import data</Button>
-            <Button href={`/projects/${projectId}/sysml`} variant="secondary">SysML</Button>
-            <Button href={`/projects/${projectId}/authoritative-sources`} variant="secondary">Authoritative Sources</Button>
           </div>
         </details>
       </CardBody>

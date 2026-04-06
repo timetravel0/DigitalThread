@@ -2,7 +2,9 @@
 import { api } from "@/lib/api-client";
 import { getLabels } from "@/lib/labels";
 import { ArtifactLinkForm } from "@/components/artifact-link-form";
-import { Badge, Button, Card, CardBody, CardHeader, SectionTitle } from "@/components/ui";
+import { Badge, Button, Card, CardBody, CardHeader, EmptyState, SectionTitle } from "@/components/ui";
+import { RelationshipLinkForm } from "@/components/relationship-link-form";
+import { RelationshipDeleteButton } from "@/components/relationship-delete-button";
 import { SimulationEvidenceCard } from "@/components/simulation-evidence-card";
 import { SimulationEvidenceForm } from "@/components/simulation-evidence-form";
 import { SimulationEvidenceMetadata } from "@/components/simulation-evidence-metadata";
@@ -16,10 +18,15 @@ export default async function TestCasePage({ params }: { params: { id: string } 
   if (!data) return <div className="text-sm text-muted">Test case not found.</div>;
   const project = await api.project(data.test_case.project_id).catch(() => null);
   const labels = getLabels(project?.domain_profile);
-  const [artifacts, fmiContracts] = await Promise.all([
+  const [artifacts, fmiContracts, requirements, blocks] = await Promise.all([
     api.externalArtifacts(data.test_case.project_id).catch(() => []),
     api.fmiContracts(data.test_case.project_id).catch(() => []),
+    api.requirements(data.test_case.project_id).catch(() => []),
+    api.blocks(data.test_case.project_id).catch(() => []),
   ]);
+  const sysmlRelations = await api.sysmlRelations(data.test_case.project_id, { object_type: "test_case", object_id: data.test_case.id }).catch(() => []);
+  const requirementLabels = new Map(requirements.map((item: any) => [item.id, `${item.key} - ${item.title}`]));
+  const blockLabels = new Map(blocks.map((item: any) => [item.id, `${item.key} - ${item.name}`]));
 
   return (
     <div className="space-y-6">
@@ -52,19 +59,113 @@ export default async function TestCasePage({ params }: { params: { id: string } 
           </CardBody>
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader><div className="font-semibold">Connect this test case</div></CardHeader>
+        <CardBody className="grid gap-6 xl:grid-cols-2">
+          <div id="connect-requirements">
+            <RelationshipLinkForm
+              projectId={data.test_case.project_id}
+              kind="sysml"
+              sourceType="test_case"
+              sourceId={data.test_case.id}
+              sourceLabel={`${data.test_case.key} - ${data.test_case.title}`}
+              relationType="verify"
+              relationLabel="Verify requirement"
+              targetType="requirement"
+              targetLabel="requirement"
+              targets={requirements.map((item: any) => ({ id: item.id, label: `${item.key} - ${item.title}` }))}
+              title="Requirements"
+              description="Use this when the test case verifies a requirement."
+              emptyDescription="Requirements belong here when this test case exists to prove them."
+              submitLabel="Link requirement"
+              emptyAction={<Button href={`/projects/${data.test_case.project_id}/requirements`} variant="secondary">Open requirements</Button>}
+            />
+          </div>
+          <div id="connect-blocks">
+            <RelationshipLinkForm
+              projectId={data.test_case.project_id}
+              kind="sysml"
+              sourceType="test_case"
+              sourceId={data.test_case.id}
+              sourceLabel={`${data.test_case.key} - ${data.test_case.title}`}
+              relationType="trace"
+              relationLabel="Trace to block"
+              targetType="block"
+              targetLabel="block"
+              targets={blocks.map((item: any) => ({ id: item.id, label: `${item.key} - ${item.name}` }))}
+              title="Blocks and realizations"
+              description="Use this when the test case exercises a block directly."
+              emptyDescription="Blocks belong here when the test case needs an explicit structural target."
+              submitLabel="Link block"
+              emptyAction={<Button href={`/projects/${data.test_case.project_id}/blocks`} variant="secondary">Open blocks</Button>}
+            />
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader><div className="font-semibold">SysML relations</div></CardHeader>
+        <CardBody className="space-y-3">
+          {sysmlRelations.length ? (
+            sysmlRelations.map((relation: any) => {
+              const sourceLabel = relation.source_type === "test_case" && relation.source_id === data.test_case.id
+                ? `${data.test_case.key} - ${data.test_case.title}`
+                : relation.source_type === "requirement"
+                  ? requirementLabels.get(relation.source_id) || relation.source_type
+                  : relation.source_type === "block"
+                    ? blockLabels.get(relation.source_id) || relation.source_type
+                    : relation.source_type;
+              const targetLabel = relation.target_type === "test_case" && relation.target_id === data.test_case.id
+                ? `${data.test_case.key} - ${data.test_case.title}`
+                : relation.target_type === "requirement"
+                  ? requirementLabels.get(relation.target_id) || relation.target_type
+                  : relation.target_type === "block"
+                    ? blockLabels.get(relation.target_id) || relation.target_type
+                    : relation.target_type;
+              return (
+                <div key={relation.id} className="rounded-xl border border-line bg-panel2 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium">{sourceLabel} <span className="text-muted">-&gt;</span> {targetLabel}</div>
+                      <div className="text-xs text-muted">{relation.relation_type}{relation.rationale ? ` · ${relation.rationale}` : ""}</div>
+                    </div>
+                    <RelationshipDeleteButton kind="sysml" id={relation.id} label={`${sourceLabel} to ${targetLabel}`} />
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <EmptyState
+              title="No SysML relations yet"
+              description="SysML relations belong here when this test case is connected to requirements or blocks. Use the link forms above to create the first one."
+              action={<Button href="#connect-requirements" variant="secondary">Connect objects</Button>}
+            />
+          )}
+        </CardBody>
+      </Card>
+
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader><div className="font-semibold">Runs</div></CardHeader>
           <CardBody className="space-y-3">
-            {data.runs.map((run: any) => (
-              <div key={run.id} className="rounded-xl border border-line bg-panel2 p-3">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="font-medium">{run.summary}</div>
-                  <Badge tone={run.result === "failed" ? "danger" : run.result === "passed" ? "success" : "warning"}>{run.result}</Badge>
+            {data.runs.length ? (
+              data.runs.map((run: any) => (
+                <div key={run.id} className="rounded-xl border border-line bg-panel2 p-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="font-medium">{run.summary}</div>
+                    <Badge tone={run.result === "failed" ? "danger" : run.result === "passed" ? "success" : "warning"}>{run.result}</Badge>
+                  </div>
+                  <div className="mt-1 text-xs text-muted">{run.execution_date}</div>
                 </div>
-                <div className="mt-1 text-xs text-muted">{run.execution_date}</div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <EmptyState
+                title="No runs recorded yet"
+                description="Runs belong here when this test or check has actually been executed. Use the validation cockpit to capture the first result so the test case can show what was exercised in practice."
+                action={<Button href={`/projects/${data.test_case.project_id}/validation`} variant="secondary">Open validation cockpit</Button>}
+              />
+            )}
           </CardBody>
         </Card>
         <Card>
@@ -91,7 +192,10 @@ export default async function TestCasePage({ params }: { params: { id: string } 
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-muted">No {labels.verificationEvidence.toLowerCase()} linked yet.</div>
+              <EmptyState
+                title={`No ${labels.verificationEvidence.toLowerCase()} linked yet`}
+                description="Verification evidence belongs here when a test run, inspection, or review proves the test case. Add evidence so the verification trail stays visible."
+              />
             )}
             <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
               <div className="mb-3 text-sm font-medium">Add {labels.verificationEvidence}</div>
@@ -114,9 +218,10 @@ export default async function TestCasePage({ params }: { params: { id: string } 
                 ))}
               </div>
             ) : (
-              <div className="rounded-xl border border-dashed border-line bg-panel2 p-4 text-sm text-muted">
-                No {labels.simulationEvidence.toLowerCase()} linked yet.
-              </div>
+              <EmptyState
+                title={`No ${labels.simulationEvidence.toLowerCase()} linked yet`}
+                description="Simulation evidence belongs here when a scenario or model explains the test case. Add it to connect simulation results back to the verification thread."
+              />
             )}
             <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
               <div className="mb-3 text-sm font-medium">Add {labels.simulationEvidence}</div>
@@ -141,7 +246,10 @@ export default async function TestCasePage({ params }: { params: { id: string } 
                 </div>
               ))
             ) : (
-              <div className="text-sm text-muted">No external sources linked yet.</div>
+              <EmptyState
+                title="No external source linked"
+                description="External sources belong here when a test case depends on a requirements document, design file, or other owning system. Link them to keep the source of truth explicit."
+              />
             )}
             <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
               <div className="mb-3 text-sm font-medium">Add linked external source</div>
@@ -157,9 +265,20 @@ export default async function TestCasePage({ params }: { params: { id: string } 
         </Card>
       </div>
       <Card>
-        <CardHeader><div className="font-semibold">Traceability</div></CardHeader>
-        <CardBody className="space-y-3">
-          {data.links.map((link: any) => <div key={link.id} className="rounded-xl border border-line bg-panel2 p-3"><div className="font-medium">{link.source_label || link.source_type} <span className="text-muted">-&gt;</span> {link.target_label || link.target_type}</div><div className="text-xs text-muted">{link.relation_type}</div></div>)}
+          <CardHeader><div className="font-semibold">Traceability</div></CardHeader>
+          <CardBody className="space-y-3">
+          {data.links.map((link: any) => (
+            <div key={link.id} className="rounded-xl border border-line bg-panel2 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium">{link.source_label || link.source_type} <span className="text-muted">-&gt;</span> {link.target_label || link.target_type}</div>
+                  <div className="text-xs text-muted">{link.relation_type}</div>
+                </div>
+                <RelationshipDeleteButton kind="link" id={link.id} label={`${link.source_label || link.source_type} to ${link.target_label || link.target_type}`} />
+              </div>
+            </div>
+          ))}
+          {!data.links.length ? <EmptyState title="No traceability links yet" description="Traceability belongs here when the test case is connected to the requirements or blocks it proves. Use the link forms above to create the first relationship." action={<Button href="#connect-requirements" variant="secondary">Connect objects</Button>} /> : null}
         </CardBody>
       </Card>
       <Card>

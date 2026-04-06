@@ -7,6 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Textarea } from "@/components/ui";
+import { FormFooter, JsonTextareaField } from "@/components/form-helpers";
 
 const schema = z.object({
   key: z.string().min(1, "Key is required"),
@@ -88,9 +89,15 @@ export function FMIContractForm({ projectId }: { projectId: string }) {
         <Input placeholder="Contract version" {...form.register("contract_version")} />
       </div>
       <Textarea placeholder="Description" rows={3} {...form.register("description")} />
-      <Textarea placeholder='Metadata JSON, e.g. {"adapter": "placeholder"}' rows={4} {...form.register("metadata_json")} />
+      <JsonTextareaField
+        label="Contract metadata"
+        description="Use this for adapter notes, interoperability hints, or contract-specific metadata."
+        example='{"adapter": "placeholder", "contract_profile": "fmi.placeholder.v1"}'
+        rows={4}
+        {...form.register("metadata_json")}
+      />
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Add FMI contract</Button>
+      <FormFooter submitLabel="Add FMI contract" onCancel={() => router.back()} />
     </form>
   );
 }

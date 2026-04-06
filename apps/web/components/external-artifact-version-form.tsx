@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Textarea } from "@/components/ui";
 import type { ExternalArtifactVersion } from "@/lib/types";
+import { FormFooter, JsonTextareaField } from "@/components/form-helpers";
 
 const schema = z.object({
   version_label: z.string().min(1),
@@ -81,9 +82,15 @@ export function ExternalArtifactVersionForm({ artifactId, initial }: { artifactI
         <Input type="date" placeholder="Effective date" {...form.register("effective_date")} />
       </div>
       <Input type="datetime-local" placeholder="Source timestamp" {...form.register("source_timestamp")} />
-      <Textarea placeholder="Metadata JSON" rows={4} {...form.register("metadata_json")} />
+      <JsonTextareaField
+        label="Version metadata"
+        description="Use this to capture checksum details, release notes, or provenance fields that do not fit the fixed columns."
+        example='{"checksum_algorithm": "sha256", "release_note": "Initial pinned version"}'
+        rows={4}
+        {...form.register("metadata_json")}
+      />
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Add version</Button>
+      <FormFooter submitLabel="Add version" onCancel={() => router.back()} />
     </form>
   );
 }

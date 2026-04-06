@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { api } from "@/lib/api-client";
 import type { Requirement, RequirementDetail, RequirementVerificationStatus } from "@/lib/types";
-import type { ReactNode } from "react";
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, Select } from "@/components/ui";
 
 type ValidationProfile = "mission" | "power" | "thermal" | "evidence" | "release";
@@ -25,10 +24,12 @@ const PROFILES: { value: ValidationProfile; label: string; description: string }
 ];
 
 export function ValidationWorkbench({
+  projectId,
   projectCode,
   projectName,
   requirements,
 }: {
+  projectId: string;
   projectCode: string;
   projectName: string;
   requirements: Requirement[];
@@ -53,6 +54,16 @@ export function ValidationWorkbench({
     () => requirements.find((item) => item.id === selectedRequirementId) || null,
     [requirements, selectedRequirementId]
   );
+
+  if (!requirements.length) {
+    return (
+      <EmptyState
+        title="No requirements to validate yet"
+        description={`Validation works when there is at least one requirement or goal to check. Create the first requirement, add measurable criteria, then come back here to run a guided validation for ${projectName}.`}
+        action={<Button href={`/projects/${projectId}/requirements`}>Create requirement</Button>}
+      />
+    );
+  }
 
   async function startValidation() {
     if (!selectedRequirementId) {
@@ -101,15 +112,11 @@ export function ValidationWorkbench({
             <div className="space-y-2">
               <label className="text-xs uppercase tracking-[0.2em] text-muted">Target requirement</label>
               <Select value={selectedRequirementId} onChange={(event) => setSelectedRequirementId(event.target.value)}>
-                {requirements.length ? (
-                  requirements.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.key} - {item.title}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">No requirements available</option>
-                )}
+                {requirements.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.key} - {item.title}
+                  </option>
+                ))}
               </Select>
             </div>
             <div className="space-y-2">

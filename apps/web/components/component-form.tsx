@@ -10,6 +10,7 @@ import { getLabels, type DomainProfile } from "@/lib/labels";
 import { useToast } from "@/lib/toast-context";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import type { Component } from "@/lib/types";
+import { FormFooter, JsonTextareaField, InlineHelp } from "@/components/form-helpers";
 
 type ComponentTypeValue = "battery" | "motor" | "flight_controller" | "camera" | "sensor" | "frame" | "software_module" | "other";
 type ComponentStatusValue = "draft" | "selected" | "validated" | "retired";
@@ -165,7 +166,7 @@ export function ComponentForm({
               </option>
             ))}
           </Select>
-          <p className="text-xs text-muted">Select the project that owns this {componentLabel.toLowerCase()}.</p>
+          <InlineHelp>Select the project that owns this {componentLabel.toLowerCase()}.</InlineHelp>
         </div>
         <Input placeholder={`${componentLabel} key`} readOnly {...form.register("key")} />
       </div>
@@ -191,9 +192,15 @@ export function ComponentForm({
         <Input placeholder="Part number (optional)" {...form.register("part_number")} />
         <Input placeholder="Supplier (optional)" {...form.register("supplier")} />
       </div>
-      <Textarea placeholder='Metadata JSON, for example {"repository": "git@example.com:repo.git"}' rows={6} {...form.register("metadata_json")} />
+      <JsonTextareaField
+        label="Metadata"
+        description="Use this for structured component metadata such as repository references, supplier notes, or integration details. Leave it as {} if you do not need extra data."
+        example='{"repository": "git@example.com:repo.git", "owner": "platform-team"}'
+        rows={6}
+        {...form.register("metadata_json")}
+      />
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">{`Save ${componentLabel}`}</Button>
+      <FormFooter submitLabel={`Save ${componentLabel}`} onCancel={() => router.back()} />
     </form>
   );
 }

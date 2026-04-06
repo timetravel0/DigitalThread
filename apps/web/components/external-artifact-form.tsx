@@ -9,6 +9,7 @@ import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import type { DomainProfile } from "@/lib/labels";
 import type { ConnectorDefinition, ExternalArtifact } from "@/lib/types";
+import { FormFooter, JsonTextareaField, InlineHelp } from "@/components/form-helpers";
 
 type ProjectOption = {
   id: string;
@@ -105,13 +106,16 @@ export function ExternalArtifactForm({ initial, connectors, projects = [], initi
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Select {...form.register("project_id")} disabled={!projects.length}>
-          {(projects.length ? projects : projects[0] ? [projects[0]] : []).map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.code} - {project.name}
-            </option>
-          ))}
-        </Select>
+        <div className="space-y-1">
+          <Select {...form.register("project_id")} disabled={!projects.length}>
+            {(projects.length ? projects : projects[0] ? [projects[0]] : []).map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.code} - {project.name}
+              </option>
+            ))}
+          </Select>
+          <InlineHelp>Select the project that owns this external source.</InlineHelp>
+        </div>
         <Input placeholder="External ID" {...form.register("external_id")} />
       </div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -150,9 +154,15 @@ export function ExternalArtifactForm({ initial, connectors, projects = [], initi
           <option value="obsolete">obsolete</option>
         </Select>
       </div>
-      <Textarea placeholder="Metadata JSON" rows={5} {...form.register("metadata_json")} />
+      <JsonTextareaField
+        label="Artifact metadata"
+        description="Optional structured data for the external source, such as owning system details or synchronization hints."
+        example='{"owner": "requirements-system", "sync_mode": "manual"}'
+        rows={5}
+        {...form.register("metadata_json")}
+      />
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Save external artifact</Button>
+      <FormFooter submitLabel="Save external artifact" onCancel={() => router.back()} />
     </form>
   );
 }

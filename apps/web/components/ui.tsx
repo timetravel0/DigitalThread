@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, ReactNode } from "react";
+import { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -119,70 +119,19 @@ export function SectionTitle({ title, description, action }: { title: string; de
 
 export function Shell({ sidebar, header, children }: { sidebar: ReactNode; header: ReactNode; children: ReactNode }) {
   const pathname = usePathname();
-  const storageKey = "threadlite.sidebar-collapsed";
-  const prefersCollapsedByRoute = useMemo(
-    () => pathname.includes("/matrix") || pathname.includes("/graph") || pathname.includes("/sysml"),
-    [pathname]
-  );
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [hasStoredPreference, setHasStoredPreference] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setHydrated(true);
-    try {
-      const stored = window.localStorage.getItem(storageKey);
-      if (stored === "true" || stored === "false") {
-        setSidebarCollapsed(stored === "true");
-        setHasStoredPreference(true);
-        return;
-      }
-    } catch {
-      // ignore storage failures and fall back to route-based defaults
-    }
-    setSidebarCollapsed(prefersCollapsedByRoute);
-  }, [prefersCollapsedByRoute]);
-
-  useEffect(() => {
-    if (!hydrated || !hasStoredPreference) return;
-    try {
-      window.localStorage.setItem(storageKey, String(sidebarCollapsed));
-    } catch {
-      // ignore storage failures
-    }
-  }, [hydrated, hasStoredPreference, sidebarCollapsed]);
+  const showSidebar = pathname.startsWith("/dashboard");
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(124,219,255,0.10),_transparent_28%),linear-gradient(180deg,_#07101f,_#0b1020_40%,_#090d18)] text-text">
       <div className="mx-auto flex min-h-screen max-w-[1600px]">
-        {!sidebarCollapsed ? (
+        {showSidebar ? (
           <aside className="hidden w-72 shrink-0 border-r border-white/10 bg-black/10 p-5 lg:block">
             {sidebar}
           </aside>
         ) : null}
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="border-b border-white/10 bg-black/10 px-4 py-4 backdrop-blur">
-            <div className="flex items-center gap-3">
-              <div className="min-w-0 flex-1">{header}</div>
-              <Button
-                variant="secondary"
-                className="shrink-0"
-                onClick={() => {
-                  setHasStoredPreference(true);
-                  setSidebarCollapsed((current) => {
-                    const next = !current;
-                    try {
-                      window.localStorage.setItem(storageKey, String(next));
-                    } catch {
-                      // ignore storage failures
-                    }
-                    return next;
-                  });
-                }}
-              >
-                {sidebarCollapsed ? "Show navigation" : "Hide navigation"}
-              </Button>
-            </div>
+            <div className="min-w-0">{header}</div>
           </header>
           <main className="flex-1 px-4 py-6 lg:px-6">{children}</main>
         </div>

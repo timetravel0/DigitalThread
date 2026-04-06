@@ -34,7 +34,7 @@ export default async function SimulationEvidencePage({ params }: { params: { id:
                 </div>
               </div>
             );
-          }) : <div className="text-sm text-muted">No related objects linked yet.</div>}
+          }) : <div className="text-sm text-muted">No related objects linked yet. Simulation evidence belongs here when you want the model, scenario, and outcome to stay connected to the requirements or tests it explains.</div>}
         </CardBody>
       </Card>
       <Link href="/projects" className="text-sm text-accent">Back to projects</Link>

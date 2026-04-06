@@ -147,6 +147,7 @@ from app.services import (
     get_simulation_evidence_service,
     get_test_case_detail,
     get_project_dashboard,
+    get_project_tab_stats,
     list_requirement_history,
     list_change_requests,
     list_fmi_contracts,
@@ -212,6 +213,22 @@ def test_seed_demo_populates_sysml_driven_kpis():
         assert any(link.relation_type == ArtifactLinkRelationType.maps_to for link in artifact_links)
 
 
+def test_project_tab_stats_report_core_thread_counts():
+    with make_session() as session:
+        seed_demo(session)
+        project = session.exec(select(Project).where(Project.code == "DRONE-001")).one()
+        stats = get_project_tab_stats(session, project.id)
+
+        assert stats.requirements >= 6
+        assert stats.blocks >= 1
+        assert stats.tests >= 1
+        assert stats.baselines >= 1
+        assert stats.change_requests >= 1
+        assert stats.simulation_evidence >= 1
+        assert stats.operational_evidence >= 1
+        assert stats.operational_runs >= 1
+
+
 def test_project_domain_profile_persists_and_label_overrides_follow_custom_profile():
     with make_session() as session:
         engineering_project = create_project(
@@ -267,12 +284,13 @@ def test_manufacturing_seed_demonstrates_full_thread():
         change_request = session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project.id, ChangeRequest.key == "MFG-CR-001")).one()
 
         assert project.domain_profile == "manufacturing"
-        assert len(session.exec(select(Requirement).where(Requirement.project_id == project.id)).all()) >= 2
-        assert len(session.exec(select(Block).where(Block.project_id == project.id)).all()) >= 2
-        assert len(session.exec(select(TestCase).where(TestCase.project_id == project.id)).all()) >= 2
-        assert len(session.exec(select(VerificationEvidence).where(VerificationEvidence.project_id == project.id)).all()) >= 2
-        assert len(session.exec(select(SimulationEvidence).where(SimulationEvidence.project_id == project.id)).all()) >= 1
-        assert len(session.exec(select(OperationalEvidence).where(OperationalEvidence.project_id == project.id)).all()) >= 1
+        assert len(session.exec(select(Requirement).where(Requirement.project_id == project.id)).all()) >= 8
+        assert len(session.exec(select(Block).where(Block.project_id == project.id)).all()) >= 6
+        assert len(session.exec(select(Component).where(Component.project_id == project.id)).all()) >= 7
+        assert len(session.exec(select(TestCase).where(TestCase.project_id == project.id)).all()) >= 8
+        assert len(session.exec(select(VerificationEvidence).where(VerificationEvidence.project_id == project.id)).all()) >= 8
+        assert len(session.exec(select(SimulationEvidence).where(SimulationEvidence.project_id == project.id)).all()) >= 2
+        assert len(session.exec(select(OperationalEvidence).where(OperationalEvidence.project_id == project.id)).all()) >= 2
         assert baseline.status == BaselineStatus.released
         assert change_request.status == ChangeRequestStatus.open
 
@@ -285,12 +303,13 @@ def test_personal_seed_demonstrates_full_thread():
         change_request = session.exec(select(ChangeRequest).where(ChangeRequest.project_id == project.id, ChangeRequest.key == "HOME-CR-001")).one()
 
         assert project.domain_profile == "personal"
-        assert len(session.exec(select(Requirement).where(Requirement.project_id == project.id)).all()) >= 2
-        assert len(session.exec(select(Block).where(Block.project_id == project.id)).all()) >= 2
-        assert len(session.exec(select(TestCase).where(TestCase.project_id == project.id)).all()) >= 2
-        assert len(session.exec(select(VerificationEvidence).where(VerificationEvidence.project_id == project.id)).all()) >= 2
-        assert len(session.exec(select(SimulationEvidence).where(SimulationEvidence.project_id == project.id)).all()) >= 1
-        assert len(session.exec(select(OperationalEvidence).where(OperationalEvidence.project_id == project.id)).all()) >= 1
+        assert len(session.exec(select(Requirement).where(Requirement.project_id == project.id)).all()) >= 8
+        assert len(session.exec(select(Block).where(Block.project_id == project.id)).all()) >= 6
+        assert len(session.exec(select(Component).where(Component.project_id == project.id)).all()) >= 7
+        assert len(session.exec(select(TestCase).where(TestCase.project_id == project.id)).all()) >= 8
+        assert len(session.exec(select(VerificationEvidence).where(VerificationEvidence.project_id == project.id)).all()) >= 8
+        assert len(session.exec(select(SimulationEvidence).where(SimulationEvidence.project_id == project.id)).all()) >= 2
+        assert len(session.exec(select(OperationalEvidence).where(OperationalEvidence.project_id == project.id)).all()) >= 2
         assert baseline.status == BaselineStatus.released
         assert change_request.status == ChangeRequestStatus.open
 

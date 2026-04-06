@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import type { ConfigurationContext } from "@/lib/types";
+import { FormFooter, InlineHelp } from "@/components/form-helpers";
 
 const schema = z.object({
   project_id: z.string().min(1),
@@ -64,6 +65,7 @@ export function ConfigurationContextForm({ initial }: { initial?: Partial<Config
       </div>
       <Input placeholder="Context name" disabled={isLocked} {...form.register("name")} />
       <Textarea placeholder="Description" rows={3} disabled={isLocked} {...form.register("description")} />
+      <InlineHelp>Use a short description so reviewers can understand what this context represents.</InlineHelp>
       <div className="grid gap-4 md:grid-cols-2">
         <Select disabled={isLocked} {...form.register("context_type")}>
           <option value="working">working</option>
@@ -80,7 +82,7 @@ export function ConfigurationContextForm({ initial }: { initial?: Partial<Config
         </Select>
       </div>
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit" disabled={isLocked}>Save context</Button>
+      <FormFooter submitLabel="Save context" onCancel={() => router.back()} busy={false} cancelDisabled={isLocked} />
     </form>
   );
 }

@@ -47,7 +47,7 @@ export default async function VerificationEvidencePage({ params }: { params: { i
                 </div>
               </div>
             );
-          }) : <div className="text-sm text-muted">No linked objects recorded yet.</div>}
+          }) : <div className="text-sm text-muted">No linked objects recorded yet. Verification evidence belongs here when you want a test, requirement, or review record to point back to the proof it supports.</div>}
         </CardBody>
       </Card>
       <Card>
@@ -63,7 +63,7 @@ export default async function VerificationEvidencePage({ params }: { params: { i
                 <Badge tone={tone(evidence.result)}>{evidence.result}</Badge>
               </div>
             </div>
-          )) : <div className="text-sm text-muted">No simulation evidence linked to this verification record.</div>}
+          )) : <div className="text-sm text-muted">No simulation evidence linked to this verification record yet. Simulation evidence belongs here when a model or scenario explains the proof trail.</div>}
         </CardBody>
       </Card>
       <Card>
@@ -76,7 +76,7 @@ export default async function VerificationEvidencePage({ params }: { params: { i
               ))}
             </div>
           ) : (
-            <div className="text-sm text-muted">No operational evidence linked to this verification record.</div>
+            <div className="text-sm text-muted">No operational evidence linked to this verification record yet. Operational evidence belongs here when field telemetry or batch observations confirm the result in practice.</div>
           )}
           <div className="rounded-xl border border-dashed border-line bg-panel2 p-4">
             <div className="mb-3 text-sm font-medium">Add operational evidence</div>

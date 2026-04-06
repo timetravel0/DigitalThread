@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import type { ConfigurationItemKind, FederatedInternalObjectType } from "@/lib/types";
+import { FormFooter, InlineHelp } from "@/components/form-helpers";
 
 type InternalOption = {
   id: string;
@@ -144,8 +145,9 @@ export function ConfigurationItemForm({
 
       <Input placeholder="Role label" {...form.register("role_label")} />
       <Textarea placeholder="Notes" rows={3} {...form.register("notes")} />
+      <InlineHelp>Role labels explain why the item belongs in the context.</InlineHelp>
       {error ? <div className="text-sm text-danger">{error}</div> : null}
-      <Button type="submit">Add context item</Button>
+      <FormFooter submitLabel="Add context item" onCancel={() => router.back()} />
     </form>
   );
 }

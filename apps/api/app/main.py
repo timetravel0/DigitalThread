@@ -114,6 +114,14 @@ def project_dashboard_endpoint(project_id: UUID, session: Session = Depends(db))
         raise api_error(exc)
 
 
+@app.get("/api/projects/{project_id}/tab-stats", response_model=ProjectTabStats)
+def project_tab_stats_endpoint(project_id: UUID, session: Session = Depends(db)):
+    try:
+        return get_project_tab_stats(session, project_id)
+    except Exception as exc:
+        raise api_error(exc)
+
+
 @app.get("/api/projects/{project_id}/authoritative-registry-summary", response_model=AuthoritativeRegistrySummary)
 def authoritative_registry_summary_endpoint(project_id: UUID, session: Session = Depends(db)):
     return get_authoritative_registry_summary(session, project_id)
@@ -921,6 +929,14 @@ def list_links_endpoint(project_id: UUID = Query(...), object_type: str | None =
 def create_link_endpoint(payload: LinkCreate, session: Session = Depends(db)):
     try:
         return create_link(session, payload)
+    except Exception as exc:
+        raise api_error(exc)
+
+
+@app.delete("/api/links/{link_id}", status_code=204)
+def delete_link_endpoint(link_id: UUID, session: Session = Depends(db)):
+    try:
+        delete_link(session, link_id)
     except Exception as exc:
         raise api_error(exc)
 

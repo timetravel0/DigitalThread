@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Badge, Card, CardBody, EmptyState } from "@/components/ui";
+import { Badge, Button, Card, CardBody, EmptyState } from "@/components/ui";
 import type {
   ArtifactLink,
   Block,
@@ -13,6 +13,7 @@ import type {
   TestCase,
   VerificationEvidence,
 } from "@/lib/types";
+import type { LabelSet } from "@/lib/labels";
 
 type GraphFocus = "core" | "all" | "requirements" | "blocks" | "parts" | "tests" | "evidence";
 type GraphKind = "requirement" | "block" | "component" | "external_artifact" | "test_case" | "operational_run" | "verification_evidence";
@@ -41,6 +42,8 @@ interface TraceabilityGraphProps {
   focus: GraphFocus;
   selectedNodeId?: string | null;
   selectionBaseHref: string;
+  projectId?: string;
+  labels?: Pick<LabelSet, "requirements" | "blocks" | "testCases" | "verificationEvidence" | "simulationEvidence" | "operationalEvidence">;
   blocks: Block[];
   tree: BlockTreeNode[];
   requirements: Requirement[];
@@ -109,6 +112,8 @@ export function TraceabilityGraph({
   focus,
   selectedNodeId,
   selectionBaseHref,
+  projectId,
+  labels,
   blocks,
   tree,
   requirements,
@@ -127,8 +132,13 @@ export function TraceabilityGraph({
   if (!filtered.nodes.length) {
     return (
       <EmptyState
-        title="No graph data available"
-        description="The relationship explorer becomes useful as soon as the project has requirements, blocks, parts, tests, or evidence."
+        title="No traceability graph yet"
+        description={
+          labels
+            ? `Start with ${labels.requirements.toLowerCase()}, then connect ${labels.blocks.toLowerCase()} and ${labels.testCases.toLowerCase()}. The graph becomes useful once objects and links exist, because it shows how the thread connects design intent to realization and evidence.`
+            : "Start with requirements, then connect blocks and tests. The graph becomes useful once objects and links exist, because it shows how the thread connects design intent to realization and evidence."
+        }
+        action={projectId ? <Button href={`/projects/${projectId}/requirements`}>Create requirements</Button> : undefined}
       />
     );
   }

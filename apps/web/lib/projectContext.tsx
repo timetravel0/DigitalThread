@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import type { DomainProfile, LabelSet } from "./labels";
 import { getLabels } from "./labels";
 import { api } from "./api-client";
+import type { Dashboard } from "./types";
 import type { ProjectTabStats } from "./types";
 
 export interface ProjectContextValue {
@@ -11,6 +12,7 @@ export interface ProjectContextValue {
   profile: DomainProfile;
   labels: LabelSet;
   advancedMode: boolean;
+  dashboard: Dashboard | null;
   tabStats: ProjectTabStats | null;
   setTabStats: (value: ProjectTabStats | null) => void;
   setAdvancedMode: (v: boolean) => void;
@@ -30,6 +32,7 @@ export function ProjectProvider({
   const resolvedProfile = profile ?? "engineering";
   const storageKey = `threadlite-project-${projectId}-advanced-mode`;
   const [advancedMode, setAdvancedModeState] = useState(false);
+  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [tabStats, setTabStats] = useState<ProjectTabStats | null>(null);
 
   useEffect(() => {
@@ -40,6 +43,25 @@ export function ProjectProvider({
       setAdvancedModeState(false);
     }
   }, [storageKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDashboard(null);
+    api.projectDashboard(projectId)
+      .then((next) => {
+        if (!cancelled) {
+          setDashboard(next);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDashboard(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +94,7 @@ export function ProjectProvider({
   const labels = useMemo(() => getLabels(resolvedProfile), [resolvedProfile]);
 
   return (
-    <ProjectContext.Provider value={{ projectId, profile: resolvedProfile, labels, advancedMode, tabStats, setTabStats, setAdvancedMode }}>
+    <ProjectContext.Provider value={{ projectId, profile: resolvedProfile, labels, advancedMode, dashboard, tabStats, setTabStats, setAdvancedMode }}>
       {children}
     </ProjectContext.Provider>
   );
