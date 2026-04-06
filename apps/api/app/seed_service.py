@@ -1,4 +1,3 @@
-﻿from __future__ import annotations
 
 """Domain facade for demo seeding.
 
@@ -8,9 +7,9 @@ project bootstrapping logic have an explicit home.
 
 from sqlmodel import Session
 
-from app.services import seed_demo as _seed_demo
-from app.services import seed_manufacturing_demo as _seed_manufacturing_demo
-from app.services import seed_personal_demo as _seed_personal_demo
+from app.services_legacy import seed_demo as _seed_demo
+from app.services_legacy import seed_manufacturing_demo as _seed_manufacturing_demo
+from app.services_legacy import seed_personal_demo as _seed_personal_demo
 
 
 def seed_demo(session: Session) -> dict[str, object]:

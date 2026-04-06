@@ -1,4 +1,3 @@
-﻿from __future__ import annotations
 
 """Domain facade for impact, dashboard, and detail views.
 
@@ -10,7 +9,7 @@ from uuid import UUID
 
 from sqlmodel import Session
 
-from app.services import (
+from app.services_legacy import (
     build_impact as _build_impact,
     build_matrix as _build_matrix,
     get_change_request_detail as _get_change_request_detail,

@@ -106,7 +106,7 @@ from app.main import (
     requirement_detail_endpoint,
     list_simulation_evidence_endpoint,
     list_operational_evidence_endpoint,
-    test_case_detail_endpoint as test_case_detail_route,
+    test_case_detail_endpoint as case_detail_route,
     verification_evidence_detail_endpoint,
     import_project_records_endpoint,
     create_fmi_contract_endpoint,
@@ -1212,7 +1212,7 @@ def test_requirement_and_test_case_detail_endpoints_expose_verification_evidence
         )
 
         requirement_detail = requirement_detail_endpoint(requirement.id, session)
-        test_case_detail = test_case_detail_route(test_case.id, session)
+        test_case_detail = case_detail_route(test_case.id, session)
         evidence_detail = verification_evidence_detail_endpoint(evidence.id, session)
 
         assert requirement_detail["verification_evidence"]

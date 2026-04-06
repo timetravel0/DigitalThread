@@ -467,3 +467,16 @@ Recommended checks once the app code is present:
 ## License
 
 Add project licensing here when the product direction is finalized.
+
+## Workspace Documentation
+
+For workspace-level analysis and maintenance, use:
+- `docs/WORKSPACE_OVERVIEW.md`
+- `docs/CROSS_PROJECT_ARCHITECTURE.md`
+- `docs/MASTER_IMPROVEMENT_ROADMAP.md`
+
+Project-specific analysis lives here:
+- `apps/api/docs/`
+- `apps/web/docs/`
+
+If you are a future coding agent, start with the project `AGENTS.md` file, then read the project docs before making changes.
