@@ -8,7 +8,14 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@/lib/api-client";
 import { useToast } from "@/lib/toast-context";
-import type { LinkObjectType, RelationType, SysMLObjectType, SysMLRelationType } from "@/lib/types";
+import type {
+  LinkCreatePayload,
+  LinkObjectType,
+  RelationType,
+  SysMLObjectType,
+  SysMLRelationCreatePayload,
+  SysMLRelationType,
+} from "@/lib/types";
 import { Badge, Button, EmptyState, Select, Textarea } from "@/components/ui";
 
 const schema = z.object({
@@ -71,18 +78,27 @@ export function RelationshipLinkForm({
   const submit = form.handleSubmit(async (values) => {
     setError(null);
     try {
-      const payload = {
-        project_id: projectId,
-        source_type: sourceType,
-        source_id: sourceId,
-        target_type: targetType,
-        target_id: values.target_id,
-        relation_type: relationType,
-        rationale: values.rationale || null,
-      };
       if (kind === "link") {
+        const payload: LinkCreatePayload = {
+          project_id: projectId,
+          source_type: sourceType as LinkObjectType,
+          source_id: sourceId,
+          target_type: targetType as LinkObjectType,
+          target_id: values.target_id,
+          relation_type: relationType as RelationType,
+          rationale: values.rationale || null,
+        };
         await api.createLink(payload);
       } else {
+        const payload: SysMLRelationCreatePayload = {
+          project_id: projectId,
+          source_type: sourceType as SysMLObjectType,
+          source_id: sourceId,
+          target_type: targetType as SysMLObjectType,
+          target_id: values.target_id,
+          relation_type: relationType as SysMLRelationType,
+          rationale: values.rationale || null,
+        };
         await api.createSysMLRelation(payload);
       }
       showToast({

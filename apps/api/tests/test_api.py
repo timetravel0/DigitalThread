@@ -655,6 +655,39 @@ def test_evidence_operational_runs_test_runs_and_import_endpoints(client: TestCl
     assert import_response.json()["summary"]["parsed_records"] > 0
 
 
+def test_import_endpoint_rejects_blank_or_empty_payloads(client: TestClient):
+    project = client.post("/api/projects", json={"code": "IMP-VAL", "name": "Import Validation", "description": "Demo"}).json()
+
+    blank_content = client.post(
+        f"/api/projects/{project['id']}/imports",
+        json={"format": "json", "content": "   "},
+    )
+    assert blank_content.status_code == 422
+
+    empty_records = client.post(
+        f"/api/projects/{project['id']}/imports",
+        json={"format": "json", "content": json.dumps({"records": []})},
+    )
+    assert empty_records.status_code == 400
+    assert "did not contain any records" in empty_records.text
+
+
+def test_import_endpoint_rejects_payloads_over_row_limit(client: TestClient):
+    project = client.post("/api/projects", json={"code": "IMP-LIMIT", "name": "Import Limit", "description": "Demo"}).json()
+
+    rows = ["record_type,external_id,artifact_type,name"]
+    for index in range(1001):
+        rows.append(f"external_artifact,EXT-LIMIT-{index},document,Imported artifact {index}")
+    oversized_csv = "\n".join(rows)
+
+    response = client.post(
+        f"/api/projects/{project['id']}/imports",
+        json={"format": "csv", "content": oversized_csv},
+    )
+    assert response.status_code == 400
+    assert "exceeding the limit" in response.text
+
+
 def test_connectors_external_artifacts_links_sysml_and_analysis_endpoints(client: TestClient):
     project = client.post("/api/projects", json={"code": "REL-PRJ", "name": "Relations Project", "description": "Demo"}).json()
 

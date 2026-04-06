@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
-import type { NonConformityDisposition } from "@/lib/types";
+import type { NonConformity, NonConformityDisposition } from "@/lib/types";
 import { Button, Select, Textarea } from "@/components/ui";
 
 const OPTIONS: { value: NonConformityDisposition; label: string; tone: "success" | "warning" | "danger" }[] = [
@@ -19,7 +19,7 @@ export function NonConformityDispositionForm({
 }: {
   nonConformityId: string;
   currentDisposition?: NonConformityDisposition | null;
-  currentStatus: string;
+  currentStatus: NonConformity["status"];
 }) {
   const router = useRouter();
   const [disposition, setDisposition] = useState<NonConformityDisposition | "">(currentDisposition ?? "");

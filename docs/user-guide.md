@@ -239,9 +239,9 @@ How to use it:
 3. link the record to the relevant requirement, test case, or supporting verification evidence
 4. open the simulation evidence detail page to review the captured fields and related objects
 
-## 13. FMI Placeholder Contract
+## 13. FMI Contract
 
-What the FMI placeholder contract is for:
+What the FMI contract is for:
 
 - store a lightweight model reference contract for simulation interoperability
 - keep the contract separate from simulation evidence so the model reference can be reused
@@ -250,7 +250,7 @@ What the FMI placeholder contract is for:
 How to use it:
 
 1. open the `FMI` tab in a project workspace
-2. create a placeholder contract with the model identifier, version, and adapter profile
+2. create a lightweight contract with the model identifier, version, and adapter profile
 3. open a simulation evidence record and link it to the contract when you want an explicit model reference
 4. open the contract detail page to review its linked simulation evidence
 
@@ -336,14 +336,14 @@ Views:
 - `Verification` shows which test cases verify which requirements
 - `Derivations` shows requirement-to-requirement derivation chains
 - `Mapping Contract` shows the current model as explicit SysML v2-inspired requirement, block, satisfy, verify, deriveReqt, and contain mappings
-- `STEP AP242` shows the placeholder contract for parts, part numbers, and `cad_part` external artifacts
+- `STEP AP242` shows the contract-shaped surface for parts, part numbers, and `cad_part` external artifacts
 
 How to use them:
 
 1. open `SysML`
 2. switch between the five views
 3. use the labels to learn the meaning of each relation
-4. open `STEP AP242` when you want to inspect the part-oriented placeholder contract
+4. open `STEP AP242` when you want to inspect the part-oriented contract-shaped surface
 
 ## 17. Matrix View
 

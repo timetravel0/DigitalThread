@@ -27,13 +27,14 @@
 - Instructions for future agents: keep the client explicit enough to remain readable.
 
 ## WEB-03 - Add a real frontend smoke test path
+- Status: Implemented in `apps/web/tests/smoke.test.mjs` and exposed through `npm run smoke`.
 - Problem: the current safety net is mostly build and type-check.
 - Benefit: better confidence in onboarding, cockpit, and form flows.
 - Priority: Medium
 - Effort: M
 - Impact: High
 - Area: test
-- Files: `app/**`, `components/**`
+- Files: `app/**`, `components/**`, `tests/smoke.test.mjs`
 - Dependencies: stable seeds and backend availability.
 - Risks: brittle tests if the route text changes often.
 - Completion criterion: one test can open the app, create or seed a project, and reach the main thread flow.

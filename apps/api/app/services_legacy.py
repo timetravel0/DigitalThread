@@ -13,8 +13,199 @@ from uuid import UUID
 from sqlalchemy import and_, desc, or_, select
 from sqlmodel import Session
 
-from app.models import *
-from app.schemas import *
+from app.models import (
+    AbstractionLevel,
+    ApprovalActionLog,
+    ArtifactLink,
+    ArtifactLinkRelationType,
+    Baseline,
+    BaselineItem,
+    BaselineObjectType,
+    BaselineStatus,
+    Block,
+    BlockContainment,
+    BlockContainmentRelationType,
+    BlockKind,
+    BlockStatus,
+    ChangeImpact,
+    ChangeRequest,
+    ChangeRequestStatus,
+    Component,
+    ComponentStatus,
+    ComponentType,
+    ConfigurationContext,
+    ConfigurationContextStatus,
+    ConfigurationContextType,
+    ConfigurationItemKind,
+    ConfigurationItemMapping,
+    ConnectorDefinition,
+    ConnectorType,
+    ExternalArtifact,
+    ExternalArtifactStatus,
+    ExternalArtifactType,
+    ExternalArtifactVersion,
+    FMIContract,
+    FederatedInternalObjectType,
+    ImpactLevel,
+    Link,
+    LinkObjectType,
+    NonConformity,
+    NonConformityDisposition,
+    NonConformityStatus,
+    OperationalEvidence,
+    OperationalEvidenceLink,
+    OperationalEvidenceLinkObjectType,
+    OperationalEvidenceQualityStatus,
+    OperationalEvidenceSourceType,
+    OperationalOutcome,
+    OperationalRun,
+    Priority,
+    Project,
+    ProjectStatus,
+    RelationType,
+    Requirement,
+    RequirementCategory,
+    RequirementStatus,
+    RequirementVerificationStatus,
+    RevisionSnapshot,
+    Severity,
+    SimulationEvidence,
+    SimulationEvidenceLink,
+    SimulationEvidenceLinkObjectType,
+    SimulationEvidenceResult,
+    SysMLObjectType,
+    SysMLRelation,
+    SysMLRelationType,
+    TestCase,
+    TestCaseStatus,
+    TestMethod,
+    TestRun,
+    TestRunResult,
+    VerificationEvidence,
+    VerificationEvidenceLink,
+    VerificationEvidenceType,
+    VerificationMethod,
+    utcnow,
+)
+from app.schemas import (
+    ApprovalActionLogRead,
+    ArtifactLinkCreate,
+    ArtifactLinkRead,
+    AuthoritativeRegistrySummary,
+    BaselineBridgeContextRead,
+    BaselineComparisonResponse,
+    BaselineContextComparisonResponse,
+    BaselineCreate,
+    BaselineDetailRead,
+    BaselineItemRead,
+    BaselineRead,
+    BlockContainmentCreate,
+    BlockContainmentRead,
+    BlockCreate,
+    BlockRead,
+    BlockTreeNode,
+    BlockUpdate,
+    ChangeImpactCreate,
+    ChangeImpactRead,
+    ChangeRequestCreate,
+    ChangeRequestDetail,
+    ChangeRequestRead,
+    ChangeRequestUpdate,
+    ComponentCreate,
+    ComponentDetail,
+    ComponentRead,
+    ComponentUpdate,
+    ConfigurationContextComparisonChange,
+    ConfigurationContextComparisonEntry,
+    ConfigurationContextComparisonGroup,
+    ConfigurationContextComparisonResponse,
+    ConfigurationContextComparisonSummary,
+    ConfigurationContextCreate,
+    ConfigurationContextRead,
+    ConfigurationContextUpdate,
+    ConfigurationItemMappingCreate,
+    ConfigurationItemMappingRead,
+    ConnectorDefinitionCreate,
+    ConnectorDefinitionRead,
+    ConnectorDefinitionUpdate,
+    DashboardKpis,
+    DerivationRow,
+    ExternalArtifactCreate,
+    ExternalArtifactRead,
+    ExternalArtifactUpdate,
+    ExternalArtifactVersionCreate,
+    ExternalArtifactVersionRead,
+    FMIContractCreate,
+    FMIContractDetail,
+    FMIContractRead,
+    GlobalDashboard,
+    ImpactResponse,
+    LinkCreate,
+    LinkRead,
+    MatrixCell,
+    MatrixColumn,
+    MatrixResponse,
+    MatrixRow,
+    NonConformityCreate,
+    NonConformityDetail,
+    NonConformityRead,
+    NonConformityUpdate,
+    ObjectSummary,
+    OperationalEvidenceCreate,
+    OperationalEvidenceLinkRead,
+    OperationalEvidenceRead,
+    OperationalRunCreate,
+    OperationalRunDetail,
+    OperationalRunRead,
+    OperationalRunUpdate,
+    ProjectCreate,
+    ProjectDashboard,
+    ProjectImportCreate,
+    ProjectImportResponse,
+    ProjectImportSummary,
+    ProjectRead,
+    ProjectTabStats,
+    ProjectUpdate,
+    RequirementCreate,
+    RequirementDetail,
+    RequirementRead,
+    RequirementUpdate,
+    RequirementVerificationEvaluation,
+    ReviewQueueItem,
+    ReviewQueueResponse,
+    RevisionSnapshotRead,
+    SatisfactionRow,
+    STEPAP242ContractResponse,
+    STEPAP242IdentifierRow,
+    STEPAP242PartRow,
+    STEPAP242RelationRow,
+    STEPAP242Summary,
+    SimulationEvidenceCreate,
+    SimulationEvidenceLinkRead,
+    SimulationEvidenceRead,
+    SysMLBlockMappingRow,
+    SysMLDerivationResponse,
+    SysMLMappingContractResponse,
+    SysMLMappingRelationRow,
+    SysMLMappingSummary,
+    SysMLRelationCreate,
+    SysMLRelationRead,
+    SysMLRequirementMappingRow,
+    SysMLSatisfactionResponse,
+    SysMLTreeResponse,
+    SysMLVerificationResponse,
+    TestCaseCreate,
+    TestCaseDetail,
+    TestCaseRead,
+    TestCaseUpdate,
+    TestRunCreate,
+    TestRunRead,
+    VerificationEvidenceCreate,
+    VerificationEvidenceRead,
+    VerificationRow,
+    VerificationStatusBreakdown,
+    WorkflowActionPayload,
+)
 
 OBJECT_MODELS = {
     "project": Project,
@@ -71,6 +262,9 @@ def _first_item(result: Any) -> Any | None:
     return items[0] if items else None
 
 
+_IMPORT_MAX_ROWS = 1000
+
+
 def _normalize_import_row(row: dict[str, Any]) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     for key, value in row.items():
@@ -83,38 +277,55 @@ def _normalize_import_row(row: dict[str, Any]) -> dict[str, Any]:
 def _parse_import_json(content: str) -> list[dict[str, Any]]:
     parsed = json.loads(content)
     if isinstance(parsed, list):
-        return [_normalize_import_row(item if isinstance(item, dict) else {"value": item}) for item in parsed]
+        rows = [_normalize_import_row(item if isinstance(item, dict) else {"value": item}) for item in parsed]
+        return [row for row in rows if any(str(value).strip() for value in row.values() if value is not None)]
     if not isinstance(parsed, dict):
         raise ValueError("JSON import content must be an object or array")
     if "records" in parsed and isinstance(parsed["records"], list):
-        return [_normalize_import_row(item if isinstance(item, dict) else {"value": item}) for item in parsed["records"]]
+        rows = [_normalize_import_row(item if isinstance(item, dict) else {"value": item}) for item in parsed["records"]]
+        return [row for row in rows if any(str(value).strip() for value in row.values() if value is not None)]
     if "items" in parsed and isinstance(parsed["items"], list):
-        return [_normalize_import_row(item if isinstance(item, dict) else {"value": item}) for item in parsed["items"]]
+        rows = [_normalize_import_row(item if isinstance(item, dict) else {"value": item}) for item in parsed["items"]]
+        return [row for row in rows if any(str(value).strip() for value in row.values() if value is not None)]
     if "external_artifacts" in parsed or "verification_evidence" in parsed:
         rows: list[dict[str, Any]] = []
         for item in parsed.get("external_artifacts", []):
             row = _normalize_import_row(item if isinstance(item, dict) else {"value": item})
             row.setdefault("record_type", "external_artifact")
-            rows.append(row)
+            if any(str(value).strip() for value in row.values() if value is not None):
+                rows.append(row)
         for item in parsed.get("verification_evidence", []):
             row = _normalize_import_row(item if isinstance(item, dict) else {"value": item})
             row.setdefault("record_type", "verification_evidence")
-            rows.append(row)
+            if any(str(value).strip() for value in row.values() if value is not None):
+                rows.append(row)
         return rows
-    return [_normalize_import_row(parsed)]
+    row = _normalize_import_row(parsed)
+    if any(str(value).strip() for value in row.values() if value is not None):
+        return [row]
+    return []
 
 
 def _parse_import_csv(content: str) -> list[dict[str, Any]]:
     reader = csv.DictReader(io.StringIO(content))
-    return [_normalize_import_row(row) for row in reader]
+    if not reader.fieldnames or not any(name and name.strip() for name in reader.fieldnames):
+        raise ValueError("CSV import content must include a header row")
+    rows = [_normalize_import_row(row) for row in reader]
+    return [row for row in rows if any(str(value).strip() for value in row.values() if value is not None)]
 
 
 def _parse_import_rows(format_name: str, content: str) -> list[dict[str, Any]]:
     if format_name == "json":
-        return _parse_import_json(content)
-    if format_name == "csv":
-        return _parse_import_csv(content)
-    raise ValueError("Unsupported import format")
+        rows = _parse_import_json(content)
+    elif format_name == "csv":
+        rows = _parse_import_csv(content)
+    else:
+        raise ValueError("Unsupported import format")
+    if not rows:
+        raise ValueError("Import content did not contain any records")
+    if len(rows) > _IMPORT_MAX_ROWS:
+        raise ValueError(f"Import contains {len(rows)} records, exceeding the limit of {_IMPORT_MAX_ROWS}")
+    return rows
 
 
 def _parse_import_json_value(value: Any, label: str, default: Any = None) -> Any:

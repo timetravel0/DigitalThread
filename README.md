@@ -15,7 +15,7 @@ It is designed for SMEs that need traceability without adopting a heavy PLM or M
 - link internal objects to external DOORS, MBSE, PLM, and simulation artifacts
 - define configuration contexts that combine internal and external versions
 - export a complete project bundle for external validation
-- inspect coverage, impact, matrix, SysML practice views, and the STEP AP242 placeholder contract
+- inspect coverage, impact, matrix, SysML practice views, and the STEP AP242 contract-shaped surface
 
 ## Documentation Set
 
@@ -109,7 +109,7 @@ threadlite/
 - Logical vs physical toggles that let you inspect the drone as architecture intent or physical realization
 - Simulation evidence detail and capture surfaces for model/scenario/input/output/result records
 - Software realization surfaces for explicit software-module traceability and evidence
-- FMI placeholder contract surfaces for simulation model reference metadata
+- FMI contract-shaped surfaces for simulation model reference metadata
 - Operational evidence detail and capture surfaces for field/telemetry batch records linked to requirements and verification evidence
 - Project import surface for JSON and CSV external data ingestion into external artifacts and verification evidence
 - Traceability matrix with component or test columns
@@ -173,8 +173,8 @@ ThreadLite does not implement the full SysML standard. It implements a focused s
 - Verify: a test case verifies a requirement.
 - DeriveReqt: one requirement is derived from another requirement.
 - SysML mapping contract: a contract-shaped projection that makes the current requirements, blocks, and relations exportable as SysML v2-inspired concepts.
-- STEP AP242 placeholder contract: a contract-shaped projection that makes physical part metadata and cad_part artifacts exportable as AP242-style concepts.
-- FMI placeholder contract: a contract-shaped projection that makes simulation model reference metadata exportable as FMI-style concepts.
+- STEP AP242 contract-shaped surface: a contract-shaped projection that makes physical part metadata and cad_part artifacts exportable as AP242-style concepts.
+- FMI contract-shaped surface: a contract-shaped projection that makes simulation model reference metadata exportable as FMI-style concepts.
 
 In the drone demo, the top-level `Drone System` block contains subsystems such as `Power Subsystem` and `Flight Controller`, while the battery and controller satisfy endurance, telemetry, and temperature requirements.
 
@@ -408,8 +408,8 @@ The demo seed should create:
 - four test cases
 - SysML satisfy, verify, and deriveReqt relations
 - a SysML mapping contract export for the seeded model
-- a STEP AP242 placeholder contract export for the seeded physical parts
-- an FMI placeholder contract export for the seeded simulation model reference
+- a STEP AP242 contract-shaped surface export for the seeded physical parts
+- an FMI contract-shaped surface export for the seeded simulation model reference
 - sample traceability links
 - failed and passing test runs
 - one operational run

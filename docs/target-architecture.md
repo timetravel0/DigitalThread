@@ -131,7 +131,7 @@ The architecture below still describes the intended semantics and extension path
 
 - Purpose: expose a lightweight FMI-style model reference contract from the current simulation evidence and contract model.
 - Key fields: project, model identifier, model version, model URI, adapter profile, linked simulation evidence, and summary counts.
-- Relations: derived from simulation evidence, requirement links, and the placeholder contract record.
+- Relations: derived from simulation evidence, requirement links, and the FMI contract-shaped surface.
 - Why needed: simulation interoperability should be explicit without introducing an FMI runtime or adapter engine.
 - Phase: implemented.
 

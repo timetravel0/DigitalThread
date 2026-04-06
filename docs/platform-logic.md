@@ -12,7 +12,7 @@ The platform keeps six ideas separate:
 - execution records, such as test runs and operational runs
 - reusable evidence, such as `VerificationEvidence`
 - simulation evidence records, which capture model-based results as a first-class object
-- FMI placeholder contracts, which capture model reference metadata for simulation interoperability
+- FMI contract-shaped surfaces, which capture model reference metadata for simulation interoperability
 - operational evidence batches, which capture reviewable field or telemetry summaries
 - configuration snapshots, such as baselines and configuration contexts
 
@@ -249,8 +249,8 @@ ThreadLite implements a focused SysML subset:
 - `verify` expresses test-to-requirement verification
 - `deriveReqt` expresses requirement derivation
 - `SysML mapping contract` exposes the current model as a contract-shaped SysML v2-inspired export surface
-- `STEP AP242 placeholder contract` exposes the current part metadata and `cad_part` external artifacts as a contract-shaped AP242-style export surface
-- `FMI placeholder contract` exposes the current model reference metadata as a contract-shaped FMI-style export surface
+- `STEP AP242 contract-shaped surface` exposes the current part metadata and `cad_part` external artifacts as a contract-shaped AP242-style export surface
+- `FMI contract-shaped surface` exposes the current model reference metadata as a contract-shaped FMI-style export surface
 
 The platform does not implement the full SysML specification.
 It implements just enough semantics to support practical aerospace authoring and review.
@@ -378,7 +378,7 @@ The platform does not yet implement:
 - a full SysML editor
 - a full status engine for all evidence variants
 - telemetry ingestion pipelines
-- the FMI placeholder contract is already modeled as a first-class placeholder exchange surface
+- the FMI contract-shaped surface is already modeled as a first-class interoperability surface
 - a graph database projection
 - a full workflow engine
 

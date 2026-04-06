@@ -1,12 +1,55 @@
 from __future__ import annotations
 
+from enum import Enum
 from datetime import date as dt_date, datetime
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models import *
+from app.models import (
+    AbstractionLevel,
+    ArtifactLinkRelationType,
+    BaselineObjectType,
+    BaselineStatus,
+    BlockContainmentRelationType,
+    BlockKind,
+    BlockStatus,
+    ChangeRequestStatus,
+    ComponentStatus,
+    ComponentType,
+    ConfigurationContextStatus,
+    ConfigurationContextType,
+    ConfigurationItemKind,
+    ConnectorType,
+    ExternalArtifactStatus,
+    ExternalArtifactType,
+    FederatedInternalObjectType,
+    ImpactLevel,
+    LinkObjectType,
+    NonConformityDisposition,
+    NonConformityStatus,
+    OperationalEvidenceLinkObjectType,
+    OperationalEvidenceQualityStatus,
+    OperationalEvidenceSourceType,
+    OperationalOutcome,
+    Priority,
+    ProjectStatus,
+    RelationType,
+    RequirementCategory,
+    RequirementStatus,
+    RequirementVerificationStatus,
+    Severity,
+    SimulationEvidenceLinkObjectType,
+    SimulationEvidenceResult,
+    SysMLObjectType,
+    SysMLRelationType,
+    TestCaseStatus,
+    TestMethod,
+    TestRunResult,
+    VerificationEvidenceType,
+    VerificationMethod,
+)
 
 
 class ORMBase(BaseModel):
@@ -752,7 +795,17 @@ class ImportFormat(str, Enum):
 
 class ProjectImportCreate(BaseModel):
     format: ImportFormat
-    content: str
+    content: str = Field(
+        min_length=1,
+        max_length=1_000_000,
+        description="Raw import content in JSON or CSV format.",
+    )
+
+    @model_validator(mode="after")
+    def content_must_not_be_blank(self) -> "ProjectImportCreate":
+        if not self.content.strip():
+            raise ValueError("Import content cannot be blank")
+        return self
 
 
 class ProjectImportSummary(BaseModel):

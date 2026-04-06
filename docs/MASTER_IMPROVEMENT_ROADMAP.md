@@ -29,6 +29,7 @@ This roadmap is for future coding agents. It focuses on the current workspace-le
 - Instructions for future agents: keep the user-facing flow first; do not centralize forms if it reduces clarity.
 
 ## WSP-03 - Improve end-to-end smoke coverage for the full thread flow
+- Status: Implemented in the web smoke suite at `apps/web/tests/smoke.test.mjs`.
 - Problem: the repository has broad API coverage, but the frontend still relies mostly on build/lint/type-check for confidence.
 - Benefit: safer changes to cockpit, project navigation, and forms.
 - Priority: Medium
@@ -41,7 +42,7 @@ This roadmap is for future coding agents. It focuses on the current workspace-le
 - Completion criterion: a smoke test can create a project, open a project, and reach requirements/blocks/tests/traceability.
 - Instructions for future agents: prefer a small number of realistic user-path tests over many shallow component tests.
 
-## WSP-04 - Strengthen interoperability contracts beyond placeholder surfaces
+## WSP-04 - Strengthen interoperability contracts beyond contract-shaped surfaces
 - Problem: SysML mapping, STEP AP242, and FMI are useful projections, but still not native standards runtimes.
 - Benefit: external tools can integrate with less manual interpretation.
 - Priority: Medium

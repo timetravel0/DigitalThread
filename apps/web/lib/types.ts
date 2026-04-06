@@ -65,6 +65,22 @@ export interface Project {
   updated_at: string;
 }
 
+export interface ProjectCreatePayload {
+  code: string;
+  name: string;
+  description?: string;
+  domain_profile: DomainProfile;
+  status: ProjectStatus;
+}
+
+export interface ProjectUpdatePayload {
+  code?: string;
+  name?: string;
+  description?: string;
+  domain_profile?: DomainProfile;
+  status?: ProjectStatus;
+}
+
 export interface Requirement {
   id: ID;
   project_id: ID;
@@ -86,6 +102,31 @@ export interface Requirement {
   updated_at: string;
 }
 
+export interface RequirementCreatePayload {
+  project_id: ID;
+  key: string;
+  title: string;
+  description?: string;
+  category: RequirementCategory;
+  priority: Priority;
+  verification_method: VerificationMethod;
+  status: RequirementStatus;
+  parent_requirement_id?: ID | null;
+  verification_criteria_json?: Record<string, unknown>;
+}
+
+export interface RequirementUpdatePayload {
+  key?: string;
+  title?: string;
+  description?: string;
+  category?: RequirementCategory;
+  priority?: Priority;
+  verification_method?: VerificationMethod;
+  status?: RequirementStatus;
+  parent_requirement_id?: ID | null;
+  verification_criteria_json?: Record<string, unknown>;
+}
+
 export interface Block {
   id: ID;
   project_id: ID;
@@ -105,6 +146,27 @@ export interface Block {
   updated_at: string;
 }
 
+export interface BlockCreatePayload {
+  project_id: ID;
+  key: string;
+  name: string;
+  description?: string;
+  block_kind: BlockKind;
+  abstraction_level: AbstractionLevel;
+  status: BlockStatus;
+  owner?: string | null;
+}
+
+export interface BlockUpdatePayload {
+  key?: string;
+  name?: string;
+  description?: string;
+  block_kind?: BlockKind;
+  abstraction_level?: AbstractionLevel;
+  status?: BlockStatus;
+  owner?: string | null;
+}
+
 export interface Component {
   id: ID;
   project_id: ID;
@@ -119,6 +181,29 @@ export interface Component {
   metadata_json: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+export interface ComponentCreatePayload {
+  project_id: ID;
+  key: string;
+  name: string;
+  description?: string;
+  type: ComponentType;
+  part_number?: string | null;
+  supplier?: string | null;
+  status: ComponentStatus;
+  metadata_json?: Record<string, unknown>;
+}
+
+export interface ComponentUpdatePayload {
+  key?: string;
+  name?: string;
+  description?: string;
+  type?: ComponentType;
+  part_number?: string | null;
+  supplier?: string | null;
+  status?: ComponentStatus;
+  metadata_json?: Record<string, unknown>;
 }
 
 export interface ComponentDetail {
@@ -144,6 +229,23 @@ export interface TestCase {
   review_comment?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TestCaseCreatePayload {
+  project_id: ID;
+  key: string;
+  title: string;
+  description?: string;
+  method: TestMethod;
+  status: TestCaseStatus;
+}
+
+export interface TestCaseUpdatePayload {
+  key?: string;
+  title?: string;
+  description?: string;
+  method?: TestMethod;
+  status?: TestCaseStatus;
 }
 
 export interface RequirementDetail {
@@ -210,6 +312,16 @@ export interface TestRun {
   updated_at: string;
 }
 
+export interface TestRunCreatePayload {
+  test_case_id: ID;
+  execution_date: string;
+  result: TestRunResult;
+  summary: string;
+  measured_values_json?: Record<string, unknown>;
+  notes?: string;
+  executed_by?: string | null;
+}
+
 export interface OperationalRun {
   id: ID;
   project_id: ID;
@@ -225,6 +337,33 @@ export interface OperationalRun {
   telemetry_json: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+export interface OperationalRunCreatePayload {
+  project_id: ID;
+  key: string;
+  date: string;
+  drone_serial: string;
+  location: string;
+  duration_minutes: number;
+  max_temperature_c?: number | null;
+  battery_consumption_pct?: number | null;
+  outcome: OperationalOutcome;
+  notes?: string;
+  telemetry_json?: Record<string, unknown>;
+}
+
+export interface OperationalRunUpdatePayload {
+  key?: string;
+  date?: string;
+  drone_serial?: string;
+  location?: string;
+  duration_minutes?: number;
+  max_temperature_c?: number | null;
+  battery_consumption_pct?: number | null;
+  outcome?: OperationalOutcome;
+  notes?: string;
+  telemetry_json?: Record<string, unknown>;
 }
 
 export interface OperationalRunDetail {
@@ -246,6 +385,17 @@ export interface VerificationEvidence {
   created_at: string;
   updated_at: string;
   linked_objects: ObjectSummary[];
+}
+
+export interface VerificationEvidenceCreatePayload {
+  project_id: ID;
+  title: string;
+  evidence_type: VerificationEvidenceType;
+  summary: string;
+  observed_at?: string | null;
+  source_name?: string | null;
+  source_reference?: string | null;
+  metadata_json?: Record<string, unknown>;
 }
 
 export interface SimulationEvidence {
@@ -272,6 +422,21 @@ export interface SimulationEvidence {
   linked_objects: ObjectSummary[];
 }
 
+export interface SimulationEvidenceCreatePayload {
+  project_id: ID;
+  title: string;
+  model_reference: string;
+  scenario_name: string;
+  input_summary?: string | null;
+  inputs_json?: Record<string, unknown>;
+  expected_behavior: string;
+  observed_behavior: string;
+  result: SimulationEvidenceResult;
+  execution_timestamp: string;
+  fmi_contract_id?: ID | null;
+  metadata_json?: Record<string, unknown>;
+}
+
 export interface FMIContract {
   id: ID;
   project_id: ID;
@@ -287,6 +452,31 @@ export interface FMIContract {
   created_at: string;
   updated_at: string;
   linked_simulation_evidence_count: number;
+}
+
+export interface FMIContractCreatePayload {
+  project_id: ID;
+  key: string;
+  name: string;
+  description: string;
+  model_identifier: string;
+  model_version?: string | null;
+  model_uri?: string | null;
+  adapter_profile?: string | null;
+  contract_version: string;
+  metadata_json?: Record<string, unknown>;
+}
+
+export interface FMIContractUpdatePayload {
+  key?: string;
+  name?: string;
+  description?: string;
+  model_identifier?: string;
+  model_version?: string | null;
+  model_uri?: string | null;
+  adapter_profile?: string | null;
+  contract_version?: string;
+  metadata_json?: Record<string, unknown>;
 }
 
 export interface FMIContractDetail {
@@ -313,6 +503,21 @@ export interface OperationalEvidence {
   linked_objects: ObjectSummary[];
 }
 
+export interface OperationalEvidenceCreatePayload {
+  project_id: ID;
+  title: string;
+  source_name: string;
+  source_type: OperationalEvidenceSourceType;
+  captured_at: string;
+  coverage_window_start: string;
+  coverage_window_end: string;
+  observations_summary: string;
+  aggregated_observations_json?: Record<string, unknown>;
+  quality_status: OperationalEvidenceQualityStatus;
+  derived_metrics_json?: Record<string, unknown>;
+  metadata_json?: Record<string, unknown>;
+}
+
 export interface Baseline {
   id: ID;
   project_id: ID;
@@ -322,6 +527,13 @@ export interface Baseline {
   release_flag: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface BaselineCreatePayload {
+  project_id: ID;
+  name: string;
+  description: string;
+  item_ids?: ID[];
 }
 
 export interface BaselineDetail {
@@ -540,6 +752,16 @@ export interface Link {
   target_label?: string | null;
 }
 
+export interface LinkCreatePayload {
+  project_id: ID;
+  source_type: LinkObjectType;
+  source_id: ID;
+  target_type: LinkObjectType;
+  target_id: ID;
+  relation_type: RelationType;
+  rationale?: string | null;
+}
+
 export interface SysMLRelation {
   id: ID;
   project_id: ID;
@@ -550,6 +772,16 @@ export interface SysMLRelation {
   relation_type: SysMLRelationType;
   rationale?: string | null;
   created_at: string;
+}
+
+export interface SysMLRelationCreatePayload {
+  project_id: ID;
+  source_type: SysMLObjectType;
+  source_id: ID;
+  target_type: SysMLObjectType;
+  target_id: ID;
+  relation_type: SysMLRelationType;
+  rationale?: string | null;
 }
 
 export interface ChangeRequest {
@@ -566,6 +798,31 @@ export interface ChangeRequest {
   closure_summary?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ChangeRequestCreatePayload {
+  project_id: ID;
+  key: string;
+  title: string;
+  description: string;
+  status: ChangeRequestStatus;
+  severity: Severity;
+  analysis_summary?: string | null;
+  disposition_summary?: string | null;
+  implementation_summary?: string | null;
+  closure_summary?: string | null;
+}
+
+export interface ChangeRequestUpdatePayload {
+  key?: string;
+  title?: string;
+  description?: string;
+  status?: ChangeRequestStatus;
+  severity?: Severity;
+  analysis_summary?: string | null;
+  disposition_summary?: string | null;
+  implementation_summary?: string | null;
+  closure_summary?: string | null;
 }
 
 export interface ApprovalActionLog {
@@ -602,6 +859,27 @@ export interface NonConformity {
   updated_at: string;
 }
 
+export interface NonConformityCreatePayload {
+  project_id: ID;
+  key: string;
+  title: string;
+  description: string;
+  status: NonConformity["status"];
+  disposition?: NonConformityDisposition | null;
+  review_comment?: string | null;
+  severity: Severity;
+}
+
+export interface NonConformityUpdatePayload {
+  key?: string;
+  title?: string;
+  description?: string;
+  status?: NonConformity["status"];
+  disposition?: NonConformityDisposition | null;
+  review_comment?: string | null;
+  severity?: Severity;
+}
+
 export interface NonConformityDetail {
   non_conformity: NonConformity;
   links: Link[];
@@ -635,6 +913,25 @@ export interface ConnectorDefinition {
   artifact_count?: number;
 }
 
+export interface ConnectorCreatePayload {
+  project_id: ID;
+  name: string;
+  connector_type: ConnectorType;
+  base_url?: string | null;
+  description?: string | null;
+  is_active: boolean;
+  metadata_json?: Record<string, unknown> | null;
+}
+
+export interface ConnectorUpdatePayload {
+  name?: string;
+  connector_type?: ConnectorType;
+  base_url?: string | null;
+  description?: string | null;
+  is_active?: boolean;
+  metadata_json?: Record<string, unknown> | null;
+}
+
 export interface ExternalArtifactVersion {
   id: ID;
   external_artifact_id: ID;
@@ -666,6 +963,40 @@ export interface ExternalArtifact {
   versions?: ExternalArtifactVersion[];
 }
 
+export interface ExternalArtifactCreatePayload {
+  project_id: ID;
+  connector_definition_id?: ID | null;
+  external_id: string;
+  artifact_type: ExternalArtifactType;
+  name: string;
+  description?: string | null;
+  canonical_uri?: string | null;
+  native_tool_url?: string | null;
+  status: ExternalArtifactStatus;
+  metadata_json?: Record<string, unknown> | null;
+}
+
+export interface ExternalArtifactUpdatePayload {
+  connector_definition_id?: ID | null;
+  external_id?: string;
+  artifact_type?: ExternalArtifactType;
+  name?: string;
+  description?: string | null;
+  canonical_uri?: string | null;
+  native_tool_url?: string | null;
+  status?: ExternalArtifactStatus;
+  metadata_json?: Record<string, unknown> | null;
+}
+
+export interface ExternalArtifactVersionCreatePayload {
+  version_label: string;
+  revision_label?: string | null;
+  checksum_or_signature?: string | null;
+  effective_date?: string | null;
+  source_timestamp?: string | null;
+  metadata_json?: Record<string, unknown> | null;
+}
+
 export interface ArtifactLink {
   id: ID;
   project_id: ID;
@@ -682,6 +1013,15 @@ export interface ArtifactLink {
   connector_name?: string | null;
 }
 
+export interface ArtifactLinkCreatePayload {
+  internal_object_type: FederatedInternalObjectType;
+  internal_object_id: ID;
+  external_artifact_id: ID;
+  external_artifact_version_id?: ID | null;
+  relation_type: ArtifactLinkRelationType;
+  rationale?: string | null;
+}
+
 export interface ConfigurationContext {
   id: ID;
   project_id: ID;
@@ -693,6 +1033,33 @@ export interface ConfigurationContext {
   created_at: string;
   updated_at: string;
   item_count?: number;
+}
+
+export interface ConfigurationContextCreatePayload {
+  project_id: ID;
+  key: string;
+  name: string;
+  description?: string | null;
+  context_type: ConfigurationContextType;
+  status: ConfigurationContextStatus;
+}
+
+export interface ConfigurationContextUpdatePayload {
+  key?: string;
+  name?: string;
+  description?: string | null;
+  context_type?: ConfigurationContextType;
+  status?: ConfigurationContextStatus;
+}
+
+export interface ConfigurationItemMappingCreatePayload {
+  item_kind: ConfigurationItemKind;
+  internal_object_type?: FederatedInternalObjectType | null;
+  internal_object_id?: ID | null;
+  internal_object_version?: number | null;
+  external_artifact_version_id?: ID | null;
+  role_label?: string | null;
+  notes?: string | null;
 }
 
 export interface ConfigurationItemMapping {

@@ -30,7 +30,7 @@ Both projects speak the same digital-thread vocabulary:
 ## Architectural risks
 - The frontend contains some profile-aware workflow and navigation logic that must stay aligned with the backend route model.
 - The API surface is broad, so route additions can easily outgrow the frontend unless the docs and client are updated together.
-- Some interoperability surfaces are deliberately contract-shaped placeholders rather than native standards runtimes.
+- Some interoperability surfaces are deliberately contract-shaped views rather than native standards runtimes.
 - The documentation portal depends on repository markdown files, so docs updates are part of the product surface.
 
 ## Dependency direction

@@ -6,7 +6,9 @@
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "smoke": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/smoke.ps1",
+    "test": "npm run smoke"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
