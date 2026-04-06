@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 
-export type DocSlug = "readme" | "user-guide" | "platform-logic" | "target-architecture" | "implementation-backlog" | "gap-analysis";
+export type DocSlug = "readme" | "user-guide" | "use-cases" | "platform-logic" | "target-architecture" | "implementation-backlog" | "gap-analysis";
 
 export interface DocEntry {
   slug: DocSlug;
@@ -22,6 +22,12 @@ export const DOCS: DocEntry[] = [
     title: "User Guide",
     description: "How to use each module and workflow in the application.",
     filePath: path.resolve(process.cwd(), "..", "..", "docs", "user-guide.md"),
+  },
+  {
+    slug: "use-cases",
+    title: "Use Cases",
+    description: "Concrete examples of how the platform is used in personal projects and manufacturing SMBs.",
+    filePath: path.resolve(process.cwd(), "..", "..", "docs", "use-cases.md"),
   },
   {
     slug: "platform-logic",

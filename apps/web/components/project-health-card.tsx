@@ -207,10 +207,10 @@ export function ProjectHealthCard({
       </CardHeader>
       <CardBody className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label={labels.requirements} value={counts.requirements} sub="Thread entry points" />
-          <MetricCard label={labels.blocks} value={counts.blocks} sub="Realization objects" />
-          <MetricCard label={labels.testCases} value={counts.tests} sub="Verification objects" />
-          <MetricCard label="Links + evidence" value={counts.links + counts.evidence} sub="Thread connections and proof" />
+          <MetricCard label={labels.requirements} value={counts.requirements} sub={labels.metric_requirements_sub} />
+          <MetricCard label={labels.blocks} value={counts.blocks} sub={labels.metric_blocks_sub} />
+          <MetricCard label={labels.testCases} value={counts.tests} sub={labels.metric_tests_sub} />
+          <MetricCard label="Links + evidence" value={counts.links + counts.evidence} sub={labels.metric_links_sub} />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-2">

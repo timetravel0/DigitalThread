@@ -25,6 +25,10 @@ export interface LabelSet {
   kpi_verified: string;
   kpi_coverage: string;
   kpi_open_changes: string;
+  metric_requirements_sub: string;
+  metric_blocks_sub: string;
+  metric_tests_sub: string;
+  metric_links_sub: string;
 }
 
 const LABELS: Record<DomainProfile, LabelSet> = {
@@ -53,6 +57,10 @@ const LABELS: Record<DomainProfile, LabelSet> = {
     kpi_verified: "Verified",
     kpi_coverage: "Coverage",
     kpi_open_changes: "Open Change Requests",
+    metric_requirements_sub: "Thread entry points",
+    metric_blocks_sub: "Realization objects",
+    metric_tests_sub: "Verification objects",
+    metric_links_sub: "Thread connections and proof",
   },
   manufacturing: {
     requirement: "Specification",
@@ -79,6 +87,10 @@ const LABELS: Record<DomainProfile, LabelSet> = {
     kpi_verified: "Passed Checks",
     kpi_coverage: "Specification Coverage",
     kpi_open_changes: "Open Change Orders",
+    metric_requirements_sub: "Product specifications",
+    metric_blocks_sub: "Parts and assemblies",
+    metric_tests_sub: "Quality checks",
+    metric_links_sub: "Compliance links and reports",
   },
   personal: {
     requirement: "Goal",
@@ -105,6 +117,10 @@ const LABELS: Record<DomainProfile, LabelSet> = {
     kpi_verified: "Completed",
     kpi_coverage: "Goal Coverage",
     kpi_open_changes: "Open Updates",
+    metric_requirements_sub: "Project goals",
+    metric_blocks_sub: "Devices and services",
+    metric_tests_sub: "How-to-check steps",
+    metric_links_sub: "Connections and logs",
   },
   custom: {
     requirement: "Requirement",
@@ -131,6 +147,10 @@ const LABELS: Record<DomainProfile, LabelSet> = {
     kpi_verified: "Verified",
     kpi_coverage: "Coverage",
     kpi_open_changes: "Open Change Requests",
+    metric_requirements_sub: "Thread entry points",
+    metric_blocks_sub: "System elements",
+    metric_tests_sub: "Verification items",
+    metric_links_sub: "Thread connections",
   },
 };
 

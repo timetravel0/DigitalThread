@@ -60,7 +60,7 @@ export const CORE_TAB_VISIBILITY: Record<DomainProfile, ProjectTab[]> = {
 export const ADVANCED_TAB_VISIBILITY: Record<DomainProfile, ProjectTab[]> = {
   engineering: ["matrix", "review-queue", "validation", "non-conformities", "import", "simulation-evidence", "operational-evidence", "operational-runs", "sysml", "authoritative-sources", "software"],
   manufacturing: ["matrix", "review-queue", "validation", "import", "simulation-evidence", "operational-evidence", "operational-runs", "sysml", "authoritative-sources", "software"],
-  personal: ["matrix", "review-queue", "validation", "import", "simulation-evidence", "operational-evidence", "operational-runs", "sysml", "authoritative-sources", "software"],
+  personal: ["matrix", "review-queue", "validation", "import"],
   custom: ["matrix", "review-queue", "validation", "non-conformities", "import", "simulation-evidence", "operational-evidence", "operational-runs", "sysml", "authoritative-sources", "software"],
 };
 

@@ -20,7 +20,7 @@ export function OnboardingWizard({
   children: ReactNode;
 }) {
   const router = useRouter();
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(true);
   const [leaving, setLeaving] = useState(false);
   const [step, setStep] = useState<WizardStep>(1);
   const storageKey = useMemo(() => `threadlite-onboarding-done-${projectId}`, [projectId]);
@@ -28,9 +28,9 @@ export function OnboardingWizard({
   useEffect(() => {
     try {
       const done = window.localStorage.getItem(storageKey);
-      if (!done) setVisible(true);
+      if (done) setVisible(false);
     } catch {
-      // ignore storage failures
+      // localStorage unavailable: keep wizard visible
     }
   }, [storageKey]);
 
@@ -148,8 +148,8 @@ export function OnboardingWizard({
                   </p>
                 </div>
                 <div className="grid gap-3 text-sm text-text sm:grid-cols-5">
-                  {["Requirements", "Blocks", "Tests", "Traceability", "Evidence"].map((item, index) => (
-                    <div key={item} className="flex items-center gap-3 rounded-xl border border-line bg-panel2 px-3 py-2">
+                  {[labels.requirements, labels.blocks, labels.testCases, "Traceability", "Evidence"].map((item, index) => (
+                    <div key={`step1-badge-${index}`} className="flex items-center gap-3 rounded-xl border border-line bg-panel2 px-3 py-2">
                       <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">{index + 1}</span>
                       <span>{item}</span>
                       {index < 4 ? <span className="text-muted">→</span> : null}

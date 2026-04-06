@@ -6,6 +6,8 @@ ThreadLite v2 should be positioned as a connective metadata and traceability lay
 
 The current federation foundation already proves the intended direction: ThreadLite registers authoritative external artifacts, stores version pointers, links internal authored objects to those sources, groups selected versions into configuration contexts, and now exposes a revision snapshot integrity summary for the internal AST history. The next architecture layers should build on that foundation instead of redefining it.
 
+Several of the later domain contracts described below are already implemented in the current codebase. This document remains a reference architecture for the remaining extension path and for the semantics we want to preserve as the product grows.
+
 ## Architecture Principles
 
 1. Metadata federation over file duplication.
