@@ -279,7 +279,7 @@ from app.services.requirement_service import list_requirements
 from app.services.test_service import list_test_runs
 from app.services.change_request_service import list_change_requests
 from app.services.link_service import list_links
-from app.services.federation_service import list_connectors, list_external_artifacts
+from app.services.federation_service import list_artifact_links, list_connectors, list_external_artifacts
 from app.services.configuration_service import list_configuration_contexts, list_configuration_item_mappings, get_authoritative_registry_summary
 from app.services.baseline_service import list_baselines
 from app.services.evidence_service import list_verification_evidence, list_simulation_evidence, list_operational_evidence

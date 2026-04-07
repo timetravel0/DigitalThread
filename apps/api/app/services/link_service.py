@@ -277,6 +277,8 @@ from app.services._common import (
 )
 
 def create_link(session: Session, payload: LinkCreate) -> LinkRead:
+    from app.services.registry_service import resolve_object
+
     source = resolve_object(session, payload.source_type.value, payload.source_id)
     target = resolve_object(session, payload.target_type.value, payload.target_id)
     if source["project_id"] != target["project_id"] or source["project_id"] != payload.project_id:
@@ -295,6 +297,8 @@ def delete_link(session: Session, link_id: UUID) -> None:
     session.commit()
 
 def list_links(session: Session, project_id: UUID, object_type: str | None = None, object_id: UUID | None = None) -> list[LinkRead]:
+    from app.services.registry_service import resolve_object
+
     stmt = select(Link).where(Link.project_id == project_id)
     if object_type and object_id:
         otype = LinkObjectType(object_type)
@@ -314,6 +318,8 @@ def list_links(session: Session, project_id: UUID, object_type: str | None = Non
     return links
 
 def create_sysml_relation(session: Session, payload: SysMLRelationCreate) -> SysMLRelationRead:
+    from app.services.registry_service import resolve_object
+
     source = resolve_object(session, payload.source_type.value, payload.source_id)
     target = resolve_object(session, payload.target_type.value, payload.target_id)
     if source["project_id"] != target["project_id"] or source["project_id"] != payload.project_id:
@@ -329,6 +335,8 @@ def delete_sysml_relation(session: Session, relation_id: UUID) -> None:
     session.commit()
 
 def list_sysml_relations(session: Session, project_id: UUID, object_type: str | None = None, object_id: UUID | None = None) -> list[SysMLRelationRead]:
+    from app.services.registry_service import resolve_object
+
     stmt = select(SysMLRelation).where(SysMLRelation.project_id == project_id)
     if object_type and object_id:
         stype = SysMLObjectType(object_type)

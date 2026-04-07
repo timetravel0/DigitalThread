@@ -648,7 +648,7 @@ def _editable(status: Any) -> bool:
     return _status_value(status) in {"draft", "rejected"}
 
 def _validate_internal_object(session: Session, object_type: FederatedInternalObjectType, object_id: UUID, project_id: UUID) -> dict[str, Any]:
-    resolved = resolve_object(session, object_type.value, object_id)
+    resolved = _resolve_object(session, object_type.value, object_id)
     if resolved["project_id"] != project_id:
         raise ValueError("Referenced internal object must stay within the same project")
     return resolved
@@ -697,6 +697,8 @@ def _ensure_configuration_context_mutable(context: ConfigurationContext) -> None
         raise ValueError("Frozen, released, or obsolete configuration contexts cannot be modified")
 
 def _artifact_read(session: Session, artifact: ExternalArtifact) -> ExternalArtifactRead:
+    from app.services.federation_service import list_external_artifact_versions
+
     read = ExternalArtifactRead.model_validate(artifact)
     connector = _get(session, ConnectorDefinition, artifact.connector_definition_id) if artifact.connector_definition_id else None
     read.connector_name = connector.name if connector else None
@@ -724,7 +726,7 @@ def _connector_read(session: Session, connector: ConnectorDefinition) -> Connect
     return read
 
 def _resolve_artifact_link_internal_label(session: Session, link: ArtifactLink) -> str:
-    resolved = resolve_object(session, link.internal_object_type.value, link.internal_object_id)
+    resolved = _resolve_object(session, link.internal_object_type.value, link.internal_object_id)
     return resolved["label"]
 
 def _resolve_artifact_link_external_label(session: Session, link: ArtifactLink) -> tuple[str, str | None, str | None]:
@@ -886,6 +888,11 @@ def _compare_configuration_entry_groups(
 
     return groups, summary
 
+def _resolve_object(session: Session, object_type: str, object_id: UUID) -> dict[str, Any]:
+    from app.services.registry_service import resolve_object
+
+    return resolve_object(session, object_type, object_id)
+
 def _seed_profile_demo(
     session: Session,
     *,
@@ -916,6 +923,17 @@ def _seed_profile_demo(
     test_description: str,
     test_method: TestMethod,
 ) -> dict[str, Any]:
+    from app.services.block_service import create_block, create_block_containment
+    from app.services.component_service import create_component
+    from app.services.configuration_service import create_configuration_context, create_configuration_item_mapping
+    from app.services.evidence_service import create_operational_evidence, create_simulation_evidence, create_verification_evidence
+    from app.services.federation_service import create_artifact_link, create_connector, create_external_artifact, create_external_artifact_version
+    from app.services.link_service import create_link, create_sysml_relation
+    from app.services.requirement_service import create_requirement
+    from app.services.test_service import create_test_case
+    from app.services.baseline_service import create_baseline, release_baseline
+    from app.services.change_request_service import create_change_request
+
     project = _first_item(session.exec(select(Project).where(Project.code == code)))
     if project is None:
         project = _add(
@@ -1120,6 +1138,17 @@ def _seed_profile_demo(
     }
 
 def _seed_manufacturing_demo_details(session: Session, project_id: UUID, base: dict[str, Any]) -> None:
+    from app.services.baseline_service import create_baseline, release_baseline
+    from app.services.change_request_service import create_change_request
+    from app.services.configuration_service import create_configuration_context, create_configuration_item_mapping
+    from app.services.evidence_service import create_operational_evidence, create_simulation_evidence, create_verification_evidence
+    from app.services.federation_service import create_artifact_link, create_connector, create_external_artifact, create_external_artifact_version
+    from app.services.link_service import create_link, create_sysml_relation
+    from app.services.requirement_service import create_requirement
+    from app.services.test_service import create_test_case, create_test_run
+    from app.services.block_service import create_block, create_block_containment
+    from app.services.component_service import create_component
+
     project = _get(session, Project, project_id)
     if project is None:
         raise LookupError("Project not found")
@@ -1954,6 +1983,17 @@ def _seed_manufacturing_demo_details(session: Session, project_id: UUID, base: d
             _add(session, ChangeImpact(change_request_id=cr.id, **impact))
 
 def _seed_personal_demo_details(session: Session, project_id: UUID, base: dict[str, Any]) -> None:
+    from app.services.baseline_service import create_baseline, release_baseline
+    from app.services.change_request_service import create_change_request
+    from app.services.configuration_service import create_configuration_context, create_configuration_item_mapping
+    from app.services.evidence_service import create_operational_evidence, create_simulation_evidence, create_verification_evidence
+    from app.services.federation_service import create_artifact_link, create_connector, create_external_artifact, create_external_artifact_version
+    from app.services.link_service import create_link, create_sysml_relation
+    from app.services.requirement_service import create_requirement
+    from app.services.test_service import create_test_case, create_test_run
+    from app.services.block_service import create_block, create_block_containment
+    from app.services.component_service import create_component
+
     project = _get(session, Project, project_id)
     if project is None:
         raise LookupError("Project not found")
@@ -2824,6 +2864,8 @@ def _step_ap242_semantics(relation_type: ArtifactLinkRelationType) -> str:
     return mapping.get(relation_type, relation_type.value)
 
 def _related_baselines_for_configuration_context(session: Session, context: ConfigurationContext) -> list[BaselineRead]:
+    from app.services.configuration_service import list_configuration_item_mappings
+
     context_signatures = {
         (item.internal_object_type.value, item.internal_object_id, item.internal_object_version)
         for item in list_configuration_item_mappings(session, context.id)
@@ -2923,6 +2965,9 @@ def _latest_test_run(session: Session, test_case_id: UUID) -> TestRun | None:
     return items[0] if items else None
 
 def _evaluate_requirement_verification(session: Session, requirement: Requirement) -> RequirementVerificationEvaluation:
+    from app.services.evidence_service import list_operational_evidence, list_simulation_evidence, list_verification_evidence
+    from app.services.link_service import list_links
+
     evidence = list_verification_evidence(
         session,
         requirement.project_id,
@@ -2968,7 +3013,7 @@ def _evaluate_requirement_verification(session: Session, requirement: Requiremen
     successful_operational_run_count = 0
     degraded_operational_run_count = 0
     failed_operational_run_count = 0
-    operational_runs = [resolve_object(session, "operational_run", link.source_id)["raw"] for link in operational_links]
+    operational_runs = [_resolve_object(session, "operational_run", link.source_id)["raw"] for link in operational_links]
     operational_cutoff = date.today() - timedelta(days=30)
     for run in operational_runs:
         if run.date < operational_cutoff:
@@ -3258,6 +3303,8 @@ def _verification_evidence_read(
     evidence: VerificationEvidence,
     linked_objects: list[VerificationEvidenceLink] | None = None,
 ) -> VerificationEvidenceRead:
+    from app.services.registry_service import resolve_object, summarize
+
     read = VerificationEvidenceRead.model_validate(evidence)
     links = linked_objects if linked_objects is not None else _items(
         session.exec(
@@ -3266,7 +3313,7 @@ def _verification_evidence_read(
             .order_by(VerificationEvidenceLink.created_at, VerificationEvidenceLink.id)
         )
     )
-    read.linked_objects = [summarize(resolve_object(session, link.internal_object_type.value, link.internal_object_id)) for link in links]
+    read.linked_objects = [summarize(_resolve_object(session, link.internal_object_type.value, link.internal_object_id)) for link in links]
     return read
 
 def _validate_verification_evidence_link(
@@ -3275,7 +3322,9 @@ def _validate_verification_evidence_link(
     object_type: FederatedInternalObjectType,
     object_id: UUID,
 ) -> None:
-    resolved = resolve_object(session, object_type.value, object_id)
+    from app.services.registry_service import resolve_object
+
+    resolved = _resolve_object(session, object_type.value, object_id)
     if resolved["project_id"] != project_id:
         raise ValueError("Verification evidence links must stay within the same project")
 
@@ -3284,6 +3333,9 @@ def _simulation_evidence_read(
     evidence: SimulationEvidence,
     linked_objects: list[SimulationEvidenceLink] | None = None,
 ) -> SimulationEvidenceRead:
+    from app.services.fmi_service import get_fmi_contract_service
+    from app.services.registry_service import resolve_object, summarize
+
     read = SimulationEvidenceRead.model_validate(evidence)
     if evidence.fmi_contract_id is not None:
         contract = _get(session, FMIContract, evidence.fmi_contract_id)
@@ -3301,7 +3353,7 @@ def _simulation_evidence_read(
             .order_by(SimulationEvidenceLink.created_at, SimulationEvidenceLink.id)
         )
     )
-    read.linked_objects = [summarize(resolve_object(session, link.internal_object_type.value, link.internal_object_id)) for link in links]
+    read.linked_objects = [summarize(_resolve_object(session, link.internal_object_type.value, link.internal_object_id)) for link in links]
     return read
 
 def _validate_simulation_evidence_link(
@@ -3310,7 +3362,9 @@ def _validate_simulation_evidence_link(
     object_type: SimulationEvidenceLinkObjectType,
     object_id: UUID,
 ) -> None:
-    resolved = resolve_object(session, object_type.value, object_id)
+    from app.services.registry_service import resolve_object
+
+    resolved = _resolve_object(session, object_type.value, object_id)
     if resolved["project_id"] != project_id:
         raise ValueError("Simulation evidence links must stay within the same project")
 
@@ -3319,6 +3373,8 @@ def _operational_evidence_read(
     evidence: OperationalEvidence,
     linked_objects: list[OperationalEvidenceLink] | None = None,
 ) -> OperationalEvidenceRead:
+    from app.services.registry_service import resolve_object, summarize
+
     read = OperationalEvidenceRead.model_validate(evidence)
     links = linked_objects if linked_objects is not None else _items(
         session.exec(
@@ -3327,7 +3383,7 @@ def _operational_evidence_read(
             .order_by(OperationalEvidenceLink.created_at, OperationalEvidenceLink.id)
         )
     )
-    read.linked_objects = [summarize(resolve_object(session, link.internal_object_type.value, link.internal_object_id)) for link in links]
+    read.linked_objects = [summarize(_resolve_object(session, link.internal_object_type.value, link.internal_object_id)) for link in links]
     return read
 
 def _validate_operational_evidence_link(
@@ -3336,6 +3392,8 @@ def _validate_operational_evidence_link(
     object_type: OperationalEvidenceLinkObjectType,
     object_id: UUID,
 ) -> None:
-    resolved = resolve_object(session, object_type.value, object_id)
+    from app.services.registry_service import resolve_object
+
+    resolved = _resolve_object(session, object_type.value, object_id)
     if resolved["project_id"] != project_id:
         raise ValueError("Operational evidence links must stay within the same project")

@@ -277,6 +277,9 @@ from app.services._common import (
 )
 
 def import_project_records(session: Session, project_id: UUID, payload: ProjectImportCreate) -> ProjectImportResponse:
+    from app.services.federation_service import create_external_artifact
+    from app.services.evidence_service import create_verification_evidence
+
     project = _get(session, Project, project_id)
     if project is None:
         raise LookupError("Project not found")

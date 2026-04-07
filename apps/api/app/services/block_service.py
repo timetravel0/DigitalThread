@@ -280,6 +280,7 @@ from app.services.project_service import get_project_service
 from app.services.requirement_service import list_requirements
 from app.services.test_service import list_test_cases
 from app.services.federation_service import list_artifact_links
+from app.services.link_service import list_sysml_relations
 
 def create_block(session: Session, payload: BlockCreate) -> BlockRead:
     item = Block.model_validate(payload)

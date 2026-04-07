@@ -19,8 +19,10 @@ from app.models import (
     Component,
     Link,
     LinkObjectType,
+    FederatedInternalObjectType,
     OperationalEvidence,
     OperationalEvidenceLink,
+    OperationalEvidenceLinkObjectType,
     OperationalOutcome,
     Project,
     RelationType,
@@ -47,6 +49,7 @@ from app.schemas import (
     ImpactResponse,
     LinkRead,
     MatrixCell,
+    ObjectSummary,
     MatrixColumn,
     MatrixResponse,
     MatrixRow,
@@ -60,6 +63,7 @@ from app.schemas import (
 )
 from app.services._common import (
     _evaluate_requirement_verification,
+    _get,
     _impact_context_internal_ids,
     _impact_node_key,
     _items,
@@ -76,7 +80,7 @@ from app.services.federation_service import list_artifact_links
 from app.services.link_service import list_links, list_sysml_relations
 from app.services.test_service import list_test_case_history, list_test_cases
 from app.services.component_service import list_components
-from app.services.requirement_service import list_requirements
+from app.services.requirement_service import list_requirement_history, list_requirements
 
 def get_global_dashboard(session: Session) -> GlobalDashboard:
     from app.services.project_service import list_projects_service

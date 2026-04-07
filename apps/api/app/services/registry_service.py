@@ -209,6 +209,7 @@ from app.schemas import (
     WorkflowActionPayload,
 )
 
+from app.services._common import OBJECT_MODELS
 from app.services._common import (
     _add,
     _touch,
